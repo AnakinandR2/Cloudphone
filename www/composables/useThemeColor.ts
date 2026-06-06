@@ -30,21 +30,16 @@ export function useThemeColor() {
     sameSite: 'lax',
   })
 
-  function apply(value: string) {
-    if (import.meta.client) {
-      document.documentElement.setAttribute('data-accent', value)
-    }
-  }
+  // SSR + 客户端都把当前 accent 反映到 <html data-accent>，让 CSS 预设在首屏即生效（无闪色）。
+  // useHead 的 htmlAttrs 是响应式的：切换 accent 时 accent ref 变化，html 属性自动更新。
+  useHead({
+    htmlAttrs: {
+      'data-accent': accent,
+    },
+  })
 
   function setAccent(value: string) {
     accent.value = value
-    apply(value)
-  }
-
-  // Keep the DOM attribute in sync on the client (initial + changes).
-  if (import.meta.client) {
-    onMounted(() => apply(accent.value))
-    watch(accent, (v) => apply(v))
   }
 
   return { accent, accents: ACCENTS, setAccent }
