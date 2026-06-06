@@ -1,0 +1,11 @@
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  vue-demi: true
+verifyDepsBeforeRun: false
+# Pin the @intlify suite to one consistent version — pnpm otherwise resolved
+# core-base@10.0.8 against shared@10.0.7, which breaks the production build.
+overrides:
+  '@intlify/shared': 10.0.8
+  '@intlify/core-base': 10.0.8
+  '@intlify/message-compiler': 10.0.8

@@ -1,0 +1,412 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+   主题集中管理区（修改主题只需改这里）
+   - 风格：Gloryphone 云手机设计系统（绿色主色 + 暖冷中性 + 圆角 + 轻阴影）
+     与 www 官网 / www/DESIGN.md 一致；色值取自 www 的 --bg/--fg/--accent。
+   - 字体：Plus Jakarta Sans（正文）/ Fira Code（等宽数字），main.ts 本地引入
+   - 多主题色：见下方 [data-theme=...] 预设，运行时由设置面板切换（默认 green）
+   - 中性色以 RGB 三元组写成 rgb(...)，与 DESIGN.md 的 token 取值一一对应
+   ========================================================================= */
+
+:root {
+  --radius: 0.75rem;
+
+  /* 中性色（亮）— 暖冷中性，对应 www --bg/--bg-elev/--bg-sunken/--bg-inset */
+  --background: rgb(252 252 253);
+  --foreground: rgb(17 18 22);
+  --card: rgb(255 255 255);
+  --card-foreground: rgb(17 18 22);
+  --popover: rgb(255 255 255);
+  --popover-foreground: rgb(17 18 22);
+  --secondary: rgb(246 246 249);
+  --secondary-foreground: rgb(17 18 22);
+  --muted: rgb(246 246 249);
+  --muted-foreground: rgb(86 90 102);
+  --accent: rgb(240 240 245);
+  --accent-foreground: rgb(17 18 22);
+  --destructive: oklch(57.7% 0.245 27.325);
+  --destructive-foreground: oklch(98.5% 0 0);
+  --border: rgb(230 230 236);
+  --input: rgb(230 230 236);
+
+  /* 主题色（默认 Gloryphone 绿 #22c55e，可被 [data-theme] 覆盖） */
+  --primary: rgb(34 197 94);
+  --primary-foreground: rgb(255 255 255);
+  --ring: rgb(34 197 94);
+  /* 主色 hover（更深一档）— color-mix 自动跟随当前主题色，无需逐预设维护 */
+  --primary-strong: color-mix(in oklch, var(--primary) 86%, #000);
+
+  /* 描边强调（对应 www --border-strong），按钮/卡片 hover 用 */
+  --border-strong: rgb(215 215 224);
+
+  /* 阴影体系（对应 DESIGN.md --shadow-*；带主色的用 color-mix 跟随主题色） */
+  --shadow-sm: 0 1px 2px rgb(15 17 26 / 0.05);
+  --shadow-md: 0 4px 20px -6px rgb(15 17 26 / 0.10), 0 2px 6px -2px rgb(15 17 26 / 0.06);
+  --shadow-lg: 0 20px 50px -16px rgb(15 17 26 / 0.18), 0 8px 20px -6px rgb(15 17 26 / 0.10);
+  --btn-shadow: 0 6px 20px -6px color-mix(in oklch, var(--primary) 55%, transparent);
+  --btn-shadow-hover: 0 14px 30px -14px color-mix(in oklch, var(--primary) 70%, transparent);
+  /* 危险按钮：阴影用危险色，保持颜色语义一致 */
+  --btn-shadow-destructive: 0 6px 20px -6px color-mix(in oklch, var(--destructive) 55%, transparent);
+  --btn-shadow-destructive-hover: 0 14px 30px -14px color-mix(in oklch, var(--destructive) 70%, transparent);
+  --shadow-card-hover:
+    0 18px 40px -22px color-mix(in oklch, var(--primary) 55%, transparent),
+    0 8px 20px -14px rgb(0 0 0 / 0.18);
+  --card-hover-border: color-mix(in oklch, var(--primary) 45%, transparent);
+
+  /* 数据可视化色板（绿色主导） */
+  --chart-1: rgb(34 197 94);
+  --chart-2: rgb(22 163 74);
+  --chart-3: oklch(76.9% 0.166 70.0);
+  --chart-4: oklch(62.7% 0.265 303.9);
+  --chart-5: oklch(64.5% 0.246 16.439);
+
+  /* 侧边栏（用 sunken 底色营造层次，对应 www footer/sunken） */
+  --sidebar: rgb(246 246 249);
+  --sidebar-foreground: rgb(17 18 22);
+  --sidebar-primary: rgb(34 197 94);
+  --sidebar-primary-foreground: rgb(255 255 255);
+  --sidebar-accent: rgb(240 240 245);
+  --sidebar-accent-foreground: rgb(17 18 22);
+  --sidebar-border: rgb(230 230 236);
+  --sidebar-ring: rgb(34 197 94);
+}
+
+.dark {
+  /* 中性色（暗）— 对应 www .dark 的 --bg/--bg-elev/--bg-sunken/--bg-inset */
+  --background: rgb(11 12 16);
+  --foreground: rgb(240 241 245);
+  --card: rgb(17 19 25);
+  --card-foreground: rgb(240 241 245);
+  --popover: rgb(17 19 25);
+  --popover-foreground: rgb(240 241 245);
+  --secondary: rgb(21 23 30);
+  --secondary-foreground: rgb(240 241 245);
+  --muted: rgb(21 23 30);
+  --muted-foreground: rgb(168 172 186);
+  --accent: rgb(33 36 46);
+  --accent-foreground: rgb(240 241 245);
+  --destructive: oklch(70.4% 0.191 22.216);
+  --destructive-foreground: oklch(98.5% 0 0);
+  --border: rgb(33 36 46);
+  --border-strong: rgb(50 54 68);
+  --input: rgb(50 54 68);
+  --primary: rgb(34 197 94);
+  --primary-foreground: rgb(255 255 255);
+  --ring: rgb(34 197 94);
+  /* 暗色阴影更深，主色阴影略加强 */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 20px -6px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 60px -20px rgb(0 0 0 / 0.7), 0 8px 20px -6px rgb(0 0 0 / 0.4);
+  --shadow-card-hover:
+    0 18px 40px -22px color-mix(in oklch, var(--primary) 60%, transparent),
+    0 8px 20px -14px rgb(0 0 0 / 0.5);
+  --chart-1: rgb(34 197 94);
+  --chart-2: rgb(74 222 128);
+  --chart-3: oklch(76.9% 0.166 70.0);
+  --chart-4: oklch(62.7% 0.265 303.9);
+  --chart-5: oklch(64.5% 0.246 16.439);
+  --sidebar: rgb(14 15 20);
+  --sidebar-foreground: rgb(240 241 245);
+  --sidebar-primary: rgb(34 197 94);
+  --sidebar-primary-foreground: rgb(255 255 255);
+  --sidebar-accent: rgb(33 36 46);
+  --sidebar-accent-foreground: rgb(240 241 245);
+  --sidebar-border: rgb(33 36 46);
+  --sidebar-ring: rgb(34 197 94);
+}
+
+/* ---------- 多主题色预设：切换 html[data-theme] 即可 ----------
+   规则：浅色用饱满主色 + 白字；深色用更亮主色 + 深字；
+   亮色主色（cyan/amber/orange）改用深色前景文字保证对比度。      */
+[data-theme='green'] {
+  --primary: rgb(34 197 94);
+  --primary-foreground: rgb(255 255 255);
+  --ring: rgb(34 197 94);
+  --sidebar-primary: rgb(34 197 94);
+  --sidebar-primary-foreground: rgb(255 255 255);
+  --sidebar-ring: rgb(34 197 94);
+}
+
+.dark[data-theme='green'] {
+  --primary: rgb(34 197 94);
+  --primary-foreground: rgb(255 255 255);
+  --ring: rgb(34 197 94);
+  --sidebar-primary: rgb(34 197 94);
+  --sidebar-primary-foreground: rgb(255 255 255);
+  --sidebar-ring: rgb(34 197 94);
+}
+
+[data-theme='indigo'] {
+  --primary: oklch(58.5% 0.233 277.1);
+  --ring: oklch(58.5% 0.233 277.1);
+  --sidebar-primary: oklch(58.5% 0.233 277.1);
+  --sidebar-ring: oklch(58.5% 0.233 277.1);
+}
+
+.dark[data-theme='indigo'] {
+  --primary: oklch(67.3% 0.182 276.9);
+  --ring: oklch(67.3% 0.182 276.9);
+  --sidebar-primary: oklch(67.3% 0.182 276.9);
+  --sidebar-ring: oklch(67.3% 0.182 276.9);
+}
+
+[data-theme='violet'] {
+  --primary: oklch(60.6% 0.25 292.7);
+  --ring: oklch(60.6% 0.25 292.7);
+  --sidebar-primary: oklch(60.6% 0.25 292.7);
+  --sidebar-ring: oklch(60.6% 0.25 292.7);
+}
+
+.dark[data-theme='violet'] {
+  --primary: oklch(70.2% 0.183 293.5);
+  --ring: oklch(70.2% 0.183 293.5);
+  --sidebar-primary: oklch(70.2% 0.183 293.5);
+  --sidebar-ring: oklch(70.2% 0.183 293.5);
+}
+
+[data-theme='blue'] {
+  --primary: oklch(54.6% 0.245 262.88);
+  --ring: oklch(54.6% 0.245 262.88);
+  --sidebar-primary: oklch(54.6% 0.245 262.88);
+  --sidebar-ring: oklch(54.6% 0.245 262.88);
+}
+
+.dark[data-theme='blue'] {
+  --primary: oklch(62.3% 0.214 259.8);
+  --ring: oklch(62.3% 0.214 259.8);
+  --sidebar-primary: oklch(62.3% 0.214 259.8);
+  --sidebar-ring: oklch(62.3% 0.214 259.8);
+}
+
+[data-theme='cyan'] {
+  --primary: oklch(71.5% 0.13 215.2);
+  --primary-foreground: oklch(21% 0.034 264.4);
+  --ring: oklch(71.5% 0.13 215.2);
+  --sidebar-primary: oklch(71.5% 0.13 215.2);
+  --sidebar-primary-foreground: oklch(21% 0.034 264.4);
+  --sidebar-ring: oklch(71.5% 0.13 215.2);
+}
+
+.dark[data-theme='cyan'] {
+  --primary: oklch(78% 0.12 215.2);
+  --primary-foreground: oklch(16% 0.02 274.6);
+  --ring: oklch(78% 0.12 215.2);
+  --sidebar-primary: oklch(78% 0.12 215.2);
+  --sidebar-primary-foreground: oklch(16% 0.02 274.6);
+  --sidebar-ring: oklch(78% 0.12 215.2);
+}
+
+[data-theme='teal'] {
+  --primary: oklch(62% 0.12 183.0);
+  --ring: oklch(62% 0.12 183.0);
+  --sidebar-primary: oklch(62% 0.12 183.0);
+  --sidebar-ring: oklch(62% 0.12 183.0);
+}
+
+.dark[data-theme='teal'] {
+  --primary: oklch(70.4% 0.13 183.0);
+  --ring: oklch(70.4% 0.13 183.0);
+  --sidebar-primary: oklch(70.4% 0.13 183.0);
+  --sidebar-ring: oklch(70.4% 0.13 183.0);
+}
+
+[data-theme='emerald'] {
+  --primary: oklch(62.7% 0.15 163.0);
+  --ring: oklch(62.7% 0.15 163.0);
+  --sidebar-primary: oklch(62.7% 0.15 163.0);
+  --sidebar-ring: oklch(62.7% 0.15 163.0);
+}
+
+.dark[data-theme='emerald'] {
+  --primary: oklch(69.6% 0.17 162.5);
+  --ring: oklch(69.6% 0.17 162.5);
+  --sidebar-primary: oklch(69.6% 0.17 162.5);
+  --sidebar-ring: oklch(69.6% 0.17 162.5);
+}
+
+[data-theme='rose'] {
+  --primary: oklch(58.6% 0.253 17.6);
+  --ring: oklch(58.6% 0.253 17.6);
+  --sidebar-primary: oklch(58.6% 0.253 17.6);
+  --sidebar-ring: oklch(58.6% 0.253 17.6);
+}
+
+.dark[data-theme='rose'] {
+  --primary: oklch(64.5% 0.246 16.4);
+  --ring: oklch(64.5% 0.246 16.4);
+  --sidebar-primary: oklch(64.5% 0.246 16.4);
+  --sidebar-ring: oklch(64.5% 0.246 16.4);
+}
+
+[data-theme='orange'] {
+  --primary: oklch(70.5% 0.19 41.5);
+  --primary-foreground: oklch(21% 0.034 264.4);
+  --ring: oklch(70.5% 0.19 41.5);
+  --sidebar-primary: oklch(70.5% 0.19 41.5);
+  --sidebar-primary-foreground: oklch(21% 0.034 264.4);
+  --sidebar-ring: oklch(70.5% 0.19 41.5);
+}
+
+.dark[data-theme='orange'] {
+  --primary: oklch(75% 0.18 48.0);
+  --primary-foreground: oklch(16% 0.02 274.6);
+  --ring: oklch(75% 0.18 48.0);
+  --sidebar-primary: oklch(75% 0.18 48.0);
+  --sidebar-primary-foreground: oklch(16% 0.02 274.6);
+  --sidebar-ring: oklch(75% 0.18 48.0);
+}
+
+[data-theme='amber'] {
+  --primary: oklch(76.9% 0.166 70.0);
+  --primary-foreground: oklch(21% 0.034 264.4);
+  --ring: oklch(76.9% 0.166 70.0);
+  --sidebar-primary: oklch(76.9% 0.166 70.0);
+  --sidebar-primary-foreground: oklch(21% 0.034 264.4);
+  --sidebar-ring: oklch(76.9% 0.166 70.0);
+}
+
+.dark[data-theme='amber'] {
+  --primary: oklch(82.8% 0.15 78.0);
+  --primary-foreground: oklch(16% 0.02 274.6);
+  --ring: oklch(82.8% 0.15 78.0);
+  --sidebar-primary: oklch(82.8% 0.15 78.0);
+  --sidebar-primary-foreground: oklch(16% 0.02 274.6);
+  --sidebar-ring: oklch(82.8% 0.15 78.0);
+}
+
+[data-theme='pink'] {
+  --primary: oklch(63.3% 0.265 5.0);
+  --ring: oklch(63.3% 0.265 5.0);
+  --sidebar-primary: oklch(63.3% 0.265 5.0);
+  --sidebar-ring: oklch(63.3% 0.265 5.0);
+}
+
+.dark[data-theme='pink'] {
+  --primary: oklch(70% 0.21 4.0);
+  --ring: oklch(70% 0.21 4.0);
+  --sidebar-primary: oklch(70% 0.21 4.0);
+  --sidebar-ring: oklch(70% 0.21 4.0);
+}
+
+[data-theme='neutral'] {
+  --primary: oklch(21% 0.034 264.4);
+  --primary-foreground: oklch(98.5% 0 0);
+  --ring: oklch(55.1% 0.027 264.4);
+  --sidebar-primary: oklch(21% 0.034 264.4);
+  --sidebar-ring: oklch(55.1% 0.027 264.4);
+}
+
+.dark[data-theme='neutral'] {
+  --primary: oklch(92% 0.004 264.5);
+  --primary-foreground: oklch(21% 0.034 264.4);
+  --ring: oklch(70.7% 0.022 264.5);
+  --sidebar-primary: oklch(92% 0.004 264.5);
+  --sidebar-primary-foreground: oklch(21% 0.034 264.4);
+  --sidebar-ring: oklch(70.7% 0.022 264.5);
+}
+
+/* ---------- Tailwind 主题映射 ---------- */
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizelegibility;
+  }
+
+  /* Tailwind v4 Preflight 默认按钮为 default 光标，这里恢复手型 */
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  a[href],
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+}
+
+/* =========================================================================
+   页面进入动效（设置面板选择 name：fade/slide/slide-up/zoom/blur；none=关闭）
+   入场用 ease-out，离场用 ease-in（更自然）
+   ========================================================================= */
+.fade-enter-active { transition: opacity 0.22s ease-out; }
+.fade-leave-active { transition: opacity 0.16s ease-in; }
+
+.fade-enter-from,
+.fade-leave-to { opacity: 0; }
+
+.slide-enter-active { transition: opacity 0.24s ease-out, transform 0.24s ease-out; }
+.slide-leave-active { transition: opacity 0.16s ease-in, transform 0.16s ease-in; }
+.slide-enter-from { opacity: 0; transform: translateX(18px); }
+.slide-leave-to { opacity: 0; transform: translateX(-18px); }
+
+.slide-up-enter-active { transition: opacity 0.24s ease-out, transform 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
+.slide-up-leave-active { transition: opacity 0.15s ease-in, transform 0.15s ease-in; }
+.slide-up-enter-from { opacity: 0; transform: translateY(16px); }
+.slide-up-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.zoom-enter-active { transition: opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.zoom-leave-active { transition: opacity 0.14s ease-in, transform 0.14s ease-in; }
+
+.zoom-enter-from,
+.zoom-leave-to { opacity: 0; transform: scale(0.97); }
+
+.blur-enter-active { transition: opacity 0.26s ease-out, filter 0.26s ease-out, transform 0.26s ease-out; }
+.blur-leave-active { transition: opacity 0.16s ease-in, filter 0.16s ease-in; }
+
+.blur-enter-from,
+.blur-leave-to { opacity: 0; filter: blur(8px); transform: scale(0.99); }
+
+/* 注意：这里不再用 @media (prefers-reduced-motion: reduce) 降级动效。
+   页面动效完全由设置面板显式控制（含「无」选项），尊重用户在应用内的主动选择；
+   否则系统“减弱动态效果”开启时，会把所选的 slide/slide-up/zoom/blur 静默降级成
+   只剩淡入淡出，造成“设置里切换其它效果没反应”。需要完全静止的用户请在设置里选「无」。 */

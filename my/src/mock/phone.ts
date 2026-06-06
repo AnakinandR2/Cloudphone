@@ -1,0 +1,310 @@
+import { defineFakeRoute } from 'vite-plugin-fake-server/client'
+
+function ok<T>(data: T, message = '成功') {
+  return { code: 0, message, data }
+}
+function fail(message: string) {
+  return { code: 1, message, data: null }
+}
+function now() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ')
+}
+
+interface PhoneRec {
+  id: number
+  user_id: number
+  cp_id: string
+  name: string
+  status: string
+  region: string
+  vm_id: string
+  image_id: string
+  proxy_id: number
+  remark: string
+  created_at: string
+  updated_at: string
+}
+
+// 内存云手机表（演示用，归属 user 1）
+const phones: PhoneRec[] = Array.from({ length: 4 }).map((_, i) => ({
+  id: 4 - i,
+  user_id: 1,
+  cp_id: `CP-${1000 + (4 - i)}`,
+  name: `云手机 ${4 - i}`,
+  status: ['RUNNING', 'STOPPED', 'CREATED', 'CREATE_FAILED'][i % 4],
+  region: ['HK', 'US', 'JP', 'SG'][i % 4],
+  vm_id: `vm-${4 - i}`,
+  image_id: `img-android13`,
+  proxy_id: i % 2 === 0 ? (4 - i) : 0,
+  remark: '',
+  created_at: `2026-0${(i % 9) + 1}-1${i % 9} 10:30:00`,
+  updated_at: `2026-0${(i % 9) + 1}-1${i % 9} 10:30:00`,
+}))
+let seq = 3000
+
+// ADB 演示态：phone id → { enabled, 白名单 IP }
+const adbState: Record<number, { enabled: boolean, whiteIp: string[] }> = {}
+function adbInfo(id: number) {
+  const st = adbState[id]
+  const enabled = st?.enabled ?? false
+  return {
+    enabled,
+    adbAddress: enabled ? `10.30.${id % 255}.${(id * 7) % 255}:5555` : '',
+    adbToken: enabled ? `tok-${(id * 8123).toString(36)}` : '',
+    adbTokenExpiredAt: enabled ? '2026-07-06 10:00:00' : '',
+    status: 'NORMAL',
+  }
+}
+
+export default defineFakeRoute([
+  {
+    url: '/v1/phone/list',
+    method: 'get',
+    response: ({ query }) => {
+      const page = Number(query.page) || 1
+      const size = Number(query.size) || 10
+      const kw = (query.kw as string) || ''
+      const status = (query.status as string) || ''
+      let list = phones
+      if (kw) list = list.filter(p => p.name.includes(kw) || p.cp_id.includes(kw))
+      if (status) list = list.filter(p => p.status === status)
+      const total = list.length
+      const start = (page - 1) * size
+      return ok({ list: list.slice(start, start + size), total })
+    },
+  },
+  {
+    url: '/v1/phone/:id',
+    method: 'get',
+    response: ({ params }) => {
+      const p = phones.find(x => x.id === Number(params.id))
+      return p ? ok(p) : fail('云手机不存在')
+    },
+  },
+  {
+    url: '/v1/phone/create',
+    method: 'post',
+    response: ({ body }) => {
+      if (!body?.name) return fail('请填写名称')
+      const id = ++seq
+      const rec: PhoneRec = {
+        id,
+        user_id: 1,
+        cp_id: `CP-${id}`,
+        name: body.name,
+        status: 'CREATING',
+        region: body.region || '',
+        vm_id: `vm-${id}`,
+        image_id: body.image_id || 'img-android13',
+        proxy_id: Number(body.proxy_id) || 0,
+        remark: body.remark || '',
+        created_at: now(),
+        updated_at: now(),
+      }
+      phones.unshift(rec)
+      // 模拟异步收敛：创建中 → 3s 后创建成功
+      setTimeout(() => {
+        const p = phones.find(x => x.id === id)
+        if (p && p.status === 'CREATING')
+          p.status = 'CREATED'
+      }, 3000)
+      return ok(rec)
+    },
+  },
+  {
+    url: '/v1/phone/update/:id',
+    method: 'put',
+    response: ({ params, body }) => {
+      const p = phones.find(x => x.id === Number(params.id))
+      if (!p) return fail('云手机不存在')
+      if (body?.name !== undefined && body.name !== '') p.name = body.name
+      if (body?.status !== undefined && body.status !== '') p.status = body.status
+      if (body?.region !== undefined) p.region = body.region
+      if (body?.image_id !== undefined) p.image_id = body.image_id
+      if (body?.proxy_id !== undefined) p.proxy_id = Number(body.proxy_id) || 0
+      if (body?.remark !== undefined) p.remark = body.remark
+      p.updated_at = now()
+      return ok(p)
+    },
+  },
+  {
+    url: '/v1/phone/delete/:id',
+    method: 'delete',
+    response: ({ params }) => {
+      const idx = phones.findIndex(x => x.id === Number(params.id))
+      if (idx === -1) return fail('云手机不存在')
+      phones.splice(idx, 1)
+      return ok(null)
+    },
+  },
+
+  // ---- 实例操作 ----
+  {
+    url: '/v1/phone/:id/power',
+    method: 'post',
+    response: ({ params, body }) => {
+      const p = phones.find(x => x.id === Number(params.id))
+      if (!p) return fail('云手机不存在')
+      if (body?.operation === '开机') {
+        if (p.status !== 'CREATED' && p.status !== 'STOPPED') return fail('当前状态不可开机')
+        p.status = 'STARTING'
+        // 模拟异步收敛：开机中 → 3s 后运行中
+        setTimeout(() => {
+          const x = phones.find(y => y.id === p.id)
+          if (x && x.status === 'STARTING') x.status = 'RUNNING'
+        }, 3000)
+      }
+      else if (body?.operation === '关机') {
+        if (p.status !== 'RUNNING') return fail('当前状态不可关机')
+        p.status = 'STOPPED'
+      }
+      return ok(null)
+    },
+  },
+  {
+    url: '/v1/phone/:id/restart',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/reset',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/destroy',
+    method: 'post',
+    response: ({ params }) => {
+      const idx = phones.findIndex(x => x.id === Number(params.id))
+      if (idx !== -1) phones.splice(idx, 1)
+      return ok(null)
+    },
+  },
+
+  // ---- 远程控制（WebRTC）----
+  {
+    url: '/v1/phone/:id/webrtc-auth',
+    method: 'post',
+    response: ({ params }) => ok({
+      cpId: `CP-${params.id}`,
+      vmId: `vm-${params.id}`,
+      zoneId: 'cn-hk-1',
+      pushStreamUrl: `webrtc://push.example.com/live/vm-${params.id}`,
+      signalUrl: `wss://signal.example.com/ws/vm-${params.id}`,
+      authToken: `mock-token-${params.id}-aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789`,
+    }),
+  },
+  {
+    url: '/v1/phone/:id/webrtc-state',
+    method: 'get',
+    response: () => ok({ in_webrtc: true }),
+  },
+  {
+    url: '/v1/phone/:id/screenshot',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/volume',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/rotate',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/shake',
+    method: 'post',
+    response: () => ok(null),
+  },
+
+  // ---- 应用管理 ----
+  {
+    url: '/v1/phone/:id/apps',
+    method: 'get',
+    response: () => ok([
+      { id: 101, packageName: 'com.tencent.mm', version: '8.0.49', md5: 'a1b2c3', appName: '微信', iconPath: '', fileSize: 268435456 },
+      { id: 102, packageName: 'com.taobao.taobao', version: '10.30.0', md5: 'd4e5f6', appName: '淘宝', iconPath: '', fileSize: 188743680 },
+      { id: 103, packageName: 'com.android.chrome', version: '125.0', md5: '7g8h9i', appName: 'Chrome', iconPath: '', fileSize: 134217728 },
+    ]),
+  },
+  {
+    url: '/v1/phone/:id/apps/install',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/apps/uninstall',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/apps/start',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/apps/stop',
+    method: 'post',
+    response: () => ok(null),
+  },
+  {
+    url: '/v1/phone/:id/apps/kill-all',
+    method: 'post',
+    response: () => ok(null),
+  },
+
+  // ---- ADB（演示用内存态：按 phone id 记 enabled + 白名单）----
+  {
+    url: '/v1/phone/:id/adb',
+    method: 'get',
+    response: ({ params }) => ok(adbInfo(Number(params.id))),
+  },
+  {
+    url: '/v1/phone/:id/adb/enable',
+    method: 'post',
+    response: ({ params, body }) => {
+      const id = Number(params.id)
+      adbState[id] = { enabled: true, whiteIp: (body?.whiteIp as string[]) ?? [] }
+      return ok(adbInfo(id))
+    },
+  },
+  {
+    url: '/v1/phone/:id/adb/disable',
+    method: 'post',
+    response: ({ params }) => {
+      const id = Number(params.id)
+      adbState[id] = { enabled: false, whiteIp: adbState[id]?.whiteIp ?? [] }
+      return ok(null)
+    },
+  },
+  {
+    url: '/v1/phone/:id/adb/whitelist',
+    method: 'get',
+    response: ({ params }) => {
+      const id = Number(params.id)
+      const ips = adbState[id]?.whiteIp ?? []
+      return ok(ips.map((ip, i) => ({
+        id: i + 1,
+        cpId: `CP-${1000 + id}`,
+        vmId: `vm-${id}`,
+        ipAddress: ip,
+        status: 1,
+        statusDesc: '生效',
+        expired: false,
+        createTime: now(),
+      })))
+    },
+  },
+  {
+    url: '/v1/phone/:id/adb/whitelist',
+    method: 'post',
+    response: ({ params, body }) => {
+      const id = Number(params.id)
+      adbState[id] = { enabled: adbState[id]?.enabled ?? true, whiteIp: (body?.whiteIp as string[]) ?? [] }
+      return ok(null)
+    },
+  },
+])

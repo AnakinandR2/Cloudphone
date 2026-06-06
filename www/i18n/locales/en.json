@@ -1,0 +1,205 @@
+{
+  "brand": "GloryPhone",
+  "nav": {
+    "features": "Features",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "faq": "FAQ",
+    "signIn": "Sign in",
+    "getStarted": "Get started"
+  },
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "color": "Theme color"
+  },
+  "lang": {
+    "label": "Language"
+  },
+  "hero": {
+    "badge": "New · Realtime collaboration is here",
+    "title": "The all-in-one platform for modern teams",
+    "subtitle": "GloryPhone brings automation, analytics, and collaboration into one beautiful workspace — so your team ships faster and stays in sync.",
+    "ctaPrimary": "Start free trial",
+    "ctaSecondary": "Book a demo",
+    "note": "No credit card required · 14-day free trial",
+    "stat1": "Teams onboarded",
+    "stat2": "Uptime SLA",
+    "stat3": "Countries served"
+  },
+  "logos": {
+    "title": "Trusted by fast-growing teams worldwide"
+  },
+  "features": {
+    "tag": "Features",
+    "title": "Everything you need to move faster",
+    "subtitle": "Powerful building blocks that adapt to the way your team already works.",
+    "items": {
+      "automation": {
+        "title": "Smart automation",
+        "desc": "Automate repetitive workflows with visual rules and triggers — no code required."
+      },
+      "analytics": {
+        "title": "Realtime analytics",
+        "desc": "Track the metrics that matter with dashboards that update the moment data changes."
+      },
+      "collaboration": {
+        "title": "Seamless collaboration",
+        "desc": "Comments, mentions, and shared spaces keep everyone aligned in real time."
+      },
+      "security": {
+        "title": "Enterprise security",
+        "desc": "SOC 2 Type II, SSO, and granular permissions keep your data protected."
+      },
+      "integrations": {
+        "title": "100+ integrations",
+        "desc": "Connect the tools you already use, from Slack and GitHub to your data warehouse."
+      },
+      "speed": {
+        "title": "Built for speed",
+        "desc": "A snappy, reliable experience on every device, anywhere in the world."
+      }
+    }
+  },
+  "pricing": {
+    "tag": "Pricing",
+    "title": "Simple, transparent pricing",
+    "subtitle": "Start free and scale as you grow. No hidden fees, cancel anytime.",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "save": "Save 20%",
+    "perMonth": "/mo",
+    "popular": "Most popular",
+    "cta": "Get started",
+    "ctaEnterprise": "Contact sales",
+    "plans": {
+      "starter": {
+        "name": "Starter",
+        "desc": "For individuals and small projects getting off the ground.",
+        "features": [
+          "Up to 3 team members",
+          "5 GB storage",
+          "Basic analytics",
+          "Community support"
+        ]
+      },
+      "pro": {
+        "name": "Pro",
+        "desc": "For growing teams that need more power and automation.",
+        "features": [
+          "Unlimited team members",
+          "100 GB storage",
+          "Advanced analytics",
+          "Automation workflows",
+          "Priority support"
+        ]
+      },
+      "enterprise": {
+        "name": "Enterprise",
+        "desc": "For organizations with advanced security and scale needs.",
+        "features": [
+          "Everything in Pro",
+          "SSO & SAML",
+          "Dedicated success manager",
+          "99.99% uptime SLA",
+          "Custom contracts"
+        ]
+      }
+    }
+  },
+  "blog": {
+    "tag": "Blog",
+    "title": "Latest from our team",
+    "subtitle": "Product updates, engineering deep-dives, and lessons from building GloryPhone.",
+    "readMore": "Read article",
+    "backToBlog": "Back to blog",
+    "minRead": "min read",
+    "posts": {
+      "p1": {
+        "title": "Shipping realtime collaboration at scale",
+        "excerpt": "How we rebuilt our sync engine to support millions of concurrent edits without breaking a sweat.",
+        "category": "Engineering",
+        "body": "Realtime collaboration sounds simple until you have thousands of users editing the same document. In this post we walk through the architecture behind our new sync engine, the trade-offs we made with CRDTs, and how we kept latency under 50ms worldwide.\n\nWe started by mapping every conflict scenario, then designed a merge strategy that favors user intent over raw timestamps. The result is an experience that feels instant, even on flaky connections."
+      },
+      "p2": {
+        "title": "A practical guide to workflow automation",
+        "excerpt": "Five automations every team should set up in their first week to save hours of manual work.",
+        "category": "Product",
+        "body": "Automation is the fastest way to reclaim your team's time. We break down five high-impact automations — from auto-assigning tasks to syncing data across tools — and show you exactly how to build them with GloryPhone's visual rule builder.\n\nEach example includes the trigger, the conditions, and the action, so you can copy them directly into your workspace."
+      },
+      "p3": {
+        "title": "Designing for dark mode the right way",
+        "excerpt": "Dark mode is more than inverting colors. Here is how we approach contrast, depth, and accent theming.",
+        "category": "Design",
+        "body": "A great dark mode respects contrast ratios, preserves hierarchy, and never feels like a flat inversion of the light theme. We share the token system we use, why we layer surfaces instead of using pure black, and how swappable accent colors stay accessible in both themes."
+      }
+    }
+  },
+  "faq": {
+    "tag": "FAQ",
+    "title": "Frequently asked questions",
+    "subtitle": "Everything you need to know about the product and billing.",
+    "stillQuestions": "Still have questions?",
+    "contact": "Contact our team",
+    "items": {
+      "q1": {
+        "q": "Can I try GloryPhone for free?",
+        "a": "Yes. Every plan starts with a 14-day free trial — no credit card required. You can explore every feature and invite your team during the trial."
+      },
+      "q2": {
+        "q": "Can I change or cancel my plan anytime?",
+        "a": "Absolutely. You can upgrade, downgrade, or cancel at any time from your billing settings. Changes take effect immediately and we prorate the difference."
+      },
+      "q3": {
+        "q": "Is my data secure?",
+        "a": "Security is foundational. We are SOC 2 Type II compliant, encrypt data at rest and in transit, and offer SSO and granular role-based permissions on higher plans."
+      },
+      "q4": {
+        "q": "Do you offer discounts for nonprofits or education?",
+        "a": "Yes, we offer up to 50% off for qualifying nonprofits, students, and educators. Reach out to our team and we'll get you set up."
+      },
+      "q5": {
+        "q": "What integrations are supported?",
+        "a": "We support 100+ integrations including Slack, GitHub, Google Workspace, Notion, and most major data warehouses. We also offer a full REST API and webhooks."
+      }
+    }
+  },
+  "cta": {
+    "title": "Ready to bring your team together?",
+    "subtitle": "Join thousands of teams already shipping faster with GloryPhone.",
+    "button": "Start your free trial",
+    "secondary": "Talk to sales"
+  },
+  "newsletter": {
+    "title": "Stay in the loop",
+    "subtitle": "Get product updates and tips in your inbox. No spam, unsubscribe anytime.",
+    "placeholder": "Enter your email",
+    "button": "Subscribe"
+  },
+  "footer": {
+    "tagline": "The all-in-one platform for modern teams.",
+    "product": "Product",
+    "company": "Company",
+    "resources": "Resources",
+    "legal": "Legal",
+    "links": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "integrations": "Integrations",
+      "changelog": "Changelog",
+      "about": "About",
+      "careers": "Careers",
+      "contact": "Contact",
+      "blog": "Blog",
+      "docs": "Documentation",
+      "support": "Support",
+      "status": "Status",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "security": "Security"
+    },
+    "rights": "All rights reserved."
+  }
+}

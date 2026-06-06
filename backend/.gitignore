@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Environment variables
+.env
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Swagger docs (will be regenerated)
+docs/docs.go
+docs/swagger.json
+docs/swagger.yaml
+
+backend
+manager-backend
+
+# SQLite 数据库文件
+*.db
+
+# scaffold 生成器误编译产物
+/scaffold

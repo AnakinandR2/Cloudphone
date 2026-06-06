@@ -1,0 +1,182 @@
+/* =========================================================================
+   Auth pages (login / register) — Gloryphone design system, ported from
+   www/DESIGN.md (ref/sytle12-claude-design login.html & register.html).
+   Everything is scoped under `.gp-auth` so the design-system tokens don't
+   leak into the rest of the admin-derived app. Dark mode keys off `.dark`
+   (set on <html> by the settings store). Accent = green (Gloryphone default).
+   ========================================================================= */
+
+.gp-auth {
+  /* accent */
+  --accent: 34 197 94;
+  --accent-strong: 22 163 74;
+  --accent-color: #22c55e;
+  --accent-strong-color: #16a34a;
+  --accent-fg: 255 255 255;
+
+  /* neutral scale (light) */
+  --bg: 252 252 253;
+  --bg-elev: 255 255 255;
+  --bg-sunken: 246 246 249;
+  --bg-inset: 240 240 245;
+  --border: 230 230 236;
+  --border-strong: 215 215 224;
+  --fg: 17 18 22;
+  --fg-muted: 86 90 102;
+  --fg-subtle: 130 135 150;
+
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  color: rgb(var(--fg));
+  font-family: var(--font-display);
+}
+
+.dark .gp-auth {
+  --bg: 11 12 16;
+  --bg-elev: 17 19 25;
+  --bg-sunken: 14 15 20;
+  --bg-inset: 21 23 30;
+  --border: 33 36 46;
+  --border-strong: 50 54 68;
+  --fg: 240 241 245;
+  --fg-muted: 168 172 186;
+  --fg-subtle: 120 125 140;
+}
+
+/* ---- brand mark (CSS-drawn phone glyph) ---- */
+.gp-auth .brand-mark {
+  width: 28px; height: 28px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-strong-color));
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15);
+  flex-shrink: 0;
+}
+.gp-auth .brand-mark::after {
+  content: ""; position: absolute; inset: 6px;
+  border: 2px solid rgb(255 255 255 / 0.85); border-radius: 4px;
+}
+.gp-auth .brand-mark::before {
+  content: ""; position: absolute; left: 50%; bottom: 3px;
+  width: 8px; height: 2px; border-radius: 2px;
+  background: rgb(255 255 255 / 0.85); transform: translateX(-50%);
+}
+
+/* ---- split layout ---- */
+.gp-auth .auth-split { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
+@media (max-width: 980px) {
+  .gp-auth .auth-split { grid-template-columns: 1fr; }
+  .gp-auth .auth-aside { display: none; }
+}
+
+/* ---- left aside (dark green, floating tiles) ---- */
+.gp-auth .auth-aside {
+  position: relative; overflow: hidden;
+  padding: 48px 56px 56px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: #fff;
+  background:
+    radial-gradient(80% 60% at 30% 40%, rgb(var(--accent) / 0.35), transparent 60%),
+    radial-gradient(60% 60% at 80% 100%, rgb(0 0 0 / 0.5), transparent 70%),
+    linear-gradient(160deg, #06140d 0%, #0a1c12 35%, #050a07 100%);
+}
+.gp-auth .auth-aside::before,
+.gp-auth .auth-aside::after {
+  content: ""; position: absolute; border-radius: 24px;
+  background: rgb(255 255 255 / 0.025);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  backdrop-filter: blur(2px); pointer-events: none;
+}
+.gp-auth .auth-aside::before { width: 220px; height: 220px; top: -50px; right: -40px; transform: rotate(8deg); }
+.gp-auth .auth-aside::after  { width: 280px; height: 280px; top: 35%; right: 22%; transform: rotate(-3deg); }
+
+.gp-auth .auth-aside__tiles { position: absolute; inset: 0; pointer-events: none; }
+.gp-auth .auth-aside__tiles i {
+  position: absolute; display: block; border-radius: 22px;
+  background: rgb(255 255 255 / 0.02); border: 1px solid rgb(255 255 255 / 0.06);
+}
+.gp-auth .auth-aside__tiles i:nth-child(1) { width: 180px; height: 180px; left: 18%; top: 18%; transform: rotate(-5deg); }
+.gp-auth .auth-aside__tiles i:nth-child(2) { width: 160px; height: 160px; left: 8%;  top: 48%; transform: rotate(7deg); }
+.gp-auth .auth-aside__tiles i:nth-child(3) { width: 200px; height: 200px; left: 40%; top: 60%; transform: rotate(-4deg); }
+.gp-auth .auth-aside__tiles i:nth-child(4) { width: 240px; height: 240px; right: -50px; bottom: 18%; transform: rotate(6deg); }
+
+.gp-auth .auth-aside__brand {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 700; font-size: 18px; color: #fff;
+}
+.gp-auth .auth-aside__brand .brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+.gp-auth .auth-aside__center { position: relative; z-index: 1; margin-block: auto; max-width: 480px; }
+.gp-auth .auth-aside__title {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(34px, 4.2vw, 52px); letter-spacing: -0.02em; line-height: 1.1;
+  color: #fff; margin: 0 0 18px;
+}
+.gp-auth .auth-aside__sub { color: rgb(255 255 255 / 0.7); font-size: 16px; line-height: 1.6; max-width: 440px; }
+.gp-auth .auth-aside__stats { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, auto); gap: 48px; align-items: end; }
+.gp-auth .auth-aside__stat .v { font-family: var(--font-display); font-weight: 800; font-size: 28px; color: #fff; letter-spacing: -0.02em; line-height: 1; }
+.gp-auth .auth-aside__stat .l { margin-top: 6px; color: rgb(255 255 255 / 0.55); font-size: 12.5px; }
+
+/* ---- right form side ---- */
+.gp-auth .auth-form {
+  position: relative; padding: 32px 56px 48px;
+  display: flex; flex-direction: column; background: rgb(var(--bg));
+}
+@media (max-width: 720px) { .gp-auth .auth-form { padding: 24px 24px 40px; } }
+.gp-auth .auth-form__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: auto; }
+.gp-auth .auth-form__brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 700; font-size: 17px; color: rgb(var(--fg));
+}
+.gp-auth .auth-form__brand .brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+.gp-auth .auth-form__tools { display: flex; align-items: center; gap: 8px; }
+.gp-auth .auth-form__tools .icon-btn {
+  width: 40px; height: 40px; border-radius: 999px;
+  background: rgb(var(--bg-elev)); border: 1px solid rgb(var(--border));
+  display: inline-flex; align-items: center; justify-content: center;
+  color: rgb(var(--fg-muted)); cursor: pointer; transition: background .2s, color .2s;
+}
+.gp-auth .auth-form__tools .icon-btn:hover { background: rgb(var(--bg-sunken)); color: rgb(var(--fg)); }
+
+.gp-auth .auth-form__center { width: 100%; max-width: 460px; margin: auto; padding-block: 24px; }
+.gp-auth .auth-form__center h1 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(28px, 3vw, 36px); letter-spacing: -0.02em; margin: 0 0 10px;
+}
+.gp-auth .auth-form__center .sub { color: rgb(var(--fg-muted)); font-size: 15px; margin-bottom: 28px; }
+
+/* ---- fields ---- */
+.gp-auth .auth-field { margin-bottom: 18px; }
+.gp-auth .auth-field label { display: block; font-size: 13px; font-weight: 600; color: rgb(var(--fg)); margin-bottom: 8px; }
+.gp-auth .auth-input {
+  width: 100%; height: 48px; padding: 0 16px;
+  background: rgb(var(--bg-elev)); border: 1px solid rgb(var(--border));
+  border-radius: 999px; font-family: inherit; font-size: 14.5px; color: rgb(var(--fg));
+  transition: border-color .2s, box-shadow .2s;
+}
+.gp-auth .auth-input::placeholder { color: rgb(var(--fg-subtle)); }
+.gp-auth .auth-input:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 4px rgb(var(--accent) / 0.15); }
+
+.gp-auth .auth-terms {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: 13px; color: rgb(var(--fg-muted)); margin: 6px 0 18px; line-height: 1.5;
+}
+.gp-auth .auth-terms input { margin-top: 3px; accent-color: var(--accent-color); }
+.gp-auth .auth-terms a { color: var(--accent-color); font-weight: 600; }
+
+.gp-auth .auth-error { color: #ef4444; font-size: 13px; margin: -6px 0 14px; }
+
+.gp-auth .auth-submit {
+  width: 100%; height: 52px; border: 0; border-radius: 999px;
+  background: var(--accent-color); color: rgb(var(--accent-fg));
+  font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px;
+  transition: background .2s, transform .15s, opacity .2s;
+  box-shadow: 0 8px 24px -8px rgb(var(--accent) / 0.55);
+}
+.gp-auth .auth-submit:hover { background: var(--accent-strong-color); }
+.gp-auth .auth-submit:active { transform: translateY(1px); }
+.gp-auth .auth-submit:disabled { opacity: .6; cursor: not-allowed; }
+
+.gp-auth .auth-foot { text-align: center; margin-top: 28px; color: rgb(var(--fg-muted)); font-size: 14px; }
+.gp-auth .auth-foot a { color: var(--accent-color); font-weight: 600; }
+.gp-auth .auth-foot a:hover { color: var(--accent-strong-color); }

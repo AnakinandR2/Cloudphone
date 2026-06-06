@@ -1,0 +1,66 @@
+# ───────── 依赖 ─────────
+node_modules/
+backend/vendor/
+
+# ───────── 前端构建产物 ─────────
+dist/
+dist-ssr/
+.nuxt/
+.nitro/
+.output/
+.cache/
+*.local
+
+# ───────── Go 构建产物 ─────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+backend/backend
+backend/manager-backend
+/scaffold
+backend/docs/docs.go
+backend/docs/swagger.json
+backend/docs/swagger.yaml
+*.db
+
+# ───────── ops 构建产物 ─────────
+ops/dist/
+
+# ───────── 环境变量 / 密钥（保留 *.example） ─────────
+.env
+.env.local
+.env.*.local
+
+# ───────── 日志 ─────────
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ───────── Lint 缓存 ─────────
+.eslintcache
+.stylelintcache
+
+# ───────── 编辑器 / IDE ─────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ───────── 操作系统 ─────────
+.DS_Store
+Thumbs.db
+
+# ───────── 工具本地配置（Claude 设置 / 记忆 / 技能） ─────────
+.claude/
+
+# ───────── 参考 / 附属目录（非主产品代码，本地保留不入库） ─────────
+/ref/
+/admin-fantistic/
+/cp-glory-service/

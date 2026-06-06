@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-accent="green">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gloryphone — Design System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- The actual design-system stylesheet (browser-ready copy of the ported reference). -->
+  <link rel="stylesheet" href="/design.css" />
+  <script>
+    // Accent presets (RGB triplet + strong + hex + strong hex) — mirror useThemeColor.ts
+    const THEMES = {
+      purple: ["168 85 247", "147 51 234", "#a855f7", "#9333ea"],
+      blue:   ["59 130 246", "37 99 235",  "#3b82f6", "#2563eb"],
+      teal:   ["20 184 166", "13 148 136", "#14b8a6", "#0d9488"],
+      green:  ["34 197 94",  "22 163 74",  "#22c55e", "#16a34a"],
+      orange: ["249 115 22", "234 88 12",  "#f97316", "#ea580c"],
+      pink:   ["236 72 153", "219 39 119", "#ec4899", "#db2777"],
+      indigo: ["99 102 241", "79 70 229",  "#6366f1", "#4f46e5"],
+      rose:   ["244 63 94",  "225 29 72",  "#f43f5e", "#e11d48"],
+    };
+    function applyAccent(key) {
+      const t = THEMES[key] || THEMES.green;
+      const r = document.documentElement;
+      r.style.setProperty("--accent", t[0]);
+      r.style.setProperty("--accent-strong", t[1]);
+      r.style.setProperty("--accent-color", t[2]);
+      r.style.setProperty("--accent-strong-color", t[3]);
+      r.setAttribute("data-accent", key);
+    }
+    function applyTheme(mode) { document.documentElement.setAttribute("data-theme", mode); }
+    // pre-paint defaults
+    applyAccent(localStorage.getItem("ds.accent") || "green");
+    applyTheme(localStorage.getItem("ds.theme") || "light");
+  </script>
+  <style>
+    /* Styleguide-only helpers (the rest comes from /design.css) */
+    .ds-wrap { max-width: 1100px; }
+    .ds-toolbar {
+      position: sticky; top: 0; z-index: 40;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 14px 24px;
+      background: rgb(var(--bg) / 0.82);
+      backdrop-filter: saturate(180%) blur(14px);
+      border-bottom: 1px solid rgb(var(--border));
+    }
+    .ds-toolbar .brand { margin-right: auto; }
+    .ds-swatch-row { display: flex; gap: 8px; align-items: center; }
+    .ds-acc {
+      width: 26px; height: 26px; border-radius: 8px; border: 2px solid transparent;
+      cursor: pointer; padding: 0;
+    }
+    .ds-acc.active { border-color: rgb(var(--fg)); box-shadow: 0 0 0 2px rgb(var(--bg)); }
+    .ds-block { padding: 40px 0; border-bottom: 1px solid rgb(var(--border)); }
+    .ds-block:last-child { border-bottom: 0; }
+    .ds-h { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.02em; margin: 0 0 6px; }
+    .ds-lead { color: rgb(var(--fg-muted)); font-size: 14.5px; margin: 0 0 22px; max-width: 720px; }
+    .ds-grid { display: grid; gap: 12px; }
+    .ds-cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .ds-cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .ds-cols-4 { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 720px) { .ds-cols-3, .ds-cols-4 { grid-template-columns: repeat(2, 1fr); } }
+    .ds-token {
+      border: 1px solid rgb(var(--border)); border-radius: var(--radius-md);
+      overflow: hidden; background: rgb(var(--bg-elev)); font-size: 12px;
+    }
+    .ds-token .chip { height: 56px; }
+    .ds-token .meta { padding: 8px 10px; }
+    .ds-token .name { font-weight: 600; }
+    .ds-token .val { color: rgb(var(--fg-muted)); font-family: var(--font-mono); font-size: 11px; }
+    .ds-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .ds-pill { font-family: var(--font-mono); font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgb(var(--bg-inset)); color: rgb(var(--fg-muted)); }
+    .ds-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+    .ds-icon {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px 8px; border: 1px solid rgb(var(--border)); border-radius: var(--radius-md);
+      background: rgb(var(--bg-elev)); font-size: 11px; color: rgb(var(--fg-muted)); font-family: var(--font-mono);
+    }
+    .ds-icon svg { width: 22px; height: 22px; color: var(--accent-color); }
+    table.ds-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.ds-table th, table.ds-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgb(var(--border)); vertical-align: top; }
+    table.ds-table th { color: rgb(var(--fg-muted)); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    table.ds-table code, .ds-code { font-family: var(--font-mono); font-size: 12.5px; background: rgb(var(--bg-inset)); padding: 1px 6px; border-radius: 6px; }
+    pre.ds-pre { background: rgb(var(--bg-inset)); border: 1px solid rgb(var(--border)); border-radius: var(--radius-md); padding: 16px; overflow: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+    .ds-ol { color: rgb(var(--fg-muted)); font-size: 14px; line-height: 1.8; padding-left: 20px; }
+    .ds-ol code { font-family: var(--font-mono); font-size: 12.5px; background: rgb(var(--bg-inset)); padding: 1px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <!-- ===== Toolbar (live theme + accent switch) ===== -->
+  <div class="ds-toolbar">
+    <span class="brand"><span class="brand-mark"></span><span>Gloryphone · Design System</span></span>
+    <div class="ds-swatch-row" id="ds-accents"></div>
+    <button class="btn btn-quiet btn-sm" id="ds-mode">Toggle dark</button>
+  </div>
+
+  <main class="container ds-wrap">
+    <!-- Intro -->
+    <section class="ds-block">
+      <span class="eyebrow">Living styleguide</span>
+      <h1 style="font-size: clamp(30px,4vw,46px); line-height:1.1; margin:14px 0 10px;">Gloryphone 设计系统</h1>
+      <p class="ds-lead">本页是 <code class="ds-code">DESIGN.md</code> 的可视化 HTML 版本，直接使用站点的设计系统样式表 <code class="ds-code">/design.css</code> 渲染。顶部可实时切换 <strong>明/暗模式</strong> 与 <strong>8 种主题色</strong>。所有色值以 RGB 三元组存储，通过 <code class="ds-code">rgb(var(--token) / a)</code> 使用。</p>
+      <div class="ds-row">
+        <span class="ds-pill">Nuxt 3 · SSR</span>
+        <span class="ds-pill">font: Manrope / JetBrains Mono</span>
+        <span class="ds-pill">dark: .dark on &lt;html&gt;</span>
+        <span class="ds-pill">accent: [data-accent]</span>
+      </div>
+    </section>
+
+    <!-- Neutral tokens -->
+    <section class="ds-block">
+      <h2 class="ds-h">1 · 中性色阶 (Neutral scale)</h2>
+      <p class="ds-lead">浅色为默认，<code class="ds-code">.dark</code> 下整体翻转。切换上方 Toggle dark 查看暗色取值。</p>
+      <div class="ds-grid ds-cols-4" id="ds-neutral"></div>
+    </section>
+
+    <!-- Accent tokens -->
+    <section class="ds-block">
+      <h2 class="ds-h">2 · 主题色 (Accent presets)</h2>
+      <p class="ds-lead">8 个预设，键于 <code class="ds-code">[data-accent]</code>，默认 <strong>green</strong>。主题色不随明暗变化。点击切换：</p>
+      <div class="ds-grid ds-cols-4" id="ds-accent-cards"></div>
+    </section>
+
+    <!-- Typography -->
+    <section class="ds-block">
+      <h2 class="ds-h">3 · 字体排印 (Typography)</h2>
+      <p class="ds-lead">Display &amp; Body = Manrope；Mono = JetBrains Mono。标题字重 700–800、字距 -0.02em。</p>
+      <div class="ds-grid ds-cols-2" style="align-items:start;">
+        <div class="card">
+          <span class="eyebrow">Eyebrow 小标</span>
+          <h1 style="font-size:40px; line-height:1.05; margin:12px 0 0;">Heading H1</h1>
+          <h2 class="section-title" style="margin-top:14px;">Section title</h2>
+          <h3 style="font-size:24px; margin-top:14px;">Heading H3</h3>
+          <p class="section-sub">Section sub — 正文辅助说明，rgb(var(--fg-muted))。</p>
+        </div>
+        <div class="card">
+          <p style="margin:0 0 10px;">正文 Body 15px / line-height 1.6 — The quick brown fox。中文混排示例：云手机平台为海外团队而生。</p>
+          <p style="color:rgb(var(--fg-muted)); margin:0 0 10px;">Muted 次级文本 rgb(var(--fg-muted))。</p>
+          <p style="color:rgb(var(--fg-subtle)); margin:0 0 14px;">Subtle 三级/元信息 rgb(var(--fg-subtle))。</p>
+          <p class="ds-code" style="display:inline-block;">Mono · v3.8.2 · &lt;30 ms</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Buttons -->
+    <section class="ds-block">
+      <h2 class="ds-h">4 · 按钮 (Buttons)</h2>
+      <p class="ds-lead">基类 <code class="ds-code">.btn</code> + 变体 <code class="ds-code">.btn-primary / .btn-ghost / .btn-quiet</code> + 尺寸 <code class="ds-code">.btn-sm / .btn-lg</code>。</p>
+      <div class="ds-row" style="margin-bottom:14px;">
+        <a class="btn btn-primary">Primary</a>
+        <a class="btn btn-ghost">Ghost</a>
+        <a class="btn btn-quiet">Quiet</a>
+        <a class="btn btn-primary">立即领取
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+      <div class="ds-row">
+        <a class="btn btn-primary btn-sm">Small</a>
+        <a class="btn btn-primary">Default</a>
+        <a class="btn btn-primary btn-lg">Large</a>
+      </div>
+    </section>
+
+    <!-- Surfaces / cards -->
+    <section class="ds-block">
+      <h2 class="ds-h">5 · 卡片与表面 (Cards & surfaces)</h2>
+      <div class="features-grid" style="margin-top:0;">
+        <div class="card feature-card">
+          <span class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a10 10 0 0 1 18-6"/><path d="M5 19.5a14 14 0 0 0 1.5-7.5 5.5 5.5 0 0 1 11 0v2"/><path d="M8.65 22a16 16 0 0 0 .35-10 3 3 0 0 1 6 0v2"/><path d="M14.5 22a23 23 0 0 0 .5-5"/></svg></span>
+          <h3>Feature card</h3>
+          <p>.card / .feature-card — 悬停上浮、accent 边框。</p>
+        </div>
+        <div class="card feature-card">
+          <span class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></span>
+          <h3>带图标</h3>
+          <p>.ficon — 44px accent 软背景图标容器。</p>
+        </div>
+        <div class="card feature-card">
+          <span class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M8.5 16a6 6 0 0 1 7 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span>
+          <h3>层级表面</h3>
+          <p>--bg / --bg-elev / --bg-sunken / --bg-inset。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Forms / misc -->
+    <section class="ds-block">
+      <h2 class="ds-h">6 · 表单 & 杂项 (Forms & misc)</h2>
+      <div class="ds-grid ds-cols-2" style="align-items:start;">
+        <div class="card">
+          <div class="auth-field"><label>邮箱 Email</label><input class="auth-input" placeholder="you@example.com" /></div>
+          <div class="auth-field"><label>验证码 OTP</label>
+            <div class="auth-otp"><input class="auth-input" placeholder="000000" /><button type="button">发送</button></div>
+          </div>
+          <button class="auth-submit" type="button">提交 Submit</button>
+        </div>
+        <div class="card">
+          <div class="ds-row" style="margin-bottom:14px;">
+            <span class="usecase-tab active" style="cursor:default;">Active tab</span>
+            <span class="usecase-tab" style="cursor:default;">Tab</span>
+          </div>
+          <div class="ds-row" style="margin-bottom:14px;">
+            <span class="blog-card__cat" style="position:static;">分类 Tag</span>
+            <span class="check" style="font-size:18px;">●</span>
+            <span class="x" style="color:rgb(var(--fg-subtle));">—</span>
+          </div>
+          <div class="perf-bar"><span class="name">GeekBench</span><span class="bar-track"><span class="bar-fill" style="width:92%; transform:none;"></span></span><span class="val">92%</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Icons -->
+    <section class="ds-block">
+      <h2 class="ds-h">7 · 图标 (GpIcon)</h2>
+      <p class="ds-lead">组件 <code class="ds-code">&lt;GpIcon name="…" /&gt;</code> — 图标不带 width/height，尺寸由上下文 CSS 决定。</p>
+      <div class="ds-icons" id="ds-icons"></div>
+    </section>
+
+    <!-- Class vocabulary -->
+    <section class="ds-block">
+      <h2 class="ds-h">8 · 类名词汇 (Class vocabulary)</h2>
+      <table class="ds-table">
+        <thead><tr><th>Class</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>.container</code></td><td>最大宽 1240px，居中，24px 内边距</td></tr>
+          <tr><td><code>.section</code></td><td>96px 纵向节奏；交替底色用内联 <code>style="background: rgb(var(--bg-sunken))"</code></td></tr>
+          <tr><td><code>.eyebrow</code> / <code>.section-title</code> / <code>.section-sub</code></td><td>区块标题三件套</td></tr>
+          <tr><td><code>.btn</code> + <code>.btn-primary/-ghost/-quiet</code> + <code>.btn-sm/-lg</code></td><td>按钮</td></tr>
+          <tr><td><code>.card</code> / <code>.feature-card</code></td><td>带边框的提升卡片</td></tr>
+          <tr><td><code>.icon-btn</code></td><td>36px 方形图标按钮（导航工具）</td></tr>
+          <tr><td><code>.brand</code> + <code>.brand-mark</code></td><td>Logo 锁定区（CSS 绘制标记）</td></tr>
+          <tr><td><code>.popover</code> / <code>.popover-wrap</code></td><td>下拉（语言选择）</td></tr>
+          <tr><td>区块块级</td><td><code>.hero · .hero-stats · .logo-strip · .features-grid · .feature-spotlight · .usecase-tabs/.usecase-panel · .compare-table · .perf-grid · .pricing-grid/.price-card · .testi-grid · .dl-grid · .blog-grid/.blog-card · .faq-list/.faq-item · .cta-banner · .footer</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Content model -->
+    <section class="ds-block">
+      <h2 class="ds-h">9 · 内容模型 (Content model)</h2>
+      <p class="ds-lead">全部文案在 <code class="ds-code">composables/useGp.ts</code> 的 <code class="ds-code">GP_CONTENT</code>（<code class="ds-code">{ zh, en }</code>）中。新增/修改文案需<strong>同时改两种语言并保持结构一致</strong>（组件按下标取值）。</p>
+      <pre class="ds-pre">&lt;script setup lang="ts"&gt;
+const { t } = useGp()        // t 是当前语言内容对象的 computed ref
+&lt;/script&gt;
+&lt;template&gt;{{ t.hero.title1 }}&lt;/template&gt;   // 模板自动解包 ref
+// &lt;script&gt; 内用 t.value.hero.title1</pre>
+    </section>
+
+    <!-- Routes -->
+    <section class="ds-block">
+      <h2 class="ds-h">10 · 页面组合 (Pages)</h2>
+      <table class="ds-table">
+        <thead><tr><th>Route</th><th>文件</th><th>区块</th></tr></thead>
+        <tbody>
+          <tr><td><code>/</code></td><td>pages/index.vue</td><td>Hero → Features → UseCases → Compare → Pricing → Testimonials → Downloads → Blog → FAQ → Cta</td></tr>
+          <tr><td><code>/pricing</code></td><td>pages/pricing.vue</td><td>Pricing → Compare → FAQ → Cta</td></tr>
+          <tr><td><code>/faq</code></td><td>pages/faq.vue</td><td>FAQ → Cta</td></tr>
+          <tr><td><code>/blog</code></td><td>pages/blog/index.vue</td><td>featured + grid + 分类筛选</td></tr>
+          <tr><td><code>/blog/:slug</code></td><td>pages/blog/[slug].vue</td><td>文章 + 相关</td></tr>
+        </tbody>
+      </table>
+      <p class="ds-lead" style="margin-top:16px;">外壳（PromoBanner / AppNavbar / AppFooter / TweakPanel）在 <code class="ds-code">layouts/default.vue</code> 挂载一次；区块组件在 <code class="ds-code">components/sections/</code>，按文件名自动导入。</p>
+    </section>
+
+    <!-- Conventions -->
+    <section class="ds-block">
+      <h2 class="ds-h">11 · Agent 约定 (Conventions)</h2>
+      <ol class="ds-ol">
+        <li><strong>复用类名词汇</strong>（见 §8），不要用原始 Tailwind 工具类重新给区块上样式。</li>
+        <li><strong>颜色</strong>始终用 <code>rgb(var(--token) / a)</code>（三元组）或 <code>var(--accent-color)</code>（hex），绝不硬编码品牌色。</li>
+        <li><strong>暗色模式</strong>不要硬编码浅色值，依赖会随 <code>.dark</code> 翻转的 <code>--bg/--fg/…</code>。</li>
+        <li><strong>文案</strong>来自 <code>useGp()</code>（<code>GP_CONTENT</code>），两种语言、结构一致。</li>
+        <li><strong>图标</strong>只用 <code>GpIcon</code> / <code>GpPartnerMark</code>。</li>
+        <li><strong>新区块</strong>：建 <code>components/sections/XxxSection.vue</code>，外层 <code>&lt;section class="section" id="xxx"&gt;</code>，文案取自 useGp，再加入 <code>pages/index.vue</code>。滚动揭示对已知选择器自动生效，否则扩展 <code>plugins/reveal.client.ts</code>。</li>
+        <li><strong>静态资源</strong>放 <code>public/images/</code>，以 <code>/images/&lt;file&gt;</code> 引用。</li>
+        <li><strong>验证</strong>：<code>pnpm build</code> 后 <code>node .output/server/index.mjs</code> 看 <code>/</code>。</li>
+      </ol>
+    </section>
+
+    <footer style="padding:32px 0 64px; color:rgb(var(--fg-subtle)); font-size:13px;">
+      © 2026 Gloryphone · 源数据见 <code class="ds-code">www/DESIGN.md</code>
+    </footer>
+  </main>
+
+  <script>
+    // ---- data ----
+    const ACCENTS = ["purple","blue","teal","green","orange","pink","indigo","rose"];
+    const ACCENT_NAME = { purple:"深紫", blue:"海蓝", teal:"薄荷", green:"翠绿", orange:"落日", pink:"霓粉", indigo:"靛青", rose:"朱砂" };
+    const NEUTRAL = [
+      ["--bg","页面背景"], ["--bg-elev","卡片/提升表面"], ["--bg-sunken","交替区块底"], ["--bg-inset","quiet 按钮/内嵌"],
+      ["--border","默认边框"], ["--border-strong","悬停/强调边框"], ["--fg","主文本"], ["--fg-muted","次级文本"],
+    ];
+    const ICONS = {
+      moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+      sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
+      globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+      palette:'<path d="M12 22a10 10 0 1 1 10-10c0 2.5-2 4-4 4h-2a2 2 0 0 0-2 2 2 2 0 0 1-2 2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>',
+      check:'<polyline points="20 6 9 17 4 12"/>',
+      arrow:'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+      shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+      cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+      fingerprint:'<path d="M2 12a10 10 0 0 1 18-6"/><path d="M5 19.5a14 14 0 0 0 1.5-7.5 5.5 5.5 0 0 1 11 0v2"/><path d="M8.65 22a16 16 0 0 0 .35-10 3 3 0 0 1 6 0v2"/><path d="M14.5 22a23 23 0 0 0 .5-5"/>',
+      clock:'<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/>',
+      users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+      code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+      wifi:'<path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M8.5 16a6 6 0 0 1 7 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+    };
+    function svg(inner){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>'; }
+
+    // neutral swatches
+    document.getElementById("ds-neutral").innerHTML = NEUTRAL.map(([v,label]) =>
+      '<div class="ds-token"><div class="chip" style="background:rgb(var('+v+'))"></div><div class="meta"><div class="name">'+label+'</div><div class="val">'+v+'</div></div></div>'
+    ).join("");
+
+    // accent toolbar
+    document.getElementById("ds-accents").innerHTML = ACCENTS.map(k =>
+      '<button class="ds-acc" data-acc="'+k+'" style="background:'+THEMES[k][2]+'" title="'+ACCENT_NAME[k]+'"></button>'
+    ).join("");
+    // accent cards
+    document.getElementById("ds-accent-cards").innerHTML = ACCENTS.map(k =>
+      '<div class="ds-token"><div class="chip" style="background:'+THEMES[k][2]+'"></div><div class="meta"><div class="name">'+ACCENT_NAME[k]+' · '+k+'</div><div class="val">'+THEMES[k][0]+'</div></div></div>'
+    ).join("");
+
+    // icons
+    document.getElementById("ds-icons").innerHTML = Object.keys(ICONS).map(n =>
+      '<div class="ds-icon">'+svg(ICONS[n])+'<span>'+n+'</span></div>'
+    ).join("");
+
+    // interactions
+    function markActive(){ document.querySelectorAll(".ds-acc").forEach(b => b.classList.toggle("active", b.dataset.acc === (localStorage.getItem("ds.accent")||"green"))); }
+    document.querySelectorAll(".ds-acc").forEach(b => b.addEventListener("click", () => {
+      applyAccent(b.dataset.acc); localStorage.setItem("ds.accent", b.dataset.acc); markActive();
+    }));
+    document.getElementById("ds-mode").addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      applyTheme(next); localStorage.setItem("ds.theme", next);
+    });
+    markActive();
+  </script>
+</body>
+</html>

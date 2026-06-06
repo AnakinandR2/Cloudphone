@@ -1,0 +1,34 @@
+# golangci-lint 配置：用 depguard 守护 Modulith 分层依赖。
+#
+# 模块间的 internal 隔离已由 Go 编译器强制；本配置补充“平台层不得依赖业务模块”等
+# 分层规则，便于在 CI 中尽早暴露违规。
+#
+# 运行（需本机安装 golangci-lint）：
+#   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+#   golangci-lint run
+#
+# 注：仓库内另有 framework/arch_test.go，用纯 `go test` 实现等价的边界自检，
+#     无需额外工具即可在本地与 CI 运行。
+
+version: "2"
+
+linters:
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # 平台层（framework）不得依赖任何业务模块。
+        framework:
+          files:
+            - "**/framework/**"
+          deny:
+            - pkg: manager-backend/modules
+              desc: 平台层 framework 不得依赖业务模块 modules/*（依赖方向应为模块 → 平台）
+        # 业务模块不得依赖应用根（main）。
+        modules:
+          files:
+            - "**/modules/**"
+          deny:
+            - pkg: manager-backend$
+              desc: 业务模块不得依赖应用组装根（main 包）
