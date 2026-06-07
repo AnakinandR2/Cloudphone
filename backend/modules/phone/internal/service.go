@@ -7,6 +7,7 @@ import (
 	"manager-backend/framework/apperr"
 	"manager-backend/framework/midplat"
 	"manager-backend/framework/query"
+	"manager-backend/modules/billing"
 )
 
 // 异步任务超时阈值：超过则 worker 把云手机收敛到失败态（创建→CREATE_FAILED；开机→STOPPED）。
@@ -162,6 +163,9 @@ func (s *serviceImpl) GetByID(userID, id int) (*CloudPhone, error) {
 //   - 已配置中台：调中台异步创建 → 落 CREATING + 创建任务，worker 轮询收敛到 CREATED/CREATE_FAILED。
 //   - 未配置中台（本地/测试降级）：仅落本地档案，直接置 CREATED，不触达中台、不建任务。
 func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, error) {
+	if err := billing.TryOccupyInstanceSeat(userID); err != nil {
+		return nil, err
+	}
 	item := CloudPhone{
 		UserID:  uint(userID),
 		Name:    req.Name,
@@ -173,6 +177,7 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	if s.ops == nil {
 		item.Status = StatusCreated
 		if err := s.repo.create(&item); err != nil {
+			_ = billing.ReleaseInstanceSeat(userID)
 			return nil, err
 		}
 		return &item, nil
@@ -182,6 +187,7 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	defer cancel()
 	res, err := s.ops.Create(ctx, CreateArgs{Region: req.Region, ImageID: req.ImageID})
 	if err != nil {
+		_ = billing.ReleaseInstanceSeat(userID)
 		return nil, apperr.Internal("创建云手机失败：" + err.Error())
 	}
 	item.Status = StatusCreating
@@ -194,6 +200,7 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 		item.Region = res.Region
 	}
 	if err := s.repo.create(&item); err != nil {
+		_ = billing.ReleaseInstanceSeat(userID)
 		return nil, err
 	}
 	// 入库创建任务：worker 轮询中台直到 cpId 状态 = ONLINE → CREATED；超时 → CREATE_FAILED。
@@ -234,7 +241,11 @@ func (s *serviceImpl) Delete(userID, id int) error {
 		return apperr.Validation("当前状态不可销毁，请先停止")
 	}
 	if p.CpID == "" || s.ops == nil {
-		return s.repo.delete(userID, id)
+		if err := s.repo.delete(userID, id); err != nil {
+			return err
+		}
+		_ = billing.ReleaseInstanceSeat(userID)
+		return nil
 	}
 
 	ctx, cancel := opCtx()
@@ -345,6 +356,13 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 	defer cancel()
 
 	if operation == "开机" {
+		frozen, err := billing.IsFrozen(userID)
+		if err != nil {
+			return err
+		}
+		if frozen {
+			return apperr.Forbidden("账户已冻结，无法开机，请续费实例席位")
+		}
 		if p.Status != StatusCreated && p.Status != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}

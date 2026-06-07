@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"manager-backend/framework"
+	"manager-backend/modules/billing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,10 @@ func statusOf(t *testing.T, id uint) string {
 
 // 创建：调中台受理 → 落 CREATING + cpId + 创建任务。
 func TestCreateProvisionsViaMidplat(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
 	withFakeOps(t, &fakePort{createCpID: "cp-123"})
 
 	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "新机", Region: "上海"})
@@ -53,7 +57,10 @@ func TestCreateProvisionsViaMidplat(t *testing.T) {
 
 // 无中台（降级）：仅落本地档案，直接 CREATED，不建任务。
 func TestCreateDegradedWithoutMidplat(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
 	withFakeOps(t, nil)
 
 	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "本地机"})

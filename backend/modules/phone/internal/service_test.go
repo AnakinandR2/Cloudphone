@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"manager-backend/framework"
+	"manager-backend/modules/billing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,10 @@ const (
 )
 
 func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
 
 	created, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "甲机", Region: "上海", ProxyID: 5})
 	require.NoError(t, err)
@@ -41,7 +45,11 @@ func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 
 // 核心：用户只能看/改/删自己的云手机，访问他人的一律「不存在」。
 func TestCloudPhoneIsolationBetweenUsers(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userB, 5))
 
 	a, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "A机"})
 	require.NoError(t, err)
@@ -67,7 +75,11 @@ func TestCloudPhoneIsolationBetweenUsers(t *testing.T) {
 
 // 管理侧：看到全量实例（跨用户），支持按 userId/status 过滤，可强制删除。
 func TestCloudPhoneAdminListAllFilterDelete(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
+	require.NoError(t, billing.GrantInstanceSeatsForTest(userB, 5))
 
 	a, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "A机"})
 	require.NoError(t, err)
@@ -91,4 +103,19 @@ func TestCloudPhoneAdminListAllFilterDelete(t *testing.T) {
 	_, total2, err := PhoneService.AdminList(1, 10, "", "", "", 0, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total2)
+}
+
+func TestCreateGatedByInstanceSeat(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	const u = 9501
+	_, err := PhoneService.Create(u, &CloudPhoneCreate{Name: "x"})
+	assert.Error(t, err) // 无席位 → 拒
+
+	require.NoError(t, billing.GrantInstanceSeatsForTest(u, 1))
+	_, err = PhoneService.Create(u, &CloudPhoneCreate{Name: "a"})
+	require.NoError(t, err) // 1 席位 → 可创建
+	_, err = PhoneService.Create(u, &CloudPhoneCreate{Name: "b"})
+	assert.Error(t, err) // 超席位 → 拒
 }

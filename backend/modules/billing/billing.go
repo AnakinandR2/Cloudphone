@@ -4,7 +4,11 @@
 // blank-import 以触发自注册。如需对外发布契约（供其他模块依赖），在此再导出。
 package billing
 
-import billinginternal "manager-backend/modules/billing/internal"
+import (
+	billinginternal "manager-backend/modules/billing/internal"
+
+	"gorm.io/gorm"
+)
 
 // 跨模块门面（供 phone 等调用；billing 不反向依赖任何业务模块）。
 
@@ -26,4 +30,13 @@ func InstanceSeatCapacity(userID int) (int64, error) {
 }
 func ListDunningEnforcement() ([]billinginternal.EnforcementTarget, error) {
 	return billinginternal.SeatService.ListDunningEnforcement()
+}
+
+// InitForTest 测试用：供其他模块装配 billing。
+func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }
+
+// GrantInstanceSeatsForTest 测试用：给用户发放 n 个实例席位。
+func GrantInstanceSeatsForTest(userID, n int) error {
+	_, err := billinginternal.EntitlementService.Grant(userID, billinginternal.SubjectInstanceSeat, int64(n), nil, billinginternal.SourceAdjust, "test", billinginternal.LedgerAdjustGrant, "staff:1")
+	return err
 }

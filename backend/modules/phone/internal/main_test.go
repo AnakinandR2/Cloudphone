@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"manager-backend/framework"
+	"manager-backend/modules/billing"
 )
 
 func TestMain(m *testing.M) {
@@ -13,6 +14,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	if err := (&phoneModule{}).Init(framework.DB); err != nil {
+		panic(err)
+	}
+	if err := billing.InitForTest(framework.DB); err != nil {
 		panic(err)
 	}
 

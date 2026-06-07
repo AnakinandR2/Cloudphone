@@ -100,3 +100,12 @@ func init() {
 		return SeedCatalog(db)
 	})
 }
+
+// InitForTest 供其他模块的测试装配 billing（建表 + 装配服务）。仅测试用。
+func InitForTest(db *gorm.DB) error {
+	if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{},
+		&Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}); err != nil {
+		return err
+	}
+	return (&billingModule{}).Init(db)
+}
