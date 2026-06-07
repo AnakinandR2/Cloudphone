@@ -18,13 +18,13 @@ func (Account) TableName() string { return "billing_accounts" }
 type LedgerEntry struct {
 	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID            uint      `gorm:"not null;index:idx_billing_ledger_user" json:"user_id"`
-	Subject           string    `gorm:"type:varchar(20);not null" json:"subject"`           // 科目：balance（计划1）；资源科目后续计划加
-	Type              string    `gorm:"type:varchar(20);not null" json:"type"`              // topup/consume/adjust_grant/adjust_deduct/...
-	DeltaCents        int64     `gorm:"not null" json:"delta_cents"`                        // 正=增 负=减（科目=balance 时单位为分）
-	BalanceAfterCents int64     `gorm:"not null" json:"balance_after_cents"`                // 变更后余额快照（审计/对账）
+	Subject           string    `gorm:"type:varchar(20);not null" json:"subject"` // 科目：balance（计划1）；资源科目后续计划加
+	Type              string    `gorm:"type:varchar(20);not null" json:"type"`    // topup/consume/adjust_grant/adjust_deduct/...
+	DeltaCents        int64     `gorm:"not null" json:"delta_cents"`              // 正=增 负=减（科目=balance 时单位为分）
+	BalanceAfterCents int64     `gorm:"not null" json:"balance_after_cents"`      // 变更后余额快照（审计/对账）
 	Reason            string    `gorm:"type:varchar(255)" json:"reason"`
-	OrderID           uint      `gorm:"default:0;index" json:"order_id"`                    // 关联订单（计划4）
-	Operator          string    `gorm:"type:varchar(64)" json:"operator"`                   // user:<id> / staff:<id> / system
+	OrderID           uint      `gorm:"default:0;index" json:"order_id"`  // 关联订单（计划4）
+	Operator          string    `gorm:"type:varchar(64)" json:"operator"` // user:<id> / staff:<id> / system
 	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
