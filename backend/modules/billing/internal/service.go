@@ -53,15 +53,18 @@ func (s *serviceImpl) ListLedger(userID, page, size int, subject, typ string) ([
 	return items, total, nil
 }
 
-// AdminGetAccount 运营查看任意用户的账户 + 近期流水（属主由调用方按权限控制）。
-func (s *serviceImpl) AdminGetAccount(userID, page, size int) (*Account, []LedgerEntry, error) {
-	acc, err := s.repo.getOrCreateAccount(userID)
+// AdminGetAccount 运营查看任意用户的账户 + 近期流水（分页）。用户尚无计费账户时返回 NotFound（不创建）。
+func (s *serviceImpl) AdminGetAccount(userID, page, size int) (*Account, []LedgerEntry, int64, error) {
+	acc, err := s.repo.getAccountOrNil(userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	ledger, _, err := s.ListLedger(userID, page, size, "", "")
+	if acc == nil {
+		return nil, nil, 0, apperr.NotFound("该用户尚无计费账户")
+	}
+	ledger, total, err := s.ListLedger(userID, page, size, "", "")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	return acc, ledger, nil
+	return acc, ledger, total, nil
 }

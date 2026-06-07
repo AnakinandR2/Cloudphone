@@ -80,12 +80,12 @@ func AdminGetAccount(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	acc, ledger, err := BillingService.AdminGetAccount(uid, page, size)
+	acc, ledger, total, err := BillingService.AdminGetAccount(uid, page, size)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
-	framework.OKWithData(c, gin.H{"account": acc, "ledger": ledger})
+	framework.OKWithData(c, gin.H{"account": acc, "ledger": ledger, "ledger_total": total})
 }
 
 // AdminAdjustBalance 运营：手动赠送/扣减余额（理由必填）= 退款实现
@@ -95,7 +95,11 @@ func AdminAdjustBalance(c *gin.Context) {
 		framework.Fail(c, http.StatusBadRequest, "无效的用户ID")
 		return
 	}
-	staffID, _ := currentUserID(c)
+	staffID, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
 	var req AdjustRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")

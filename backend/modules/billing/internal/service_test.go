@@ -96,9 +96,13 @@ func TestAdminGetAccountView(t *testing.T) {
 
 	_, _ = BillingService.Topup(userA, 8888, "充值", "user:7001")
 
-	acc, ledger, err := BillingService.AdminGetAccount(userA, 1, 10)
+	acc, ledger, total, err := BillingService.AdminGetAccount(userA, 1, 10)
 	require.NoError(t, err)
 	assert.Equal(t, int64(8888), acc.BalanceCents)
 	require.Len(t, ledger, 1)
+	assert.Equal(t, int64(1), total)
 	assert.Equal(t, LedgerTopup, ledger[0].Type)
+
+	_, _, _, err = BillingService.AdminGetAccount(7777, 1, 10)
+	assert.Error(t, err)
 }

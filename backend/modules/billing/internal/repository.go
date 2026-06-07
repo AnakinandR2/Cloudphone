@@ -10,6 +10,7 @@ import (
 
 type repository interface {
 	getOrCreateAccount(userID int) (*Account, error)
+	getAccountOrNil(userID int) (*Account, error)
 	applyBalance(userID int, delta int64, typ, reason string, orderID uint, operator string) (*Account, error)
 	listLedger(userID, offset, limit int, subject, typ string) ([]LedgerEntry, int64, error)
 	countLedger(userID int, subject, typ string) (int64, error)
@@ -26,6 +27,19 @@ func (r *gormRepository) getOrCreateAccount(userID int) (*Account, error) {
 	err := r.db.Where(Account{UserID: uint(userID)}).FirstOrCreate(&acc).Error
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		err = r.db.Where("user_id = ?", userID).First(&acc).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &acc, nil
+}
+
+// getAccountOrNil 返回已存在的账户；不存在则返回 (nil, nil)（不创建）。
+func (r *gormRepository) getAccountOrNil(userID int) (*Account, error) {
+	var acc Account
+	err := r.db.Where("user_id = ?", userID).First(&acc).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
