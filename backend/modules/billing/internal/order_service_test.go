@@ -133,3 +133,27 @@ func TestMarkPaidFulfillsWithoutBalance(t *testing.T) {
 	acc, _ := BillingService.GetAccount(ordUser)
 	assert.Equal(t, int64(0), acc.BalanceCents)
 }
+
+func TestPaidOrderLedgerLinkedByOrderID(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_orders", "billing_order_items", "billing_skus", "billing_discount_tiers",
+			"billing_accounts", "billing_ledger_entries", "billing_entitlement_batches")
+	})
+	require.NoError(t, SeedCatalog(framework.DB))
+	_, err := BillingService.Topup(ordUser, 1000000, "充值", "user:9101")
+	require.NoError(t, err)
+
+	d, err := OrderService.CreateOrder(ordUser, &OrderCreate{PayMethod: PayBalance,
+		Items: []OrderItemRequest{
+			{SkuCode: "instance_fee", CycleMonths: 1, Quantity: 2},
+			{SkuCode: "time_pack", CycleMonths: 0, Quantity: 1000},
+		}})
+	require.NoError(t, err)
+	_, err = OrderService.PayWithBalance(ordUser, int(d.Order.ID))
+	require.NoError(t, err)
+
+	// 该订单关联的流水：1 条余额消费 + 2 条资源发放，都应带 OrderID
+	var cnt int64
+	framework.DB.Model(&LedgerEntry{}).Where("order_id = ?", d.Order.ID).Count(&cnt)
+	assert.Equal(t, int64(3), cnt)
+}

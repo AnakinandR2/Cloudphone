@@ -132,7 +132,7 @@ func (r *gormOrderRepository) settle(order *Order, items []OrderItem, deductBala
 		}
 		entRepo := &gormEntitlementRepository{db: tx}
 		for _, it := range items {
-			if err := fulfillItem(entRepo, int(order.UserID), it, order.OrderNo, now); err != nil {
+			if err := fulfillItem(entRepo, int(order.UserID), order.ID, it, order.OrderNo, now); err != nil {
 				return err
 			}
 		}
@@ -143,7 +143,7 @@ func (r *gormOrderRepository) settle(order *Order, items []OrderItem, deductBala
 }
 
 // fulfillItem 按订单项品类发放对应资源权益 + 写流水。
-func fulfillItem(entRepo entitlementRepository, userID int, it OrderItem, orderNo string, now time.Time) error {
+func fulfillItem(entRepo entitlementRepository, userID int, orderID uint, it OrderItem, orderNo string, now time.Time) error {
 	var subject string
 	var qty int64
 	var expireAt *time.Time
@@ -172,7 +172,7 @@ func fulfillItem(entRepo entitlementRepository, userID int, it OrderItem, orderN
 	}
 	return entRepo.insertLedger(&LedgerEntry{
 		UserID: uint(userID), Subject: subject, Type: LedgerPurchase,
-		Delta: qty, BalanceAfter: capacity, Reason: orderNo, Operator: "user:" + itoa(userID),
+		Delta: qty, BalanceAfter: capacity, Reason: orderNo, OrderID: orderID, Operator: "user:" + itoa(userID),
 	})
 }
 
