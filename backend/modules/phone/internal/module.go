@@ -9,11 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-type phoneModule struct{}
+type phoneModule struct {
+	db *gorm.DB
+}
 
 func (m *phoneModule) Name() string { return "phone" }
 
 func (m *phoneModule) Init(db *gorm.DB) error {
+	m.db = db
 	PhoneService = newService(newRepository(db), newMidplatPort())
 	return nil
 }
@@ -76,7 +79,7 @@ var phoneWorker *taskWorker
 
 func (m *phoneModule) OnStart() error {
 	if PhoneService != nil && PhoneService.ops != nil {
-		phoneWorker = newTaskWorker(PhoneService)
+		phoneWorker = newTaskWorker(PhoneService, m.db)
 		phoneWorker.start()
 	}
 	return nil

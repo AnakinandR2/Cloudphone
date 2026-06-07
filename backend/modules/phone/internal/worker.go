@@ -3,20 +3,22 @@ package phone
 import (
 	"context"
 	"time"
+
+	"manager-backend/framework"
+
+	"gorm.io/gorm"
 )
 
-// workerInterval 是异步任务收敛的轮询间隔。
 const workerInterval = 5 * time.Second
 
-// taskWorker 周期性轮询中台，把云手机从过渡态（CREATING/STARTING）收敛到稳定态。
-// 只有在中台已配置时才启动（见 module.OnStart）。
 type taskWorker struct {
 	svc  *serviceImpl
+	db   *gorm.DB
 	quit chan struct{}
 }
 
-func newTaskWorker(svc *serviceImpl) *taskWorker {
-	return &taskWorker{svc: svc, quit: make(chan struct{})}
+func newTaskWorker(svc *serviceImpl, db *gorm.DB) *taskWorker {
+	return &taskWorker{svc: svc, db: db, quit: make(chan struct{})}
 }
 
 func (w *taskWorker) start() {
@@ -28,14 +30,16 @@ func (w *taskWorker) start() {
 			case <-w.quit:
 				return
 			case <-ticker.C:
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				w.svc.runDueTasks(ctx)
-				cancel()
+				// HA：每 tick 仅一个实例执行；lease=interval，依赖 runDueTasks 幂等容忍偶发重叠。
+				_, _ = framework.TryRunLocked(w.db, "phone:task-worker", workerInterval, func() error {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					w.svc.runDueTasks(ctx)
+					return nil
+				})
 			}
 		}
 	}()
 }
 
-func (w *taskWorker) stop() {
-	close(w.quit)
-}
+func (w *taskWorker) stop() { close(w.quit) }
