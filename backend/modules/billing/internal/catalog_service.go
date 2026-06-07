@@ -258,3 +258,54 @@ func (s *catalogServiceImpl) ListTiers(skuID int) ([]DiscountTier, error) {
 	}
 	return s.repo.listTiersBySku(skuID)
 }
+
+// Quote 服务端权威计价。订阅类(instance_fee/boot_pack)：cycleMonths>0，quantity=台数；
+// 时长包(time_pack)：cycleMonths==0，quantity=小时数。
+func (s *catalogServiceImpl) Quote(skuCode string, cycleMonths, quantity int) (*QuoteResult, error) {
+	sku, err := s.repo.getSkuByCode(skuCode)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, apperr.NotFound("商品不存在")
+		}
+		return nil, err
+	}
+	if quantity < 1 {
+		return nil, apperr.Validation("数量必须≥1")
+	}
+	if sku.Category == CategoryTimePack {
+		if cycleMonths != 0 {
+			return nil, apperr.Validation("时长包的周期月数必须为0")
+		}
+	} else if cycleMonths < 1 {
+		return nil, apperr.Validation("订阅类商品周期月数必须≥1")
+	}
+
+	var billingUnits int
+	if sku.Category == CategoryTimePack {
+		billingUnits = quantity
+	} else {
+		billingUnits = cycleMonths * quantity
+	}
+	originalCents := sku.UnitPriceCents * int64(billingUnits)
+
+	bps := DiscountBpsFull
+	tiers, err := s.repo.listTiersBySkuCycle(int(sku.ID), cycleMonths)
+	if err != nil {
+		return nil, err
+	}
+	bestMin := -1
+	for _, t := range tiers {
+		if t.MinQuantity <= quantity && t.MinQuantity > bestMin {
+			bestMin = t.MinQuantity
+			bps = t.DiscountBps
+		}
+	}
+
+	payableCents := (originalCents*int64(bps) + int64(DiscountBpsFull)/2) / int64(DiscountBpsFull)
+
+	return &QuoteResult{
+		SkuCode: sku.Code, Category: sku.Category, CycleMonths: cycleMonths, Quantity: quantity,
+		UnitPriceCents: sku.UnitPriceCents, BillingUnits: billingUnits,
+		OriginalCents: originalCents, DiscountBps: bps, PayableCents: payableCents,
+	}, nil
+}

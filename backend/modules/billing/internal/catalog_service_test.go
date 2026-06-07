@@ -82,6 +82,49 @@ func TestSeedCatalogIdempotent(t *testing.T) {
 	assert.Equal(t, int64(9), tierCount)
 }
 
+func TestQuotePricing(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_skus", "billing_discount_tiers") })
+	require.NoError(t, SeedCatalog(framework.DB))
+
+	q, err := CatalogService.Quote("instance_fee", 12, 5)
+	require.NoError(t, err)
+	assert.Equal(t, int64(180000), q.OriginalCents)
+	assert.Equal(t, 7000, q.DiscountBps)
+	assert.Equal(t, int64(126000), q.PayableCents)
+	assert.Equal(t, 60, q.BillingUnits)
+
+	q, err = CatalogService.Quote("instance_fee", 1, 2)
+	require.NoError(t, err)
+	assert.Equal(t, int64(6000), q.OriginalCents)
+	assert.Equal(t, 10000, q.DiscountBps)
+	assert.Equal(t, int64(6000), q.PayableCents)
+
+	q, err = CatalogService.Quote("time_pack", 0, 1000)
+	require.NoError(t, err)
+	assert.Equal(t, int64(20000), q.OriginalCents)
+	assert.Equal(t, 8000, q.DiscountBps)
+	assert.Equal(t, int64(16000), q.PayableCents)
+
+	q, err = CatalogService.Quote("time_pack", 0, 300)
+	require.NoError(t, err)
+	assert.Equal(t, 10000, q.DiscountBps)
+	assert.Equal(t, int64(6000), q.PayableCents)
+}
+
+func TestQuoteGuards(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_skus", "billing_discount_tiers") })
+	require.NoError(t, SeedCatalog(framework.DB))
+
+	_, err := CatalogService.Quote("nope", 1, 1)
+	assert.Error(t, err)
+	_, err = CatalogService.Quote("instance_fee", 1, 0)
+	assert.Error(t, err)
+	_, err = CatalogService.Quote("instance_fee", 0, 1)
+	assert.Error(t, err)
+	_, err = CatalogService.Quote("time_pack", 1, 100)
+	assert.Error(t, err)
+}
+
 func TestDeleteSkuCascadesTiers(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("billing_skus", "billing_discount_tiers") })
 
