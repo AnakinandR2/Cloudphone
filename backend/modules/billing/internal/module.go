@@ -15,6 +15,7 @@ func (m *billingModule) Name() string { return "billing" }
 
 func (m *billingModule) Init(db *gorm.DB) error {
 	BillingService = newService(newRepository(db))
+	CatalogService = newCatalogService(newCatalogRepository(db))
 	return nil
 }
 

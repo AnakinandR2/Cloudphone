@@ -1,6 +1,10 @@
 package billing
 
-import "gorm.io/gorm"
+import (
+	"manager-backend/framework/apperr"
+
+	"gorm.io/gorm"
+)
 
 // SeedCatalog 幂等写入三类默认 SKU 及其折扣阶梯（按 code 查重，存在即跳过该 SKU）。
 func SeedCatalog(db *gorm.DB) error {
@@ -55,4 +59,202 @@ func SeedCatalog(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// catalogServiceImpl 商品目录服务。
+type catalogServiceImpl struct{ repo catalogRepository }
+
+// CatalogService 模块内实例，由 module.Init 注入 DB 后装配。
+var CatalogService *catalogServiceImpl
+
+func newCatalogService(repo catalogRepository) *catalogServiceImpl {
+	return &catalogServiceImpl{repo: repo}
+}
+
+var validCategory = map[string]bool{
+	CategoryInstanceFee: true, CategoryBootPack: true, CategoryTimePack: true,
+}
+
+func validBps(bps int) bool { return bps >= 0 && bps <= DiscountBpsFull }
+
+func (s *catalogServiceImpl) CreateSku(req *SkuCreate) (*Sku, error) {
+	if !validCategory[req.Category] {
+		return nil, apperr.Validation("非法的商品类别")
+	}
+	if req.UnitPriceCents < 0 {
+		return nil, apperr.Validation("单价不能为负")
+	}
+	if _, err := s.repo.getSkuByCode(req.Code); err == nil {
+		return nil, apperr.Conflict("商品编码已存在")
+	} else if !isNotFound(err) {
+		return nil, err
+	}
+	listed := true
+	if req.Listed != nil {
+		listed = *req.Listed
+	}
+	sku := Sku{
+		Code: req.Code, Category: req.Category, Name: req.Name, Description: req.Description,
+		UnitPriceCents: req.UnitPriceCents, Unit: req.Unit, Listed: listed, Sort: req.Sort,
+	}
+	if err := s.repo.createSku(&sku); err != nil {
+		return nil, err
+	}
+	return &sku, nil
+}
+
+func (s *catalogServiceImpl) UpdateSku(id int, req *SkuUpdate) (*Sku, error) {
+	if _, err := s.GetSku(id); err != nil {
+		return nil, err
+	}
+	fields := map[string]interface{}{}
+	if req.Name != "" {
+		fields["name"] = req.Name
+	}
+	if req.Description != "" {
+		fields["description"] = req.Description
+	}
+	if req.UnitPriceCents != nil {
+		if *req.UnitPriceCents < 0 {
+			return nil, apperr.Validation("单价不能为负")
+		}
+		fields["unit_price_cents"] = *req.UnitPriceCents
+	}
+	if req.Unit != "" {
+		fields["unit"] = req.Unit
+	}
+	if req.Listed != nil {
+		fields["listed"] = *req.Listed
+	}
+	if req.Sort != nil {
+		fields["sort"] = *req.Sort
+	}
+	if len(fields) > 0 {
+		if err := s.repo.updateSku(id, fields); err != nil {
+			return nil, err
+		}
+	}
+	return s.GetSku(id)
+}
+
+func (s *catalogServiceImpl) DeleteSku(id int) error {
+	if _, err := s.GetSku(id); err != nil {
+		return err
+	}
+	tiers, err := s.repo.listTiersBySku(id)
+	if err != nil {
+		return err
+	}
+	for _, t := range tiers {
+		if err := s.repo.deleteTier(int(t.ID)); err != nil {
+			return err
+		}
+	}
+	return s.repo.deleteSku(id)
+}
+
+func (s *catalogServiceImpl) GetSku(id int) (*Sku, error) {
+	sku, err := s.repo.getSku(id)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, apperr.NotFound("商品不存在")
+		}
+		return nil, err
+	}
+	return sku, nil
+}
+
+func (s *catalogServiceImpl) ListSkus(includeUnlisted bool) ([]Sku, error) {
+	return s.repo.listSkus(!includeUnlisted)
+}
+
+func (s *catalogServiceImpl) ListListedSkus() ([]SkuWithTiers, error) {
+	skus, err := s.repo.listSkus(true)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SkuWithTiers, 0, len(skus))
+	for _, sku := range skus {
+		tiers, err := s.repo.listTiersBySku(int(sku.ID))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SkuWithTiers{Sku: sku, Tiers: tiers})
+	}
+	return out, nil
+}
+
+func (s *catalogServiceImpl) CreateTier(skuID int, req *TierCreate) (*DiscountTier, error) {
+	if _, err := s.GetSku(skuID); err != nil {
+		return nil, err
+	}
+	if req.MinQuantity < 1 {
+		return nil, apperr.Validation("数量门槛必须≥1")
+	}
+	if !validBps(req.DiscountBps) {
+		return nil, apperr.Validation("折扣基点须在 0~10000")
+	}
+	if req.CycleMonths < 0 {
+		return nil, apperr.Validation("周期月数不能为负")
+	}
+	tier := DiscountTier{SkuID: uint(skuID), CycleMonths: req.CycleMonths, MinQuantity: req.MinQuantity, DiscountBps: req.DiscountBps}
+	if err := s.repo.createTier(&tier); err != nil {
+		return nil, err
+	}
+	return &tier, nil
+}
+
+func (s *catalogServiceImpl) UpdateTier(id int, req *TierUpdate) (*DiscountTier, error) {
+	if _, err := s.repo.getTier(id); err != nil {
+		if isNotFound(err) {
+			return nil, apperr.NotFound("折扣阶梯不存在")
+		}
+		return nil, err
+	}
+	fields := map[string]interface{}{}
+	if req.CycleMonths != nil {
+		if *req.CycleMonths < 0 {
+			return nil, apperr.Validation("周期月数不能为负")
+		}
+		fields["cycle_months"] = *req.CycleMonths
+	}
+	if req.MinQuantity != nil {
+		if *req.MinQuantity < 1 {
+			return nil, apperr.Validation("数量门槛必须≥1")
+		}
+		fields["min_quantity"] = *req.MinQuantity
+	}
+	if req.DiscountBps != nil {
+		if !validBps(*req.DiscountBps) {
+			return nil, apperr.Validation("折扣基点须在 0~10000")
+		}
+		fields["discount_bps"] = *req.DiscountBps
+	}
+	if len(fields) > 0 {
+		if err := s.repo.updateTier(id, fields); err != nil {
+			return nil, err
+		}
+	}
+	t, err := s.repo.getTier(id)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func (s *catalogServiceImpl) DeleteTier(id int) error {
+	if _, err := s.repo.getTier(id); err != nil {
+		if isNotFound(err) {
+			return apperr.NotFound("折扣阶梯不存在")
+		}
+		return err
+	}
+	return s.repo.deleteTier(id)
+}
+
+func (s *catalogServiceImpl) ListTiers(skuID int) ([]DiscountTier, error) {
+	if _, err := s.GetSku(skuID); err != nil {
+		return nil, err
+	}
+	return s.repo.listTiersBySku(skuID)
 }
