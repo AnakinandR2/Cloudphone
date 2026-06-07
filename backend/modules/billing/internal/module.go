@@ -66,7 +66,7 @@ func init() {
 
 	// 建表（幂等）：计费账户 + 统一流水 + 商品目录 + 折扣阶梯。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}); err != nil {
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}); err != nil {
 			return err
 		}
 		return SeedCatalog(db)

@@ -38,6 +38,7 @@ const (
 	LedgerAdjustGrant  = "adjust_grant"
 	LedgerAdjustDeduct = "adjust_deduct"
 	LedgerPurchase     = "purchase" // 订单支付成功发放权益
+	LedgerTrial        = "trial"    // 试用发放
 )
 
 // TopupRequest 充值请求（计划1 为桩：直接入账）。
