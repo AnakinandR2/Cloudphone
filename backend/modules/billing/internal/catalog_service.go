@@ -307,7 +307,7 @@ func (s *catalogServiceImpl) Quote(skuCode string, cycleMonths, quantity int) (*
 	payableCents := (originalCents*int64(bps) + int64(DiscountBpsFull)/2) / int64(DiscountBpsFull)
 
 	return &QuoteResult{
-		SkuCode: sku.Code, Category: sku.Category, CycleMonths: cycleMonths, Quantity: quantity,
+		SkuCode: sku.Code, SkuName: sku.Name, Category: sku.Category, CycleMonths: cycleMonths, Quantity: quantity,
 		UnitPriceCents: sku.UnitPriceCents, BillingUnits: billingUnits,
 		OriginalCents: originalCents, DiscountBps: bps, PayableCents: payableCents,
 	}, nil

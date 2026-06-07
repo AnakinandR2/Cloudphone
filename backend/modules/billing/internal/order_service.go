@@ -27,12 +27,8 @@ func (s *orderServiceImpl) CreateOrder(userID int, req *OrderCreate) (*OrderDeta
 		if err != nil {
 			return nil, err
 		}
-		sku, err := s.catalog.repo.getSkuByCode(it.SkuCode)
-		if err != nil {
-			return nil, err
-		}
 		items = append(items, OrderItem{
-			SkuCode: q.SkuCode, SkuName: sku.Name, Category: q.Category,
+			SkuCode: q.SkuCode, SkuName: q.SkuName, Category: q.Category,
 			CycleMonths: q.CycleMonths, Quantity: q.Quantity,
 			UnitPriceCents: q.UnitPriceCents, DiscountBps: q.DiscountBps,
 			OriginalCents: q.OriginalCents, PayableCents: q.PayableCents,

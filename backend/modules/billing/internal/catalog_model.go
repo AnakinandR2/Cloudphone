@@ -81,6 +81,7 @@ type SkuWithTiers struct {
 
 type QuoteResult struct {
 	SkuCode        string `json:"sku_code"`
+	SkuName        string `json:"sku_name"`
 	Category       string `json:"category"`
 	CycleMonths    int    `json:"cycle_months"`
 	Quantity       int    `json:"quantity"`
