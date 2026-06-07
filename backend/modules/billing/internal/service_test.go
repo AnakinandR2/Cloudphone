@@ -66,3 +66,27 @@ func TestAdjustBalanceGuards(t *testing.T) {
 	_, err = BillingService.Topup(userA, -500, "负充值", "user:7001")
 	assert.Error(t, err)
 }
+
+func TestListLedgerPagingFilterIsolation(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_accounts", "billing_ledger_entries") })
+
+	_, _ = BillingService.Topup(userA, 10000, "充值", "user:7001")
+	_, _ = BillingService.AdjustBalance(userA, -2000, "退款", staffOp)
+	_, _ = BillingService.Topup(userB, 9999, "B充值", "user:7002")
+
+	// userA 仅见自己的 2 条
+	list, total, err := BillingService.ListLedger(userA, 1, 10, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	require.Len(t, list, 2)
+
+	// 按类型筛选
+	_, totalTopup, err := BillingService.ListLedger(userA, 1, 10, "", LedgerTopup)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), totalTopup)
+
+	// userB 看不到 userA 的流水
+	_, totalB, err := BillingService.ListLedger(userB, 1, 10, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), totalB)
+}

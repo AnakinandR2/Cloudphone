@@ -37,3 +37,18 @@ func (s *serviceImpl) AdjustBalance(userID int, deltaCents int64, reason, operat
 	}
 	return s.repo.applyBalance(userID, deltaCents, typ, reason, 0, operator)
 }
+
+// ListLedger 费用日志：当前用户的余额/资源包流水（分页 + 科目/类型筛选）。
+func (s *serviceImpl) ListLedger(userID, page, size int, subject, typ string) ([]LedgerEntry, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 200 {
+		size = 20
+	}
+	items, total, err := s.repo.listLedger(userID, (page-1)*size, size, subject, typ)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
