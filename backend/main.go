@@ -17,6 +17,7 @@ import (
 	"manager-backend/framework"
 	_ "manager-backend/modules/accesslog"
 	_ "manager-backend/modules/app"
+	_ "manager-backend/modules/billing"
 	_ "manager-backend/modules/cloudphone"
 	_ "manager-backend/modules/example"
 	_ "manager-backend/modules/note"
