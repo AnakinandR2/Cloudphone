@@ -76,3 +76,41 @@ func (s *orderServiceImpl) AdminListOrders(page, size, userID int, status string
 	}
 	return s.repo.adminListOrders((page-1)*size, size, userID, status)
 }
+
+// PayWithBalance 用余额支付本人订单（扣款+发放，单事务幂等）。
+func (s *orderServiceImpl) PayWithBalance(userID, id int) (*OrderDetail, error) {
+	o, err := s.repo.getOwned(userID, id)
+	if err != nil {
+		if isNotFoundOrder(err) {
+			return nil, apperr.NotFound("订单不存在")
+		}
+		return nil, err
+	}
+	items, err := s.repo.listItems(int(o.ID))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.settle(o, items, true); err != nil {
+		return nil, err
+	}
+	return &OrderDetail{Order: *o, Items: items}, nil
+}
+
+// MarkPaid 后台/网关回调桩：标记已付并发放（不扣余额）。
+func (s *orderServiceImpl) MarkPaid(id int) (*OrderDetail, error) {
+	o, err := s.repo.getByID(id)
+	if err != nil {
+		if isNotFoundOrder(err) {
+			return nil, apperr.NotFound("订单不存在")
+		}
+		return nil, err
+	}
+	items, err := s.repo.listItems(int(o.ID))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.settle(o, items, false); err != nil {
+		return nil, err
+	}
+	return &OrderDetail{Order: *o, Items: items}, nil
+}
