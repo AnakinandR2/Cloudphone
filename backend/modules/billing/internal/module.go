@@ -27,6 +27,8 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/account", GetMyAccount)
 		g.GET("/ledger", GetMyLedger)
 		g.POST("/topup", Topup)
+		g.GET("/skus", ListSkus)
+		g.POST("/quote", Quote)
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -35,6 +37,14 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 	{
 		admin.GET("/accounts/:userId", staff.PermissionMiddleware("billing:view"), AdminGetAccount)
 		admin.POST("/accounts/:userId/adjust", staff.PermissionMiddleware("billing:manage"), AdminAdjustBalance)
+		admin.GET("/skus", staff.PermissionMiddleware("billing:view"), AdminListSkus)
+		admin.POST("/skus", staff.PermissionMiddleware("billing:manage"), AdminCreateSku)
+		admin.PUT("/skus/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateSku)
+		admin.DELETE("/skus/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteSku)
+		admin.GET("/skus/:id/tiers", staff.PermissionMiddleware("billing:view"), AdminListTiers)
+		admin.POST("/skus/:id/tiers", staff.PermissionMiddleware("billing:manage"), AdminCreateTier)
+		admin.PUT("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminUpdateTier)
+		admin.DELETE("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminDeleteTier)
 	}
 }
 
