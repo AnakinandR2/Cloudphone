@@ -1,6 +1,10 @@
 package billing
 
-import "gorm.io/gorm"
+import (
+	"errors"
+
+	"gorm.io/gorm"
+)
 
 type repository interface {
 	getOrCreateAccount(userID int) (*Account, error)
@@ -14,11 +18,13 @@ type gormRepository struct{ db *gorm.DB }
 func newRepository(db *gorm.DB) repository { return &gormRepository{db: db} }
 
 // getOrCreateAccount 取当前用户账户，不存在则建（余额 0）。
+// 并发竞态下若另一请求已抢先创建（唯一索引冲突），回退为直接读取。
 func (r *gormRepository) getOrCreateAccount(userID int) (*Account, error) {
 	var acc Account
-	err := r.db.Where(Account{UserID: uint(userID)}).
-		Attrs(Account{BalanceCents: 0}).
-		FirstOrCreate(&acc).Error
+	err := r.db.Where(Account{UserID: uint(userID)}).FirstOrCreate(&acc).Error
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		err = r.db.Where("user_id = ?", userID).First(&acc).Error
+	}
 	if err != nil {
 		return nil, err
 	}
