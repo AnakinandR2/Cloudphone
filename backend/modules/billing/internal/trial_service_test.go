@@ -113,6 +113,21 @@ func TestListClaimable(t *testing.T) {
 	assert.True(t, byCode["promo"].NeedInvite)
 }
 
+func TestListClaimableHidesInviteCode(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
+			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	repo := newTrialRepository(framework.DB)
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "SECRET"}))
+
+	items, err := TrialService.ListClaimable(trialUser)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "", items[0].Policy.InviteCode) // 前台不泄露邀请码
+	assert.True(t, items[0].NeedInvite)             // 但提示需要邀请码
+}
+
 func TestTrialAdminPolicyService(t *testing.T) {
 	t.Cleanup(func() {
 		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities")

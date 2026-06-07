@@ -39,7 +39,9 @@ func (s *trialServiceImpl) ListClaimable(userID int) ([]ClaimableItem, error) {
 	out := make([]ClaimableItem, 0, len(policies))
 	for i := range policies {
 		ok, needInvite, claimed, reason := s.eligible(userID, &policies[i])
-		out = append(out, ClaimableItem{Policy: policies[i], Claimable: ok, NeedInvite: needInvite, ClaimedCount: claimed, Reason: reason})
+		pub := policies[i]
+		pub.InviteCode = "" // 不向前台泄露邀请码（NeedInvite 已提示需要输入）
+		out = append(out, ClaimableItem{Policy: pub, Claimable: ok, NeedInvite: needInvite, ClaimedCount: claimed, Reason: reason})
 	}
 	return out, nil
 }

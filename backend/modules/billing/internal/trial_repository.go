@@ -98,6 +98,8 @@ func (r *gormTrialRepository) listGrants(policyID int) ([]TrialGrant, error) {
 func (r *gormTrialRepository) claim(policy *TrialPolicy, userID int, expireAt *time.Time) error {
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 并发硬化（Phase 2 前置）：sqlite 串行化下安全；迁 MySQL/PG 后，限领守卫为
+		// 读后写(COUNT 再 INSERT)、非原子，需对 (policy_id,user_id) 加唯一约束或行锁防并发超领。
 		var claimed int64
 		if err := tx.Model(&TrialGrant{}).Where("policy_id = ? AND user_id = ?", policy.ID, userID).Count(&claimed).Error; err != nil {
 			return err
