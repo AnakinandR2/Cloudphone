@@ -9,11 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-type billingModule struct{}
+type billingModule struct {
+	db *gorm.DB
+}
 
 func (m *billingModule) Name() string { return "billing" }
 
 func (m *billingModule) Init(db *gorm.DB) error {
+	m.db = db
 	BillingService = newService(newRepository(db))
 	CatalogService = newCatalogService(newCatalogRepository(db))
 	EntitlementService = newEntitlementService(newEntitlementRepository(db))
@@ -68,8 +71,23 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 	}
 }
 
-func (m *billingModule) OnStart() error { return nil }
-func (m *billingModule) OnStop() error  { return nil }
+func (m *billingModule) OnStart() error {
+	if SeatService != nil {
+		dunningRunner = framework.NewPeriodicRunner(m.db, "billing:dunning", dunningInterval, dunningLease, func() error {
+			return SeatService.runDunning(defaultGraceDays, defaultFrozenDays)
+		})
+		dunningRunner.Start()
+	}
+	return nil
+}
+
+func (m *billingModule) OnStop() error {
+	if dunningRunner != nil {
+		dunningRunner.Stop()
+		dunningRunner = nil
+	}
+	return nil
+}
 
 func init() {
 	framework.GlobalModule.Register(&billingModule{})
