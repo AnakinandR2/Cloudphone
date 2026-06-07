@@ -44,10 +44,11 @@ func (r *gormRepository) applyBalance(userID int, delta int64, typ, reason strin
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&Account{}).
 			Where("user_id = ? AND balance_cents + ? >= 0", userID, delta).
-			UpdateColumn("balance_cents", gorm.Expr("balance_cents + ?", delta))
+			Updates(map[string]interface{}{"balance_cents": gorm.Expr("balance_cents + ?", delta)})
 		if res.Error != nil {
 			return res.Error
 		}
+		// 余额不足（delta<0 且会扣成负数）。delta>0 时该条件恒满足、本分支不会触发。
 		if res.RowsAffected == 0 {
 			return apperr.Validation("余额不足")
 		}

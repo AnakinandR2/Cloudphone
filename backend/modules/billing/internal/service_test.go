@@ -62,4 +62,7 @@ func TestAdjustBalanceGuards(t *testing.T) {
 
 	_, err = BillingService.Topup(userA, 0, "零充值", "user:7001")
 	assert.Error(t, err)
+
+	_, err = BillingService.Topup(userA, -500, "负充值", "user:7001")
+	assert.Error(t, err)
 }
