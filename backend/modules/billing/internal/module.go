@@ -43,8 +43,11 @@ func (m *billingModule) OnStop() error  { return nil }
 func init() {
 	framework.GlobalModule.Register(&billingModule{})
 
-	// 建表（幂等）：计费账户 + 统一流水。
+	// 建表（幂等）：计费账户 + 统一流水 + 商品目录 + 折扣阶梯。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		return db.AutoMigrate(&Account{}, &LedgerEntry{})
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}); err != nil {
+			return err
+		}
+		return SeedCatalog(db)
 	})
 }

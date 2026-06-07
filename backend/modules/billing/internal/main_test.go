@@ -9,7 +9,7 @@ import (
 
 func TestMain(m *testing.M) {
 	tdb, _ := framework.SetupTestDB(m)
-	if err := framework.DB.AutoMigrate(&Account{}, &LedgerEntry{}); err != nil {
+	if err := framework.DB.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}); err != nil {
 		panic(err)
 	}
 	if err := (&billingModule{}).Init(framework.DB); err != nil {
