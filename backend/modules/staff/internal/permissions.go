@@ -88,6 +88,13 @@ var PermissionGroups = []PermissionGroup{
 			{Key: "app:manage", Label: "删除用户上传的应用"},
 		},
 	},
+	{
+		Module: "计费管理", ModuleKey: "billing",
+		Permissions: []Permission{
+			{Key: "billing:view", Label: "查看计费（账户/订单/流水）"},
+			{Key: "billing:manage", Label: "管理计费（调整余额/资源、配置定价与试用）"},
+		},
+	},
 	// scaffold:permission-groups
 }
 

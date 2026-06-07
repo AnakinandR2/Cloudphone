@@ -70,3 +70,41 @@ func Topup(c *gin.Context) {
 	}
 	framework.OKWithData(c, acc)
 }
+
+// AdminGetAccount 运营：查看某用户账户 + 流水
+func AdminGetAccount(c *gin.Context) {
+	uid, err := strconv.Atoi(c.Param("userId"))
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "无效的用户ID")
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	acc, ledger, err := BillingService.AdminGetAccount(uid, page, size)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{"account": acc, "ledger": ledger})
+}
+
+// AdminAdjustBalance 运营：手动赠送/扣减余额（理由必填）= 退款实现
+func AdminAdjustBalance(c *gin.Context) {
+	uid, err := strconv.Atoi(c.Param("userId"))
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "无效的用户ID")
+		return
+	}
+	staffID, _ := currentUserID(c)
+	var req AdjustRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	acc, err := BillingService.AdjustBalance(uid, req.DeltaCents, req.Reason, "staff:"+strconv.Itoa(staffID))
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, acc)
+}

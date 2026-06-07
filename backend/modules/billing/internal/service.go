@@ -52,3 +52,16 @@ func (s *serviceImpl) ListLedger(userID, page, size int, subject, typ string) ([
 	}
 	return items, total, nil
 }
+
+// AdminGetAccount 运营查看任意用户的账户 + 近期流水（属主由调用方按权限控制）。
+func (s *serviceImpl) AdminGetAccount(userID, page, size int) (*Account, []LedgerEntry, error) {
+	acc, err := s.repo.getOrCreateAccount(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	ledger, _, err := s.ListLedger(userID, page, size, "", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	return acc, ledger, nil
+}

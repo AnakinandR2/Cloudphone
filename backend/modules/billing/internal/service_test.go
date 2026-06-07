@@ -90,3 +90,15 @@ func TestListLedgerPagingFilterIsolation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), totalB)
 }
+
+func TestAdminGetAccountView(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_accounts", "billing_ledger_entries") })
+
+	_, _ = BillingService.Topup(userA, 8888, "充值", "user:7001")
+
+	acc, ledger, err := BillingService.AdminGetAccount(userA, 1, 10)
+	require.NoError(t, err)
+	assert.Equal(t, int64(8888), acc.BalanceCents)
+	require.Len(t, ledger, 1)
+	assert.Equal(t, LedgerTopup, ledger[0].Type)
+}

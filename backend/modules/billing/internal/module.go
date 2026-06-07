@@ -2,6 +2,7 @@ package billing
 
 import (
 	"manager-backend/framework"
+	"manager-backend/modules/staff"
 	"manager-backend/modules/user"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,14 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/account", GetMyAccount)
 		g.GET("/ledger", GetMyLedger)
 		g.POST("/topup", Topup)
+	}
+
+	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
+	admin := router.Group("/admin/billing")
+	admin.Use(middlewareFuncs...)
+	{
+		admin.GET("/accounts/:userId", staff.PermissionMiddleware("billing:view"), AdminGetAccount)
+		admin.POST("/accounts/:userId/adjust", staff.PermissionMiddleware("billing:manage"), AdminAdjustBalance)
 	}
 }
 
