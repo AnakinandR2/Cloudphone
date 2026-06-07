@@ -145,3 +145,18 @@ func TestDeleteSkuCascadesTiers(t *testing.T) {
 	framework.DB.Model(&DiscountTier{}).Where("sku_id = ?", sku.ID).Count(&remaining)
 	assert.Equal(t, int64(0), remaining)
 }
+
+func TestQuoteRejectsUnlistedSku(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_skus", "billing_discount_tiers") })
+	require.NoError(t, SeedCatalog(framework.DB))
+
+	// 下架 instance_fee
+	sku, err := CatalogService.repo.getSkuByCode("instance_fee")
+	require.NoError(t, err)
+	notListed := false
+	_, err = CatalogService.UpdateSku(int(sku.ID), &SkuUpdate{Listed: &notListed})
+	require.NoError(t, err)
+
+	_, err = CatalogService.Quote("instance_fee", 1, 1)
+	assert.Error(t, err) // 下架后不可计价
+}

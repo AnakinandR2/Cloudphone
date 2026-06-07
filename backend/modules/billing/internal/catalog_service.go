@@ -269,6 +269,9 @@ func (s *catalogServiceImpl) Quote(skuCode string, cycleMonths, quantity int) (*
 		}
 		return nil, err
 	}
+	if !sku.Listed {
+		return nil, apperr.NotFound("商品不存在或已下架")
+	}
 	if quantity < 1 {
 		return nil, apperr.Validation("数量必须≥1")
 	}
