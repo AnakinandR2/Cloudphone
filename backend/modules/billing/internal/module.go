@@ -32,6 +32,10 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/skus", ListSkus)
 		g.POST("/quote", Quote)
 		g.GET("/entitlements", GetMyEntitlements)
+		g.POST("/orders", CreateOrder)
+		g.GET("/orders", ListMyOrders)
+		g.GET("/orders/:id", GetMyOrder)
+		g.POST("/orders/:id/pay", PayMyOrder)
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -49,6 +53,8 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.POST("/skus/:id/tiers", staff.PermissionMiddleware("billing:manage"), AdminCreateTier)
 		admin.PUT("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminUpdateTier)
 		admin.DELETE("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminDeleteTier)
+		admin.GET("/orders", staff.PermissionMiddleware("billing:view"), AdminListOrders)
+		admin.POST("/orders/:id/mark-paid", staff.PermissionMiddleware("billing:manage"), AdminMarkOrderPaid)
 	}
 }
 
