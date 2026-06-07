@@ -30,6 +30,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.POST("/topup", Topup)
 		g.GET("/skus", ListSkus)
 		g.POST("/quote", Quote)
+		g.GET("/entitlements", GetMyEntitlements)
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -38,6 +39,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 	{
 		admin.GET("/accounts/:userId", staff.PermissionMiddleware("billing:view"), AdminGetAccount)
 		admin.POST("/accounts/:userId/adjust", staff.PermissionMiddleware("billing:manage"), AdminAdjustBalance)
+		admin.POST("/accounts/:userId/adjust-resource", staff.PermissionMiddleware("billing:manage"), AdminAdjustResource)
 		admin.GET("/skus", staff.PermissionMiddleware("billing:view"), AdminListSkus)
 		admin.POST("/skus", staff.PermissionMiddleware("billing:manage"), AdminCreateSku)
 		admin.PUT("/skus/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateSku)
