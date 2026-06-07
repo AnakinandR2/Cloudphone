@@ -19,6 +19,7 @@ func (m *billingModule) Init(db *gorm.DB) error {
 	EntitlementService = newEntitlementService(newEntitlementRepository(db))
 	OrderService = newOrderService(newOrderRepository(db), CatalogService)
 	TrialService = newTrialService(newTrialRepository(db))
+	SeatService = newSeatService(newSeatRepository(db), EntitlementService)
 	return nil
 }
 
@@ -75,7 +76,7 @@ func init() {
 
 	// 建表（幂等）：计费账户 + 统一流水 + 商品目录 + 折扣阶梯。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}); err != nil {
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}); err != nil {
 			return err
 		}
 		return SeedCatalog(db)
