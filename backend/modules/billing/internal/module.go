@@ -2,6 +2,7 @@ package billing
 
 import (
 	"manager-backend/framework"
+	"manager-backend/modules/user"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,7 +18,14 @@ func (m *billingModule) Init(db *gorm.DB) error {
 }
 
 func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ...gin.HandlerFunc) {
-	// 前台/后台路由在 Task 4 / Task 5 补全。
+	// 前台：我的计费，按属主隔离，要求 user 登录。
+	g := router.Group("/billing")
+	g.Use(user.AuthMiddleware())
+	{
+		g.GET("/account", GetMyAccount)
+		g.GET("/ledger", GetMyLedger)
+		g.POST("/topup", Topup)
+	}
 }
 
 func (m *billingModule) OnStart() error { return nil }
