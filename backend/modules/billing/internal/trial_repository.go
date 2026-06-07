@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"manager-backend/framework/apperr"
+
 	"gorm.io/gorm"
 )
 
@@ -92,8 +94,34 @@ func (r *gormTrialRepository) listGrants(policyID int) ([]TrialGrant, error) {
 	return items, err
 }
 
+// claim 单事务：守卫式限领 + 写 TrialGrant + 发放权益(type=trial)。
 func (r *gormTrialRepository) claim(policy *TrialPolicy, userID int, expireAt *time.Time) error {
-	return errors.New("not implemented") // TODO(Task 2)
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var claimed int64
+		if err := tx.Model(&TrialGrant{}).Where("policy_id = ? AND user_id = ?", policy.ID, userID).Count(&claimed).Error; err != nil {
+			return err
+		}
+		if int(claimed) >= policy.PerUserLimit {
+			return apperr.Conflict("已达领取上限")
+		}
+		if err := tx.Create(&TrialGrant{PolicyID: policy.ID, UserID: uint(userID), Subject: policy.GrantSubject, Quantity: policy.GrantQuantity}).Error; err != nil {
+			return err
+		}
+		entRepo := &gormEntitlementRepository{db: tx}
+		batch := EntitlementBatch{UserID: uint(userID), Subject: policy.GrantSubject, Quantity: policy.GrantQuantity, Source: SourceTrial, SourceRef: "trial:" + policy.Code, ExpireAt: expireAt}
+		if err := entRepo.createBatch(&batch); err != nil {
+			return err
+		}
+		capacity, err := entRepo.capacity(userID, policy.GrantSubject, now)
+		if err != nil {
+			return err
+		}
+		return entRepo.insertLedger(&LedgerEntry{
+			UserID: uint(userID), Subject: policy.GrantSubject, Type: LedgerTrial,
+			Delta: policy.GrantQuantity, BalanceAfter: capacity, Reason: "trial:" + policy.Code, Operator: "user:" + itoa(userID),
+		})
+	})
 }
 
 func isNotFoundTrial(err error) bool { return errors.Is(err, gorm.ErrRecordNotFound) }

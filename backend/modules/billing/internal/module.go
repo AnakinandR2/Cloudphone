@@ -18,6 +18,7 @@ func (m *billingModule) Init(db *gorm.DB) error {
 	CatalogService = newCatalogService(newCatalogRepository(db))
 	EntitlementService = newEntitlementService(newEntitlementRepository(db))
 	OrderService = newOrderService(newOrderRepository(db), CatalogService)
+	TrialService = newTrialService(newTrialRepository(db))
 	return nil
 }
 

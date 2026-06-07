@@ -44,3 +44,71 @@ func TestTrialPolicyCRUDAndHelpers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 }
+
+func TestClaimTrialNewUserAndDedup(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
+			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	repo := newTrialRepository(framework.DB)
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, GrantExpireDays: 30, PerUserLimit: 1, AllowNewUser: true}))
+
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "newbie", ""))
+	cap, err := EntitlementService.Capacity(trialUser, SubjectInstanceSeat)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), cap)
+
+	err = TrialService.ClaimTrial(trialUser, "newbie", "")
+	assert.Error(t, err)
+	cap, _ = EntitlementService.Capacity(trialUser, SubjectInstanceSeat)
+	assert.Equal(t, int64(1), cap)
+
+	_, total, err := BillingService.ListLedger(trialUser, 1, 50, SubjectInstanceSeat, LedgerTrial)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+}
+
+func TestClaimTrialEligibilityPaths(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
+			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	repo := newTrialRepository(framework.DB)
+
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "VIP2026"}))
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "promo", ""))
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "promo", "WRONG"))
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "promo", "VIP2026"))
+	cap, _ := EntitlementService.Capacity(trialUser, SubjectRuntimeMinute)
+	assert.Equal(t, int64(600), cap)
+
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newonly", Name: "仅新人", Enabled: true, GrantSubject: SubjectBootSeat, GrantQuantity: 2, PerUserLimit: 1, AllowNewUser: true}))
+	require.NoError(t, framework.DB.Create(&Order{OrderNo: "BILY1", UserID: uint(trialUser), Status: OrderPaid, PayMethod: PayBalance, TotalCents: 1}).Error)
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "newonly", ""))
+	pol, _ := repo.getPolicyByCode("newonly")
+	require.NoError(t, repo.createEligibility(&TrialEligibility{PolicyID: pol.ID, UserID: uint(trialUser), GrantedBy: "staff:1"}))
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "newonly", ""))
+	cap, _ = EntitlementService.Capacity(trialUser, SubjectBootSeat)
+	assert.Equal(t, int64(2), cap)
+}
+
+func TestListClaimable(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
+			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	repo := newTrialRepository(framework.DB)
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, PerUserLimit: 1, AllowNewUser: true}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "VIP"}))
+
+	items, err := TrialService.ListClaimable(trialUser)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	byCode := map[string]ClaimableItem{}
+	for _, it := range items {
+		byCode[it.Policy.Code] = it
+	}
+	assert.True(t, byCode["newbie"].Claimable)
+	assert.False(t, byCode["promo"].Claimable)
+	assert.True(t, byCode["promo"].NeedInvite)
+}
