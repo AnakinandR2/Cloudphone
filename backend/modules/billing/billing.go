@@ -32,8 +32,19 @@ func ListDunningEnforcement() ([]billinginternal.EnforcementTarget, error) {
 	return billinginternal.SeatService.ListDunningEnforcement()
 }
 
+// 欠费状态常量（供 phone 等跨模块引用）。
+const (
+	DunningFrozen   = billinginternal.DunningFrozen
+	DunningRecycled = billinginternal.DunningRecycled
+)
+
 // InitForTest 测试用：供其他模块装配 billing。
 func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }
+
+// SetDunningForTest 测试用：直接置某用户欠费状态。
+func SetDunningForTest(userID int, state string) error {
+	return billinginternal.SetDunningForTest(userID, state)
+}
 
 // GrantInstanceSeatsForTest 测试用：给用户发放 n 个实例席位。
 func GrantInstanceSeatsForTest(userID, n int) error {

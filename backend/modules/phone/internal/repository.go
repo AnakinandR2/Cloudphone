@@ -15,6 +15,10 @@ type repository interface {
 	delete(userID, id int) error
 	// setStatus 按业务主键无条件改状态（worker 收敛异步任务用，不带属主约束）。
 	setStatus(phoneID uint, status string) error
+	// listByUser 按用户 id 升序列出所有实例（enforcement worker 用）。
+	listByUser(userID int) ([]CloudPhone, error)
+	// deleteByID 按主键删除（enforcement worker 销毁超量实例用，不带属主约束）。
+	deleteByID(id uint) error
 	// 管理侧（不限属主）
 	adminCount(kw, status, tag string, userID int) (int64, error)
 	adminList(offset, limit int, kw, status, tag string, userID int, orderClause string) ([]CloudPhone, error)
@@ -82,6 +86,16 @@ func (r *gormRepository) delete(userID, id int) error {
 
 func (r *gormRepository) setStatus(phoneID uint, status string) error {
 	return r.db.Model(&CloudPhone{}).Where("id = ?", phoneID).Update("status", status).Error
+}
+
+func (r *gormRepository) listByUser(userID int) ([]CloudPhone, error) {
+	var items []CloudPhone
+	err := r.db.Where("user_id = ?", userID).Order("id ASC").Find(&items).Error
+	return items, err
+}
+
+func (r *gormRepository) deleteByID(id uint) error {
+	return r.db.Where("id = ?", id).Delete(&CloudPhone{}).Error
 }
 
 // --- 异步任务追踪 ---

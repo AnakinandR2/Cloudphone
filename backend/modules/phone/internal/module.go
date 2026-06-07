@@ -1,6 +1,9 @@
 package phone
 
 import (
+	"context"
+	"time"
+
 	"manager-backend/framework"
 	"manager-backend/modules/staff"
 	"manager-backend/modules/user"
@@ -77,10 +80,21 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 // phoneWorker 异步任务收敛 worker（仅中台已配置时运行）。
 var phoneWorker *taskWorker
 
+// enforceRunner 欠费执行 runner（仅中台已配置时运行）。
+var enforceRunner *framework.PeriodicRunner
+
 func (m *phoneModule) OnStart() error {
 	if PhoneService != nil && PhoneService.ops != nil {
 		phoneWorker = newTaskWorker(PhoneService, m.db)
 		phoneWorker.start()
+
+		enforceRunner = framework.NewPeriodicRunner(m.db, "phone:enforcement", time.Minute, 50*time.Second, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			PhoneService.runEnforcement(ctx)
+			return nil
+		})
+		enforceRunner.Start()
 	}
 	return nil
 }
@@ -89,6 +103,10 @@ func (m *phoneModule) OnStop() error {
 	if phoneWorker != nil {
 		phoneWorker.stop()
 		phoneWorker = nil
+	}
+	if enforceRunner != nil {
+		enforceRunner.Stop()
+		enforceRunner = nil
 	}
 	return nil
 }

@@ -75,6 +75,11 @@ func (s *seatServiceImpl) ListDunningEnforcement() ([]EnforcementTarget, error) 
 	return out, nil
 }
 
+// SetDunningForTest 测试用：直接置某用户欠费状态（EnteredAt=now）。
+func SetDunningForTest(userID int, state string) error {
+	return SeatService.repo.upsertDunning(userID, state, time.Now())
+}
+
 // runDunning cron 一次：扫描所有占用，转换欠费状态（幂等）。X=graceDays, Y=frozenDays。
 func (s *seatServiceImpl) runDunning(graceDays, frozenDays int) error {
 	now := time.Now()

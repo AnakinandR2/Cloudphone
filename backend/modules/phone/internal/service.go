@@ -829,9 +829,11 @@ func midplatTarget(taskType string) string {
 	return MidplatReady
 }
 
-// settleDestroy 销毁任务收敛：删本地档案 + 标记任务终态。
+// settleDestroy 销毁任务收敛：删本地档案 + 释放席位 + 标记任务终态。
 func (s *serviceImpl) settleDestroy(t CpTask, taskStatus, lastErr string) {
-	_ = s.repo.delete(int(t.UserID), int(t.CloudPhoneID))
+	if err := s.repo.delete(int(t.UserID), int(t.CloudPhoneID)); err == nil {
+		_ = billing.ReleaseInstanceSeat(int(t.UserID))
+	}
 	_ = s.repo.updateTask(t.ID, taskStatus, lastErr)
 }
 
