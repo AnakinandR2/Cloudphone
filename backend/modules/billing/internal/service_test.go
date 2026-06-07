@@ -47,7 +47,7 @@ func TestTopupAndAdjustBalanceWithLedger(t *testing.T) {
 	list, total, err := BillingService.repo.listLedger(userA, 0, 10, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), total)
-	assert.Equal(t, int64(12000), list[0].BalanceAfterCents) // id DESC，最新在前
+	assert.Equal(t, int64(12000), list[0].BalanceAfter) // id DESC，最新在前
 	assert.Equal(t, LedgerAdjustDeduct, list[0].Type)
 }
 

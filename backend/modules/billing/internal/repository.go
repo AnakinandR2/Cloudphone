@@ -70,7 +70,7 @@ func (r *gormRepository) applyBalance(userID int, delta int64, typ, reason strin
 		}
 		entry := LedgerEntry{
 			UserID: uint(userID), Subject: SubjectBalance, Type: typ,
-			DeltaCents: delta, BalanceAfterCents: acc.BalanceCents,
+			Delta: delta, BalanceAfter: acc.BalanceCents,
 			Reason: reason, OrderID: orderID, Operator: operator,
 		}
 		return tx.Create(&entry).Error
