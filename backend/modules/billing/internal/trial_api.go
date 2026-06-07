@@ -107,7 +107,11 @@ func AdminGrantTrialEligibility(c *gin.Context) {
 		framework.Fail(c, http.StatusBadRequest, "无效的ID")
 		return
 	}
-	staffID, _ := currentUserID(c)
+	staffID, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
 	var req EligibilityGrantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")

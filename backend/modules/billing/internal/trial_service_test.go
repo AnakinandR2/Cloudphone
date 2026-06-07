@@ -112,3 +112,46 @@ func TestListClaimable(t *testing.T) {
 	assert.False(t, byCode["promo"].Claimable)
 	assert.True(t, byCode["promo"].NeedInvite)
 }
+
+func TestTrialAdminPolicyService(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities")
+	})
+
+	// 试用只能发资源科目 → balance 被拒
+	_, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "bad", Name: "x", GrantSubject: SubjectBalance, GrantQuantity: 100})
+	assert.Error(t, err)
+
+	p, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "新人礼", GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, AllowNewUser: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, p.PerUserLimit) // 默认 1
+	assert.True(t, p.Enabled)          // 默认启用
+
+	// 重复 code → 冲突
+	_, err = TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "dup", GrantSubject: SubjectInstanceSeat, GrantQuantity: 1})
+	assert.Error(t, err)
+
+	// 更新
+	newQty := int64(5)
+	disabled := false
+	upd, err := TrialService.UpdatePolicy(int(p.ID), &TrialPolicyUpdate{GrantQuantity: &newQty, Enabled: &disabled})
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), upd.GrantQuantity)
+	assert.False(t, upd.Enabled)
+
+	// 授予资格 + 列出（无领取记录时为空）
+	require.NoError(t, TrialService.GrantEligibility(int(p.ID), 9301, "staff:1"))
+	grants, err := TrialService.ListGrants(int(p.ID))
+	require.NoError(t, err)
+	assert.Len(t, grants, 0)
+
+	// ListPolicies 含全部（含已停用）
+	all, err := TrialService.ListPolicies()
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+
+	// 删除
+	require.NoError(t, TrialService.DeletePolicy(int(p.ID)))
+	_, err = TrialService.UpdatePolicy(int(p.ID), &TrialPolicyUpdate{Name: "ghost"})
+	assert.Error(t, err) // 已删 → NotFound
+}
