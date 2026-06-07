@@ -9,6 +9,7 @@ import (
 	// blank-import 各模块的公开包以触发自注册（等价于 main.go 的装配）。
 	_ "manager-backend/modules/accesslog"
 	_ "manager-backend/modules/app"
+	_ "manager-backend/modules/billing"
 	_ "manager-backend/modules/cloudphone"
 	_ "manager-backend/modules/example"
 	_ "manager-backend/modules/note"

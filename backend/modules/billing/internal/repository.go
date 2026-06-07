@@ -13,7 +13,6 @@ type repository interface {
 	getAccountOrNil(userID int) (*Account, error)
 	applyBalance(userID int, delta int64, typ, reason string, orderID uint, operator string) (*Account, error)
 	listLedger(userID, offset, limit int, subject, typ string) ([]LedgerEntry, int64, error)
-	countLedger(userID int, subject, typ string) (int64, error)
 }
 
 type gormRepository struct{ db *gorm.DB }
