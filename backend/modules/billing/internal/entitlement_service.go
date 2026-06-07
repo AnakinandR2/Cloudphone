@@ -56,6 +56,8 @@ func (s *entitlementServiceImpl) Deduct(userID int, subject string, amount int64
 	}
 	return s.repo.txWith(func(tx entitlementRepository) error {
 		now := time.Now()
+		// 并发硬化（Phase 2 前置）：sqlite 串行化下安全；迁 MySQL/PG 后，
+		// 自动按分钟消耗上线前，这里需对批次行加 SELECT ... FOR UPDATE 防丢失更新。
 		batches, err := tx.listActiveBatches(userID, subject, now)
 		if err != nil {
 			return err

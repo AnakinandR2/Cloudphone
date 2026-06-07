@@ -101,3 +101,36 @@ func TestEntitlementCapacityExcludesExpiredAndUsed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), capacity)
 }
+
+func TestUnifiedLedgerCoversMoneyAndResource(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_accounts", "billing_ledger_entries", "billing_entitlement_batches")
+	})
+	const u = 8202
+
+	_, err := BillingService.Topup(u, 10000, "充值", "user:8202") // 余额 +10000 分
+	require.NoError(t, err)
+	_, err = EntitlementService.Grant(u, SubjectInstanceSeat, 5, nil, SourceAdjust, "赠送5台", LedgerAdjustGrant, "staff:1") // 实例席位 +5
+	require.NoError(t, err)
+
+	rows, total, err := BillingService.ListLedger(u, 1, 50, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+
+	var balanceDelta, seatDelta int64
+	var sawBalance, sawSeat bool
+	for _, r := range rows {
+		switch r.Subject {
+		case SubjectBalance:
+			balanceDelta = r.Delta
+			sawBalance = true
+		case SubjectInstanceSeat:
+			seatDelta = r.Delta
+			sawSeat = true
+		}
+	}
+	assert.True(t, sawBalance)
+	assert.True(t, sawSeat)
+	assert.Equal(t, int64(10000), balanceDelta) // 单位=分
+	assert.Equal(t, int64(5), seatDelta)        // 单位=台
+}
