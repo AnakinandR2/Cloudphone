@@ -37,6 +37,8 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/orders", ListMyOrders)
 		g.GET("/orders/:id", GetMyOrder)
 		g.POST("/orders/:id/pay", PayMyOrder)
+		g.GET("/trials", ListMyTrials)
+		g.POST("/trials/:code/claim", ClaimTrial)
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -56,6 +58,12 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.DELETE("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminDeleteTier)
 		admin.GET("/orders", staff.PermissionMiddleware("billing:view"), AdminListOrders)
 		admin.POST("/orders/:id/mark-paid", staff.PermissionMiddleware("billing:manage"), AdminMarkOrderPaid)
+		admin.GET("/trials", staff.PermissionMiddleware("billing:view"), AdminListTrialPolicies)
+		admin.POST("/trials", staff.PermissionMiddleware("billing:manage"), AdminCreateTrialPolicy)
+		admin.PUT("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateTrialPolicy)
+		admin.DELETE("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteTrialPolicy)
+		admin.POST("/trials/:id/eligibility", staff.PermissionMiddleware("billing:manage"), AdminGrantTrialEligibility)
+		admin.GET("/trials/:id/grants", staff.PermissionMiddleware("billing:view"), AdminListTrialGrants)
 	}
 }
 
