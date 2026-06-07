@@ -81,3 +81,24 @@ func TestSeedCatalogIdempotent(t *testing.T) {
 	assert.Equal(t, int64(3), skuCount)
 	assert.Equal(t, int64(9), tierCount)
 }
+
+func TestDeleteSkuCascadesTiers(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("billing_skus", "billing_discount_tiers") })
+
+	listed := true
+	sku, err := CatalogService.CreateSku(&SkuCreate{Code: "casc_fee", Category: CategoryInstanceFee, Name: "级联测试", UnitPriceCents: 1000, Unit: "台/月", Listed: &listed})
+	require.NoError(t, err)
+	_, err = CatalogService.CreateTier(int(sku.ID), &TierCreate{CycleMonths: 1, MinQuantity: 1, DiscountBps: 9000})
+	require.NoError(t, err)
+	_, err = CatalogService.CreateTier(int(sku.ID), &TierCreate{CycleMonths: 12, MinQuantity: 1, DiscountBps: 7000})
+	require.NoError(t, err)
+
+	// 直接删 SKU（不先删 tier）→ 应级联删掉其 2 条折扣阶梯
+	require.NoError(t, CatalogService.DeleteSku(int(sku.ID)))
+
+	_, err = CatalogService.GetSku(int(sku.ID))
+	assert.Error(t, err)
+	var remaining int64
+	framework.DB.Model(&DiscountTier{}).Where("sku_id = ?", sku.ID).Count(&remaining)
+	assert.Equal(t, int64(0), remaining)
+}
