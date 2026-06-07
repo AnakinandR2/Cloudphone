@@ -2,6 +2,7 @@ package phone
 
 import (
 	"context"
+	"log"
 
 	"manager-backend/modules/billing"
 )
@@ -32,15 +33,22 @@ func (s *serviceImpl) runEnforcement(ctx context.Context) {
 				}
 			}
 		case billing.DunningRecycled:
-			over := len(phones) - int(tgt.Capacity)
-			if over <= 0 {
+			if int64(len(phones)) <= tgt.Capacity {
 				continue
 			}
-			// phones 按 id 升序；回收末尾 over 台(最近创建)，保留容量内最早创建的。
-			victims := phones[len(phones)-over:]
-			for _, p := range victims {
+			// 保留容量内最早创建的；回收其余(最新的超量部分)。
+			overTail := phones[int(tgt.Capacity):]
+			for _, p := range overTail {
+				// 跳过过渡态实例(创建中/开机中/关机中/销毁中)，避免破坏状态机与重复销毁，留待下轮收敛后回收。
+				if p.Status == StatusCreating || p.Status == StatusStarting || p.Status == StatusStopping || p.Status == StatusDestroying {
+					continue
+				}
 				if p.CpID != "" {
-					_ = s.ops.Destroy(ctx, p.CpID)
+					// 审计：不可逆销毁前留痕(含容量=0 时的全量回收)。
+					log.Printf("[enforcement] 回收销毁超量实例 user=%d cp=%s phoneID=%d", tgt.UserID, p.CpID, p.ID)
+					if err := s.ops.Destroy(ctx, p.CpID); err != nil {
+						continue // 中台销毁失败：不删本地，留待下轮重试，避免中台孤儿
+					}
 				}
 				if err := s.repo.deleteByID(p.ID); err == nil {
 					_ = billing.ReleaseInstanceSeat(tgt.UserID)

@@ -122,3 +122,26 @@ func TestEnforcementFreezeShutsDownRunningOnly(t *testing.T) {
 	framework.DB.Model(&CloudPhone{}).Where("user_id = ?", u).Count(&n)
 	assert.Equal(t, int64(2), n) // nothing deleted
 }
+
+func TestEnforcementRecycleSkipsTransitional(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+	})
+	const u = 9603
+	fake := &fakeOps{}
+	svc := newService(newRepository(framework.DB), fake)
+	// capacity 1; 3 phones (id asc): oldest STOPPED(keep), then a CREATING(transitional, skip), then a STOPPED(recycle)
+	require.NoError(t, framework.DB.Create(&CloudPhone{UserID: u, Name: "keep", CpID: "cpK", Status: StatusStopped}).Error)
+	require.NoError(t, framework.DB.Create(&CloudPhone{UserID: u, Name: "mid", CpID: "cpM", Status: StatusCreating}).Error)
+	require.NoError(t, framework.DB.Create(&CloudPhone{UserID: u, Name: "new", CpID: "cpN", Status: StatusStopped}).Error)
+	require.NoError(t, billing.GrantInstanceSeatsForTest(u, 1))
+	require.NoError(t, billing.SetDunningForTest(u, billing.DunningRecycled))
+
+	svc.runEnforcement(context.Background())
+
+	// over-quota tail = [cpM(creating, skipped), cpN(stopped, destroyed)] → only cpN destroyed
+	assert.Equal(t, []string{"cpN"}, fake.destroyed)
+	var n int64
+	framework.DB.Model(&CloudPhone{}).Where("user_id = ?", u).Count(&n)
+	assert.Equal(t, int64(2), n) // cpK + cpM remain (cpM retried next cycle once settled)
+}
