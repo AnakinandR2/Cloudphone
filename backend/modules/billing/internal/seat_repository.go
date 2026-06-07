@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -55,7 +56,7 @@ func (r *gormSeatRepository) reconcile(userID int, count int64) error {
 func (r *gormSeatRepository) usage(userID int) (int64, error) {
 	var u SeatUsage
 	err := r.db.Where("user_id = ?", userID).First(&u).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, nil
 	}
 	return u.InstanceSeatsUsed, err
@@ -70,7 +71,7 @@ func (r *gormSeatRepository) listUsages() ([]SeatUsage, error) {
 func (r *gormSeatRepository) getDunning(userID int) (*DunningState, error) {
 	var d DunningState
 	err := r.db.Where("user_id = ?", userID).First(&d).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return &DunningState{UserID: uint(userID), State: DunningActive}, nil
 	}
 	if err != nil {
