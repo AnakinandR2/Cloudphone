@@ -150,8 +150,8 @@ async function claim(item: ClaimableItem) {
             {{ t('billing.trialPerUserLimit', { n: item.policy.per_user_limit }) }}
           </div>
 
-          <!-- 邀请码输入（need_invite 且 claimable）-->
-          <div v-if="item.need_invite && item.claimable" class="mt-3">
+          <!-- 邀请码输入（需邀请码即显示，凭码领取）-->
+          <div v-if="item.need_invite" class="mt-3">
             <Input
               v-model="inviteCodes[item.policy.code]"
               :placeholder="t('billing.trialInviteCodePlaceholder')"
