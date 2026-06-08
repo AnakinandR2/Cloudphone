@@ -32,9 +32,9 @@ let tierNextId = 10
 // ---- Orders ----
 let orders = [
   { id: 1, order_no: 'ORD202606010001', user_id: 101, status: 'paid', pay_method: 'balance', total_cents: 3000, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', updated_at: '2026-06-01T10:00:00Z' },
-  { id: 2, order_no: 'ORD202606010002', user_id: 102, status: 'pending', pay_method: 'offline', total_cents: 8500, paid_at: null, created_at: '2026-06-01T11:00:00Z', updated_at: '2026-06-01T11:00:00Z' },
+  { id: 2, order_no: 'ORD202606010002', user_id: 102, status: 'pending', pay_method: 'wechat', total_cents: 8500, paid_at: null, created_at: '2026-06-01T11:00:00Z', updated_at: '2026-06-01T11:00:00Z' },
   { id: 3, order_no: 'ORD202606020001', user_id: 101, status: 'paid', pay_method: 'alipay', total_cents: 20000, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', updated_at: '2026-06-02T14:30:00Z' },
-  { id: 4, order_no: 'ORD202606030001', user_id: 103, status: 'pending', pay_method: 'offline', total_cents: 6000, paid_at: null, created_at: '2026-06-03T08:00:00Z', updated_at: '2026-06-03T08:00:00Z' },
+  { id: 4, order_no: 'ORD202606030001', user_id: 103, status: 'pending', pay_method: 'alipay', total_cents: 6000, paid_at: null, created_at: '2026-06-03T08:00:00Z', updated_at: '2026-06-03T08:00:00Z' },
   { id: 5, order_no: 'ORD202606040001', user_id: 104, status: 'cancelled', pay_method: 'wechat', total_cents: 1000, paid_at: null, created_at: '2026-06-04T16:00:00Z', updated_at: '2026-06-04T17:00:00Z' },
 ]
 
@@ -51,7 +51,7 @@ const accountStore: Record<number, any> = {
   101: {
     account: { id: 1, user_id: 101, balance_cents: 15000, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-06-01T10:00:00Z' },
     ledger: [
-      { id: 1, user_id: 101, subject: 'balance', type: 'recharge', delta: 20000, balance_after: 20000, reason: '充值', order_id: 0, operator: 'user', created_at: '2026-05-01T09:00:00Z' },
+      { id: 1, user_id: 101, subject: 'balance', type: 'topup', delta: 20000, balance_after: 20000, reason: '充值', order_id: 0, operator: 'user', created_at: '2026-05-01T09:00:00Z' },
       { id: 2, user_id: 101, subject: 'balance', type: 'consume', delta: -3000, balance_after: 17000, reason: '订单 ORD202606010001', order_id: 1, operator: 'system', created_at: '2026-06-01T10:00:00Z' },
       { id: 3, user_id: 101, subject: 'balance', type: 'consume', delta: -2000, balance_after: 15000, reason: '订单 ORD202606020001', order_id: 3, operator: 'system', created_at: '2026-06-02T14:30:00Z' },
     ],
@@ -230,7 +230,7 @@ export default defineFakeRoute([
         id: accountStore[userId].ledger.length + 1,
         user_id: userId,
         subject: 'balance',
-        type: d.delta_cents >= 0 ? 'adjust_in' : 'adjust_out',
+        type: d.delta_cents >= 0 ? 'adjust_grant' : 'adjust_deduct',
         delta: d.delta_cents,
         balance_after: acct.balance_cents,
         reason: d.reason || '',
