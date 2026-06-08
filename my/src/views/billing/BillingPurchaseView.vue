@@ -226,7 +226,6 @@ const payAmountCents = computed(() => {
 })
 
 const paySummary = computed(() => {
-  const c = CYCLES.find(x => x.key === cycleKey.value)!
   if (payKind.value === 'instance')
     return t('billing.paySummaryInstance', { qty: qty.value, cycle: t(`billing.cycle_${cycleKey.value}`) })
   if (payKind.value === 'boot')
@@ -251,32 +250,35 @@ function openPay(kind: PayKind) {
 async function doCreateAndPay(
   items: Array<{ sku_code: string; cycle_months: number; quantity: number }>,
   method: PayMethod,
-) {
+): Promise<boolean> {
   submitting.value = true
   try {
     const createRes = await billingApi.createOrder({ items, pay_method: method })
     if (createRes.code !== 0) {
       toast.error(createRes.message || t('billing.orderFailed'))
-      return
+      return false
     }
     const orderDetail = createRes.data
     if (method === 'balance') {
       const payRes = await billingApi.payOrder(orderDetail.order.id)
       if (payRes.code !== 0) {
         toast.error(payRes.message || t('billing.payFailed'))
-        return
+        return false
       }
       toast.success(t('billing.orderPaidOk'))
       await loadOverview()
+      return true
     }
     else {
-      // wechat / alipay: Phase-1 stub
+      // wechat / alipay: Phase-1 stub — order created successfully
       toast.info(t('billing.payPending'))
+      return true
     }
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     toast.error(msg || t('billing.orderFailed'))
+    return false
   }
   finally {
     submitting.value = false
@@ -323,9 +325,8 @@ async function checkout() {
     }
   }
   if (!items.length) return
-  await doCreateAndPay(items, payMethod.value)
-  if (!submitting.value) {
-    // Clear cart on success
+  const ok = await doCreateAndPay(items, payMethod.value)
+  if (ok) {
     addedInstances.value = false
     addedBoot.value = false
     addedTime.value = false
