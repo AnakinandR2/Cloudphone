@@ -32,6 +32,7 @@ import {
   Tags,
   UserRound,
   Users,
+  Wallet,
 } from 'lucide-vue-next'
 import { computed } from 'vue'
 
@@ -70,6 +71,7 @@ const registry: Record<string, Component> = {
   Plug,
   ReceiptText,
   Tags,
+  Wallet,
 }
 
 const comp = computed(() => (props.name && registry[props.name]) || CircleDot)

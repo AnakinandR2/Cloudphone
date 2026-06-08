@@ -132,26 +132,32 @@ export const asyncRoutes: AppMainRoute[] = [
     ],
   },
   {
-    // 费用运营（SKU 定价 / 折扣设置 原型，暂无后端对接）
+    // 费用运营
     meta: { title: 'menu.billing', icon: 'CreditCard' },
     children: [
       {
         path: '/billing/pricing',
         name: 'billingPricing',
         component: () => import('@/views/billing/PricingView.vue'),
-        meta: { title: 'menu.billingPricing', icon: 'Tags' },
+        meta: { title: 'menu.billingPricing', icon: 'Tags', auth: 'billing:view' },
       },
       {
         path: '/billing/discounts',
         name: 'billingDiscounts',
         component: () => import('@/views/billing/DiscountsView.vue'),
-        meta: { title: 'menu.billingDiscounts', icon: 'Percent' },
+        meta: { title: 'menu.billingDiscounts', icon: 'Percent', auth: 'billing:view' },
       },
       {
         path: '/billing/orders',
         name: 'billingOrders',
         component: () => import('@/views/billing/OrdersView.vue'),
-        meta: { title: 'menu.billingOrders', icon: 'ReceiptText' },
+        meta: { title: 'menu.billingOrders', icon: 'ReceiptText', auth: 'billing:view' },
+      },
+      {
+        path: '/billing/accounts',
+        name: 'billingAccounts',
+        component: () => import('@/views/billing/AccountsView.vue'),
+        meta: { title: 'menu.billingAccounts', icon: 'Wallet', auth: 'billing:view' },
       },
     ],
   },
