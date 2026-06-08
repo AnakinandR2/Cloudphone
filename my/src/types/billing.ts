@@ -98,6 +98,7 @@ export interface EntitlementBatch {
   source: string
   source_ref: string
   created_at: string
+  updated_at: string
 }
 export interface EntitlementsResult { capacities: CapacitySnapshot, batches: EntitlementBatch[] }
 
