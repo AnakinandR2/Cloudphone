@@ -70,7 +70,7 @@ export const asyncRoutes: AppMainRoute[] = [
     ],
   },
   {
-    // 费用（购买 / 费用详情 / 订单日志 原型，暂无具体功能）
+    // 费用（购买 / 用量 / 订单 / 费用日志）
     meta: { title: 'menu.billing', icon: 'Wallet' },
     children: [
       {
@@ -90,6 +90,12 @@ export const asyncRoutes: AppMainRoute[] = [
         name: 'billingOrders',
         component: () => import('@/views/billing/BillingOrdersView.vue'),
         meta: { title: 'menu.billingOrders', icon: 'ReceiptText' },
+      },
+      {
+        path: '/billing/ledger',
+        name: 'billingLedger',
+        component: () => import('@/views/billing/BillingLedgerView.vue'),
+        meta: { title: 'menu.billingLedger', icon: 'ScrollText' },
       },
     ],
   },
