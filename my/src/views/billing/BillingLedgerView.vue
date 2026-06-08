@@ -59,8 +59,8 @@ watch(() => [filters.subject, filters.type], load)
 // ——— 单位感知格式化 ———
 function fmtDelta(entry: LedgerEntry): string {
   if (entry.subject === 'balance') {
-    const sign = entry.delta >= 0 ? '+' : ''
-    return `${sign}¥${fmtCents(entry.delta)}`
+    const sign = entry.delta >= 0 ? '+' : '-' // 负号置于 ¥ 之前（-¥5.00）
+    return `${sign}¥${fmtCents(Math.abs(entry.delta))}`
   }
   const unit = subjectUnit(entry.subject)
   const sign = entry.delta >= 0 ? '+' : ''
