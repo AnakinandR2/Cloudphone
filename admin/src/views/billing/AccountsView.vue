@@ -176,11 +176,11 @@ async function submitBalance() {
     return
   }
   const yuan = Number(balanceForm.yuan)
-  if (Number.isNaN(yuan)) {
+  const cents = Math.round(yuan * 100)
+  if (Number.isNaN(yuan) || cents === 0) {
     toast.error(t('billing.errInvalidAmount'))
     return
   }
-  const cents = Math.round(yuan * 100)
   balanceSubmitting.value = true
   try {
     await billingApi.adjustBalance(currentUserId.value, cents, balanceForm.reason.trim())
