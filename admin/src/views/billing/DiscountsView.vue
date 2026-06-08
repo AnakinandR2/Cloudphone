@@ -26,13 +26,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { fmtDiscountBps } from '@/utils/money'
 
 const { t } = useI18n()
@@ -259,7 +252,7 @@ async function removeTier(tier: DiscountTier) {
             </span>
           </template>
           <template #cell-actions="{ row }">
-            <Button variant="ghost" size="sm" @click="openEditTier(row)">
+            <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEditTier(row)">
               <Pencil class="size-4" />
             </Button>
             <Popconfirm :title="t('billing.deleteTierConfirm')" @confirm="removeTier(row)">

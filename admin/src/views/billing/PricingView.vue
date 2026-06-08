@@ -220,7 +220,7 @@ async function remove(s: Sku) {
           </Badge>
         </template>
         <template #cell-actions="{ row }">
-          <Button variant="ghost" size="sm" @click="openEdit(row)">
+          <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEdit(row)">
             <Pencil class="size-4" />
           </Button>
           <Popconfirm :title="t('billing.deleteConfirm', { name: row.name })" @confirm="remove(row)">
