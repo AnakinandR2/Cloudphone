@@ -159,6 +159,12 @@ export const asyncRoutes: AppMainRoute[] = [
         component: () => import('@/views/billing/AccountsView.vue'),
         meta: { title: 'menu.billingAccounts', icon: 'Wallet', auth: 'billing:view' },
       },
+      {
+        path: '/billing/trials',
+        name: 'billingTrials',
+        component: () => import('@/views/billing/TrialsView.vue'),
+        meta: { title: 'menu.billingTrials', icon: 'Gift', auth: 'billing:view' },
+      },
     ],
   },
   {
