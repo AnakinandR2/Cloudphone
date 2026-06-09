@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5666,
-      strictPort: true, // 端口被占直接 fail，避免 vite 换号导致 nginx 转到老进程
+      strictPort: false, 
       host: true,
       // HMR 客户端路径跟 base 对齐到 /my/，让 nginx 的 location /my 走 WS Upgrade。
       hmr: {
