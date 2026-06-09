@@ -185,118 +185,120 @@ async function remove(s: Sku) {
 </script>
 
 <template>
-  <Card>
-    <CardHeader class="flex-row items-start justify-between gap-3 space-y-0">
-      <div class="space-y-1.5">
-        <CardTitle>{{ t('billing.pricingTitle') }}</CardTitle>
-        <CardDescription>{{ t('billing.pricingDesc') }}</CardDescription>
-      </div>
-      <Button v-auth="'billing:manage'" size="sm" @click="openCreate">
-        <Plus class="size-4" /> {{ t('billing.addSku') }}
-      </Button>
-    </CardHeader>
-    <CardContent>
-      <DataTable
-        v-model:search-value="q"
-        :columns="columns"
-        :data="skus"
-        :loading="loading"
-        :search-placeholder="t('billing.searchSku')"
-      >
-        <template #cell-code="{ row }">
-          <span class="font-mono text-xs">{{ row.code }}</span>
-        </template>
-        <template #cell-category="{ row }">
-          <Badge :variant="catVariant(row.category)">
-            {{ catLabel(row.category) }}
-          </Badge>
-        </template>
-        <template #cell-unit_price_cents="{ row }">
-          <span class="tabular-nums">¥{{ fmtCents(row.unit_price_cents) }}</span>
-        </template>
-        <template #cell-listed="{ row }">
-          <Badge :variant="row.listed ? 'default' : 'outline'">
-            {{ row.listed ? t('billing.statusActive') : t('billing.statusInactive') }}
-          </Badge>
-        </template>
-        <template #cell-actions="{ row }">
-          <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEdit(row)">
-            <Pencil class="size-4" />
-          </Button>
-          <Popconfirm :title="t('billing.deleteConfirm', { name: row.name })" @confirm="remove(row)">
-            <Button v-auth="'billing:manage'" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
-              <Trash2 class="size-4" />
+  <div class="flex flex-col gap-6">
+    <Card>
+      <CardHeader class="flex-row items-start justify-between gap-3 space-y-0">
+        <div class="space-y-1.5">
+          <CardTitle>{{ t('billing.pricingTitle') }}</CardTitle>
+          <CardDescription>{{ t('billing.pricingDesc') }}</CardDescription>
+        </div>
+        <Button v-auth="'billing:manage'" size="sm" @click="openCreate">
+          <Plus class="size-4" /> {{ t('billing.addSku') }}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          v-model:search-value="q"
+          :columns="columns"
+          :data="skus"
+          :loading="loading"
+          :search-placeholder="t('billing.searchSku')"
+        >
+          <template #cell-code="{ row }">
+            <span class="font-mono text-xs">{{ row.code }}</span>
+          </template>
+          <template #cell-category="{ row }">
+            <Badge :variant="catVariant(row.category)">
+              {{ catLabel(row.category) }}
+            </Badge>
+          </template>
+          <template #cell-unit_price_cents="{ row }">
+            <span class="tabular-nums">¥{{ fmtCents(row.unit_price_cents) }}</span>
+          </template>
+          <template #cell-listed="{ row }">
+            <Badge :variant="row.listed ? 'default' : 'outline'">
+              {{ row.listed ? t('billing.statusActive') : t('billing.statusInactive') }}
+            </Badge>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEdit(row)">
+              <Pencil class="size-4" />
             </Button>
-          </Popconfirm>
-        </template>
-      </DataTable>
-    </CardContent>
-  </Card>
+            <Popconfirm :title="t('billing.deleteConfirm', { name: row.name })" @confirm="remove(row)">
+              <Button v-auth="'billing:manage'" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                <Trash2 class="size-4" />
+              </Button>
+            </Popconfirm>
+          </template>
+        </DataTable>
+      </CardContent>
+    </Card>
 
-  <!-- 新增 / 编辑 SKU Dialog -->
-  <Dialog v-model:open="dialogOpen">
-    <DialogContent class="sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>{{ editingId === null ? t('billing.createTitle') : t('billing.editTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="flex flex-col gap-4 py-1">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('billing.fCode') }}</Label>
-            <Input v-model="form.code" :placeholder="t('billing.fCodePlaceholder')" :disabled="editingId !== null" class="font-mono" />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('billing.fCategory') }}</Label>
-            <Select
-              :model-value="form.category"
-              :disabled="editingId !== null"
-              @update:model-value="(v) => { form.category = String(v) }"
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="cat in CATEGORIES" :key="cat" :value="cat">
-                  {{ catLabel(cat) }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('billing.fName') }}</Label>
-          <Input v-model="form.name" :placeholder="t('billing.fNamePlaceholder')" />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('billing.fDescription') }}</Label>
-          <Input v-model="form.description" :placeholder="t('billing.fDescriptionPlaceholder')" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('billing.fPrice') }}</Label>
-            <div class="flex items-center gap-2">
-              <span class="text-muted-foreground text-sm">¥</span>
-              <Input v-model.number="form.unit_price_yuan" type="number" min="0" step="0.01" class="tabular-nums" />
+    <!-- 新增 / 编辑 SKU Dialog -->
+    <Dialog v-model:open="dialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ editingId === null ? t('billing.createTitle') : t('billing.editTitle') }}</DialogTitle>
+        </DialogHeader>
+        <div class="flex flex-col gap-4 py-1">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('billing.fCode') }}</Label>
+              <Input v-model="form.code" :placeholder="t('billing.fCodePlaceholder')" :disabled="editingId !== null" class="font-mono" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('billing.fCategory') }}</Label>
+              <Select
+                :model-value="form.category"
+                :disabled="editingId !== null"
+                @update:model-value="(v) => { form.category = String(v) }"
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="cat in CATEGORIES" :key="cat" :value="cat">
+                    {{ catLabel(cat) }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div class="flex flex-col gap-1.5">
-            <Label>{{ t('billing.fUnit') }}</Label>
-            <Input v-model="form.unit" :placeholder="t('billing.fUnitPlaceholder')" />
+            <Label>{{ t('billing.fName') }}</Label>
+            <Input v-model="form.name" :placeholder="t('billing.fNamePlaceholder')" />
           </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <Label>{{ t('billing.fSort') }}</Label>
-            <Input v-model.number="form.sort" type="number" min="0" />
+            <Label>{{ t('billing.fDescription') }}</Label>
+            <Input v-model="form.description" :placeholder="t('billing.fDescriptionPlaceholder')" />
           </div>
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label class="cursor-pointer">{{ t('billing.fStatus') }}</Label>
-            <Switch v-model="form.listed" />
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('billing.fPrice') }}</Label>
+              <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-sm">¥</span>
+                <Input v-model.number="form.unit_price_yuan" type="number" min="0" step="0.01" class="tabular-nums" />
+              </div>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('billing.fUnit') }}</Label>
+              <Input v-model="form.unit" :placeholder="t('billing.fUnitPlaceholder')" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('billing.fSort') }}</Label>
+              <Input v-model.number="form.sort" type="number" min="0" />
+            </div>
+            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label class="cursor-pointer">{{ t('billing.fStatus') }}</Label>
+              <Switch v-model="form.listed" />
+            </div>
           </div>
         </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
-        <Button :disabled="saving" @click="save">{{ t('crud.confirm') }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <DialogFooter>
+          <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
+          <Button :disabled="saving" @click="save">{{ t('crud.confirm') }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
 </template>

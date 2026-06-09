@@ -268,39 +268,39 @@ async function removeTier(tier: DiscountTier) {
     <div v-else-if="!skusLoading" class="text-muted-foreground py-8 text-center text-sm">
       {{ t('billing.selectSkuHint') }}
     </div>
-  </div>
 
-  <!-- 新增 / 编辑 阶梯 Dialog -->
-  <Dialog v-model:open="dialogOpen">
-    <DialogContent class="sm:max-w-sm">
-      <DialogHeader>
-        <DialogTitle>{{ editingTierId === null ? t('billing.createTierTitle') : t('billing.editTierTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="flex flex-col gap-4 py-1">
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('billing.fCycleMonths') }}</Label>
-          <Input v-model.number="form.cycle_months" type="number" min="0" step="1" />
-          <p class="text-muted-foreground text-xs">{{ t('billing.fCycleMonthsHint') }}</p>
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('billing.fMinQty') }}</Label>
-          <Input v-model.number="form.min_quantity" type="number" min="1" step="1" />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('billing.fDiscountZhe') }}</Label>
-          <div class="flex items-center gap-2">
-            <Input v-model.number="form.discount_zhe" type="number" min="0.1" max="10" step="0.1" class="tabular-nums" />
-            <span class="text-muted-foreground text-sm shrink-0">{{ t('billing.discountUnit') }}</span>
+    <!-- 新增 / 编辑 阶梯 Dialog -->
+    <Dialog v-model:open="dialogOpen">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ editingTierId === null ? t('billing.createTierTitle') : t('billing.editTierTitle') }}</DialogTitle>
+        </DialogHeader>
+        <div class="flex flex-col gap-4 py-1">
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('billing.fCycleMonths') }}</Label>
+            <Input v-model.number="form.cycle_months" type="number" min="0" step="1" />
+            <p class="text-muted-foreground text-xs">{{ t('billing.fCycleMonthsHint') }}</p>
           </div>
-          <p class="text-muted-foreground text-xs">
-            {{ t('billing.fDiscountZheHint', { bps: Math.round(form.discount_zhe * 1000) }) }}
-          </p>
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('billing.fMinQty') }}</Label>
+            <Input v-model.number="form.min_quantity" type="number" min="1" step="1" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('billing.fDiscountZhe') }}</Label>
+            <div class="flex items-center gap-2">
+              <Input v-model.number="form.discount_zhe" type="number" min="0.1" max="10" step="0.1" class="tabular-nums" />
+              <span class="text-muted-foreground text-sm shrink-0">{{ t('billing.discountUnit') }}</span>
+            </div>
+            <p class="text-muted-foreground text-xs">
+              {{ t('billing.fDiscountZheHint', { bps: Math.round(form.discount_zhe * 1000) }) }}
+            </p>
+          </div>
         </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
-        <Button :disabled="saving" @click="saveTier">{{ t('crud.confirm') }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <DialogFooter>
+          <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
+          <Button :disabled="saving" @click="saveTier">{{ t('crud.confirm') }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
 </template>

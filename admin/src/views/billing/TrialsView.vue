@@ -259,203 +259,205 @@ async function doGrantEligibility(p: TrialPolicy) {
 </script>
 
 <template>
-  <Card>
-    <CardHeader class="flex-row items-start justify-between gap-3 space-y-0">
-      <div class="space-y-1.5">
-        <CardTitle>{{ t('trial.title') }}</CardTitle>
-        <CardDescription>{{ t('trial.desc') }}</CardDescription>
-      </div>
-      <Button v-auth="'billing:manage'" size="sm" @click="openCreate">
-        <Plus class="size-4" /> {{ t('trial.add') }}
-      </Button>
-    </CardHeader>
-    <CardContent>
-      <DataTable
-        v-model:search-value="q"
-        :columns="columns"
-        :data="policies"
-        :loading="loading"
-        :search-placeholder="t('trial.searchPlaceholder')"
-        expandable
-        @update:expanded="(row: TrialPolicy) => loadGrants(row)"
-      >
-        <template #cell-code="{ row }">
-          <span class="font-mono text-xs">{{ row.code }}</span>
-        </template>
-        <template #cell-enabled="{ row }">
-          <Badge :variant="row.enabled ? 'default' : 'outline'">
-            {{ row.enabled ? t('table.enabled') : t('table.disabled') }}
-          </Badge>
-        </template>
-        <template #cell-grant="{ row }">
-          <span class="text-sm">{{ grantDesc(row) }}</span>
-        </template>
-        <template #cell-allow_new_user="{ row }">
-          <Badge :variant="row.allow_new_user ? 'secondary' : 'outline'">
-            {{ row.allow_new_user ? t('trial.yes') : t('trial.no') }}
-          </Badge>
-        </template>
-        <template #cell-invite_code="{ row }">
-          <span v-if="row.invite_code" class="font-mono text-xs">{{ row.invite_code }}</span>
-          <span v-else class="text-muted-foreground">—</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEdit(row)">
-            <Pencil class="size-4" />
-          </Button>
-          <Popconfirm :title="t('billing.deleteConfirm', { name: row.name })" @confirm="remove(row)">
-            <Button v-auth="'billing:manage'" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
-              <Trash2 class="size-4" />
+  <div class="flex flex-col gap-6">
+    <Card>
+      <CardHeader class="flex-row items-start justify-between gap-3 space-y-0">
+        <div class="space-y-1.5">
+          <CardTitle>{{ t('trial.title') }}</CardTitle>
+          <CardDescription>{{ t('trial.desc') }}</CardDescription>
+        </div>
+        <Button v-auth="'billing:manage'" size="sm" @click="openCreate">
+          <Plus class="size-4" /> {{ t('trial.add') }}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          v-model:search-value="q"
+          :columns="columns"
+          :data="policies"
+          :loading="loading"
+          :search-placeholder="t('trial.searchPlaceholder')"
+          expandable
+          @update:expanded="(row: TrialPolicy) => loadGrants(row)"
+        >
+          <template #cell-code="{ row }">
+            <span class="font-mono text-xs">{{ row.code }}</span>
+          </template>
+          <template #cell-enabled="{ row }">
+            <Badge :variant="row.enabled ? 'default' : 'outline'">
+              {{ row.enabled ? t('table.enabled') : t('table.disabled') }}
+            </Badge>
+          </template>
+          <template #cell-grant="{ row }">
+            <span class="text-sm">{{ grantDesc(row) }}</span>
+          </template>
+          <template #cell-allow_new_user="{ row }">
+            <Badge :variant="row.allow_new_user ? 'secondary' : 'outline'">
+              {{ row.allow_new_user ? t('trial.yes') : t('trial.no') }}
+            </Badge>
+          </template>
+          <template #cell-invite_code="{ row }">
+            <span v-if="row.invite_code" class="font-mono text-xs">{{ row.invite_code }}</span>
+            <span v-else class="text-muted-foreground">—</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button v-auth="'billing:manage'" variant="ghost" size="sm" @click="openEdit(row)">
+              <Pencil class="size-4" />
             </Button>
-          </Popconfirm>
-        </template>
+            <Popconfirm :title="t('billing.deleteConfirm', { name: row.name })" @confirm="remove(row)">
+              <Button v-auth="'billing:manage'" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                <Trash2 class="size-4" />
+              </Button>
+            </Popconfirm>
+          </template>
 
-        <!-- 展开行 -->
-        <template #expanded="{ row }">
-          <div class="space-y-4 p-4">
-            <!-- 授予资格 -->
-            <div class="space-y-2">
-              <p class="text-sm font-medium">{{ t('trial.grantEligibilityTitle') }}</p>
-              <div class="flex items-center gap-2">
-                <Input
-                  v-model="grantUserIds[row.id]"
-                  type="number"
-                  class="h-8 w-36"
-                  :placeholder="t('billing.inputUserId')"
-                  @keyup.enter="doGrantEligibility(row)"
-                />
-                <Button
-                  v-auth="'billing:manage'"
-                  size="sm"
-                  :disabled="granting[row.id]"
-                  @click="doGrantEligibility(row)"
-                >
-                  {{ granting[row.id] ? t('common.loading') : t('trial.grantBtn') }}
-                </Button>
-              </div>
-            </div>
-
-            <!-- 发放记录 -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                <p class="text-sm font-medium">{{ t('trial.grantsTitle') }}</p>
-                <Button variant="ghost" size="sm" class="h-7 text-xs" :disabled="grantsLoading[row.id]" @click="loadGrants(row)">
-                  {{ t('trial.grantsRefresh') }}
-                </Button>
-              </div>
-              <template v-if="grantsLoading[row.id]">
-                <p class="text-muted-foreground text-xs">{{ t('common.loading') }}</p>
-              </template>
-              <template v-else-if="grants[row.id]?.length">
-                <div class="overflow-auto rounded-md border">
-                  <table class="w-full text-xs">
-                    <thead>
-                      <tr class="bg-muted/40 border-b">
-                        <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantUserId') }}</th>
-                        <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantSubject') }}</th>
-                        <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantQty') }}</th>
-                        <th class="px-3 py-2 text-left font-medium">{{ t('table.createdAt') }}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="g in grants[row.id]" :key="g.id" class="border-b last:border-0">
-                        <td class="px-3 py-1.5 tabular-nums">{{ g.user_id }}</td>
-                        <td class="px-3 py-1.5">
-                          <Badge variant="outline" class="text-xs">{{ subjectLabel(g.subject) }}</Badge>
-                        </td>
-                        <td class="px-3 py-1.5 tabular-nums">{{ g.quantity }} {{ subjectUnit(g.subject) }}</td>
-                        <td class="text-muted-foreground px-3 py-1.5 tabular-nums">{{ formatDateTime(g.created_at) }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+          <!-- 展开行 -->
+          <template #expanded="{ row }">
+            <div class="space-y-4 p-4">
+              <!-- 授予资格 -->
+              <div class="space-y-2">
+                <p class="text-sm font-medium">{{ t('trial.grantEligibilityTitle') }}</p>
+                <div class="flex items-center gap-2">
+                  <Input
+                    v-model="grantUserIds[row.id]"
+                    type="number"
+                    class="h-8 w-36"
+                    :placeholder="t('billing.inputUserId')"
+                    @keyup.enter="doGrantEligibility(row)"
+                  />
+                  <Button
+                    v-auth="'billing:manage'"
+                    size="sm"
+                    :disabled="granting[row.id]"
+                    @click="doGrantEligibility(row)"
+                  >
+                    {{ granting[row.id] ? t('common.loading') : t('trial.grantBtn') }}
+                  </Button>
                 </div>
-              </template>
-              <p v-else class="text-muted-foreground text-xs">
-                {{ t('trial.grantsEmpty') }}
-              </p>
+              </div>
+
+              <!-- 发放记录 -->
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <p class="text-sm font-medium">{{ t('trial.grantsTitle') }}</p>
+                  <Button variant="ghost" size="sm" class="h-7 text-xs" :disabled="grantsLoading[row.id]" @click="loadGrants(row)">
+                    {{ t('trial.grantsRefresh') }}
+                  </Button>
+                </div>
+                <template v-if="grantsLoading[row.id]">
+                  <p class="text-muted-foreground text-xs">{{ t('common.loading') }}</p>
+                </template>
+                <template v-else-if="grants[row.id]?.length">
+                  <div class="overflow-auto rounded-md border">
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="bg-muted/40 border-b">
+                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantUserId') }}</th>
+                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantSubject') }}</th>
+                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantQty') }}</th>
+                          <th class="px-3 py-2 text-left font-medium">{{ t('table.createdAt') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="g in grants[row.id]" :key="g.id" class="border-b last:border-0">
+                          <td class="px-3 py-1.5 tabular-nums">{{ g.user_id }}</td>
+                          <td class="px-3 py-1.5">
+                            <Badge variant="outline" class="text-xs">{{ subjectLabel(g.subject) }}</Badge>
+                          </td>
+                          <td class="px-3 py-1.5 tabular-nums">{{ g.quantity }} {{ subjectUnit(g.subject) }}</td>
+                          <td class="text-muted-foreground px-3 py-1.5 tabular-nums">{{ formatDateTime(g.created_at) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <p v-else class="text-muted-foreground text-xs">
+                  {{ t('trial.grantsEmpty') }}
+                </p>
+              </div>
+            </div>
+          </template>
+        </DataTable>
+      </CardContent>
+    </Card>
+
+    <!-- 新增 / 编辑 Dialog -->
+    <Dialog v-model:open="dialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ editingId === null ? t('trial.createTitle') : t('trial.editTitle') }}</DialogTitle>
+        </DialogHeader>
+        <div class="flex flex-col gap-4 py-1">
+          <!-- 代码（新建时填写，编辑时只读） -->
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('trial.fCode') }}<span class="text-destructive ml-1">*</span></Label>
+            <Input
+              v-model="form.code"
+              class="font-mono"
+              :placeholder="t('trial.fCodePlaceholder')"
+              :disabled="editingId !== null"
+            />
+          </div>
+          <!-- 名称 -->
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('trial.fName') }}<span class="text-destructive ml-1">*</span></Label>
+            <Input v-model="form.name" :placeholder="t('trial.fNamePlaceholder')" />
+          </div>
+          <!-- 授予科目 + 授予数量 -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('trial.fGrantSubject') }}</Label>
+              <Select
+                :model-value="form.grant_subject"
+                @update:model-value="(v) => { form.grant_subject = String(v) }"
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="s in SUBJECTS" :key="s" :value="s">
+                    {{ subjectLabel(s) }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('trial.fGrantQty') }}</Label>
+              <Input v-model.number="form.grant_quantity" type="number" min="1" step="1" />
             </div>
           </div>
-        </template>
-      </DataTable>
-    </CardContent>
-  </Card>
-
-  <!-- 新增 / 编辑 Dialog -->
-  <Dialog v-model:open="dialogOpen">
-    <DialogContent class="sm:max-w-lg">
-      <DialogHeader>
-        <DialogTitle>{{ editingId === null ? t('trial.createTitle') : t('trial.editTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="flex flex-col gap-4 py-1">
-        <!-- 代码（新建时填写，编辑时只读） -->
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('trial.fCode') }}<span class="text-destructive ml-1">*</span></Label>
-          <Input
-            v-model="form.code"
-            class="font-mono"
-            :placeholder="t('trial.fCodePlaceholder')"
-            :disabled="editingId !== null"
-          />
-        </div>
-        <!-- 名称 -->
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('trial.fName') }}<span class="text-destructive ml-1">*</span></Label>
-          <Input v-model="form.name" :placeholder="t('trial.fNamePlaceholder')" />
-        </div>
-        <!-- 授予科目 + 授予数量 -->
-        <div class="grid grid-cols-2 gap-3">
+          <!-- 有效天数 + 每用户限量 -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('trial.fGrantExpireDays') }}</Label>
+              <Input v-model.number="form.grant_expire_days" type="number" min="0" step="1" :placeholder="t('trial.fGrantExpireDaysHint')" />
+              <p class="text-muted-foreground text-xs">{{ t('trial.fGrantExpireDaysHint') }}</p>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <Label>{{ t('trial.fPerUserLimit') }}</Label>
+              <Input v-model.number="form.per_user_limit" type="number" min="1" step="1" />
+            </div>
+          </div>
+          <!-- 邀请码 -->
           <div class="flex flex-col gap-1.5">
-            <Label>{{ t('trial.fGrantSubject') }}</Label>
-            <Select
-              :model-value="form.grant_subject"
-              @update:model-value="(v) => { form.grant_subject = String(v) }"
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="s in SUBJECTS" :key="s" :value="s">
-                  {{ subjectLabel(s) }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Label>{{ t('trial.fInviteCode') }}</Label>
+            <Input v-model="form.invite_code" class="font-mono" :placeholder="t('trial.fInviteCodePlaceholder')" />
           </div>
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('trial.fGrantQty') }}</Label>
-            <Input v-model.number="form.grant_quantity" type="number" min="1" step="1" />
+          <!-- 允许新用户 + 启用 -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label class="cursor-pointer">{{ t('trial.fAllowNewUser') }}</Label>
+              <Switch v-model="form.allow_new_user" />
+            </div>
+            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+              <Label class="cursor-pointer">{{ t('trial.fEnabled') }}</Label>
+              <Switch v-model="form.enabled" />
+            </div>
           </div>
         </div>
-        <!-- 有效天数 + 每用户限量 -->
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('trial.fGrantExpireDays') }}</Label>
-            <Input v-model.number="form.grant_expire_days" type="number" min="0" step="1" :placeholder="t('trial.fGrantExpireDaysHint')" />
-            <p class="text-muted-foreground text-xs">{{ t('trial.fGrantExpireDaysHint') }}</p>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <Label>{{ t('trial.fPerUserLimit') }}</Label>
-            <Input v-model.number="form.per_user_limit" type="number" min="1" step="1" />
-          </div>
-        </div>
-        <!-- 邀请码 -->
-        <div class="flex flex-col gap-1.5">
-          <Label>{{ t('trial.fInviteCode') }}</Label>
-          <Input v-model="form.invite_code" class="font-mono" :placeholder="t('trial.fInviteCodePlaceholder')" />
-        </div>
-        <!-- 允许新用户 + 启用 -->
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label class="cursor-pointer">{{ t('trial.fAllowNewUser') }}</Label>
-            <Switch v-model="form.allow_new_user" />
-          </div>
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label class="cursor-pointer">{{ t('trial.fEnabled') }}</Label>
-            <Switch v-model="form.enabled" />
-          </div>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
-        <Button :disabled="saving" @click="save">{{ t('crud.confirm') }}</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <DialogFooter>
+          <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
+          <Button :disabled="saving" @click="save">{{ t('crud.confirm') }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
 </template>

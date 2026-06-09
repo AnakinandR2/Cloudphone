@@ -236,196 +236,198 @@ function subjectLabel(subject: string): string {
 </script>
 
 <template>
-  <Card>
-    <CardHeader>
-      <CardTitle>{{ t('billing.accountsTitle') }}</CardTitle>
-      <CardDescription>{{ t('billing.accountsDesc') }}</CardDescription>
-    </CardHeader>
-    <CardContent class="space-y-6">
-      <!-- 查询区 -->
-      <div class="flex items-center gap-2">
-        <Input
-          v-model="userIdInput"
-          type="number"
-          class="h-9 w-40"
-          :placeholder="t('billing.inputUserId')"
-          @keyup.enter="queryAccount"
-        />
-        <Button size="sm" :disabled="loading" @click="queryAccount">
-          {{ t('common.search') }}
-        </Button>
-      </div>
-
-      <!-- 空态提示 -->
-      <div v-if="!accountView && !loading" class="text-muted-foreground py-8 text-center text-sm">
-        {{ t('billing.accountQueryHint') }}
-      </div>
-
-      <!-- 账户概览 -->
-      <template v-if="accountView">
-        <!-- 概览卡片 -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <!-- 余额 -->
-          <Card class="bg-muted/30">
-            <CardContent class="pt-4">
-              <p class="text-muted-foreground text-xs">{{ t('billing.accountBalance') }}</p>
-              <p class="mt-1 text-2xl font-semibold tabular-nums">¥{{ fmtCents(accountView.account.balance_cents) }}</p>
-            </CardContent>
-          </Card>
-          <!-- instance_seat -->
-          <Card class="bg-muted/30">
-            <CardContent class="pt-4">
-              <p class="text-muted-foreground text-xs">{{ t('billing.subject_instance_seat') }}</p>
-              <p class="mt-1 text-2xl font-semibold tabular-nums">
-                {{ accountView.capacities.instance_seat }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitSeat') }}</span>
-              </p>
-            </CardContent>
-          </Card>
-          <!-- boot_seat -->
-          <Card class="bg-muted/30">
-            <CardContent class="pt-4">
-              <p class="text-muted-foreground text-xs">{{ t('billing.subject_boot_seat') }}</p>
-              <p class="mt-1 text-2xl font-semibold tabular-nums">
-                {{ accountView.capacities.boot_seat }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitSeat') }}</span>
-              </p>
-            </CardContent>
-          </Card>
-          <!-- runtime_minute -->
-          <Card class="bg-muted/30">
-            <CardContent class="pt-4">
-              <p class="text-muted-foreground text-xs">{{ t('billing.subject_runtime_minute') }}</p>
-              <p class="mt-1 text-2xl font-semibold tabular-nums">
-                {{ accountView.capacities.runtime_minute }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitMinute') }}</span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="flex gap-2">
-          <Button v-auth="'billing:manage'" variant="outline" size="sm" @click="openBalanceDialog">
-            {{ t('billing.adjustBalance') }}
-          </Button>
-          <Button v-auth="'billing:manage'" variant="outline" size="sm" @click="openResourceDialog">
-            {{ t('billing.adjustResource') }}
+  <div class="flex flex-col gap-6">
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('billing.accountsTitle') }}</CardTitle>
+        <CardDescription>{{ t('billing.accountsDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-6">
+        <!-- 查询区 -->
+        <div class="flex items-center gap-2">
+          <Input
+            v-model="userIdInput"
+            type="number"
+            class="h-9 w-40"
+            :placeholder="t('billing.inputUserId')"
+            @keyup.enter="queryAccount"
+          />
+          <Button size="sm" :disabled="loading" @click="queryAccount">
+            {{ t('common.search') }}
           </Button>
         </div>
 
-        <!-- 流水表 -->
-        <div>
-          <p class="text-muted-foreground mb-2 text-xs">
-            {{ t('billing.ledgerHint', { total: accountView.ledger_total }) }}
-          </p>
-          <DataTable
-            :columns="ledgerColumns"
-            :data="accountView.ledger"
-            :loading="loading"
-          >
-            <template #cell-created_at="{ row }">
-              <span class="tabular-nums text-muted-foreground text-xs">{{ formatDateTime(row.created_at) }}</span>
-            </template>
-            <template #cell-subject="{ row }">
-              <Badge variant="outline" class="text-xs">{{ subjectLabel(row.subject) }}</Badge>
-            </template>
-            <template #cell-type="{ row }">
-              <span class="text-muted-foreground text-xs">{{ t(`billing.ledgerType_${row.type}`) }}</span>
-            </template>
-            <template #cell-delta="{ row }">
-              <span :class="deltaClass(row.delta)">{{ fmtDelta(row) }}</span>
-            </template>
-            <template #cell-balance_after="{ row }">
-              <span class="tabular-nums text-xs">{{ fmtBalanceAfter(row) }}</span>
-            </template>
-            <template #cell-reason="{ row }">
-              <span class="text-muted-foreground text-xs">{{ row.reason || '-' }}</span>
-            </template>
-            <template #cell-operator="{ row }">
-              <span class="text-muted-foreground text-xs">{{ row.operator || '-' }}</span>
-            </template>
-          </DataTable>
+        <!-- 空态提示 -->
+        <div v-if="!accountView && !loading" class="text-muted-foreground py-8 text-center text-sm">
+          {{ t('billing.accountQueryHint') }}
         </div>
-      </template>
-    </CardContent>
-  </Card>
 
-  <!-- 余额调整 Dialog -->
-  <Dialog v-model:open="balanceDialog">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{{ t('billing.adjustBalanceTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="space-y-4 py-2">
-        <div class="space-y-1.5">
-          <Label>{{ t('billing.fAdjustAmount') }}</Label>
-          <Input
-            v-model="balanceForm.yuan"
-            type="number"
-            step="0.01"
-            :placeholder="t('billing.fAdjustAmountPlaceholder')"
-          />
-          <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustAmountHint') }}</p>
-        </div>
-        <div class="space-y-1.5">
-          <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
-          <Input
-            v-model="balanceForm.reason"
-            :placeholder="t('billing.fAdjustReasonPlaceholder')"
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="balanceDialog = false">{{ t('crud.cancel') }}</Button>
-        <Button :disabled="balanceSubmitting" @click="submitBalance">
-          {{ balanceSubmitting ? t('common.loading') : t('crud.confirm') }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <!-- 账户概览 -->
+        <template v-if="accountView">
+          <!-- 概览卡片 -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <!-- 余额 -->
+            <Card class="bg-muted/30">
+              <CardContent class="pt-4">
+                <p class="text-muted-foreground text-xs">{{ t('billing.accountBalance') }}</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">¥{{ fmtCents(accountView.account.balance_cents) }}</p>
+              </CardContent>
+            </Card>
+            <!-- instance_seat -->
+            <Card class="bg-muted/30">
+              <CardContent class="pt-4">
+                <p class="text-muted-foreground text-xs">{{ t('billing.subject_instance_seat') }}</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">
+                  {{ accountView.capacities.instance_seat }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitSeat') }}</span>
+                </p>
+              </CardContent>
+            </Card>
+            <!-- boot_seat -->
+            <Card class="bg-muted/30">
+              <CardContent class="pt-4">
+                <p class="text-muted-foreground text-xs">{{ t('billing.subject_boot_seat') }}</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">
+                  {{ accountView.capacities.boot_seat }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitSeat') }}</span>
+                </p>
+              </CardContent>
+            </Card>
+            <!-- runtime_minute -->
+            <Card class="bg-muted/30">
+              <CardContent class="pt-4">
+                <p class="text-muted-foreground text-xs">{{ t('billing.subject_runtime_minute') }}</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">
+                  {{ accountView.capacities.runtime_minute }} <span class="text-muted-foreground text-sm font-normal">{{ t('billing.unitMinute') }}</span>
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-  <!-- 资源调整 Dialog -->
-  <Dialog v-model:open="resourceDialog">
-    <DialogContent class="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{{ t('billing.adjustResourceTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="space-y-4 py-2">
-        <div class="space-y-1.5">
-          <Label>{{ t('billing.fAdjustSubject') }}</Label>
-          <Select v-model="resourceForm.subject">
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="instance_seat">{{ t('billing.subject_instance_seat') }}</SelectItem>
-              <SelectItem value="boot_seat">{{ t('billing.subject_boot_seat') }}</SelectItem>
-              <SelectItem value="runtime_minute">{{ t('billing.subject_runtime_minute') }}</SelectItem>
-            </SelectContent>
-          </Select>
+          <!-- 操作按钮 -->
+          <div class="flex gap-2">
+            <Button v-auth="'billing:manage'" variant="outline" size="sm" @click="openBalanceDialog">
+              {{ t('billing.adjustBalance') }}
+            </Button>
+            <Button v-auth="'billing:manage'" variant="outline" size="sm" @click="openResourceDialog">
+              {{ t('billing.adjustResource') }}
+            </Button>
+          </div>
+
+          <!-- 流水表 -->
+          <div>
+            <p class="text-muted-foreground mb-2 text-xs">
+              {{ t('billing.ledgerHint', { total: accountView.ledger_total }) }}
+            </p>
+            <DataTable
+              :columns="ledgerColumns"
+              :data="accountView.ledger"
+              :loading="loading"
+            >
+              <template #cell-created_at="{ row }">
+                <span class="tabular-nums text-muted-foreground text-xs">{{ formatDateTime(row.created_at) }}</span>
+              </template>
+              <template #cell-subject="{ row }">
+                <Badge variant="outline" class="text-xs">{{ subjectLabel(row.subject) }}</Badge>
+              </template>
+              <template #cell-type="{ row }">
+                <span class="text-muted-foreground text-xs">{{ t(`billing.ledgerType_${row.type}`) }}</span>
+              </template>
+              <template #cell-delta="{ row }">
+                <span :class="deltaClass(row.delta)">{{ fmtDelta(row) }}</span>
+              </template>
+              <template #cell-balance_after="{ row }">
+                <span class="tabular-nums text-xs">{{ fmtBalanceAfter(row) }}</span>
+              </template>
+              <template #cell-reason="{ row }">
+                <span class="text-muted-foreground text-xs">{{ row.reason || '-' }}</span>
+              </template>
+              <template #cell-operator="{ row }">
+                <span class="text-muted-foreground text-xs">{{ row.operator || '-' }}</span>
+              </template>
+            </DataTable>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
+
+    <!-- 余额调整 Dialog -->
+    <Dialog v-model:open="balanceDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ t('billing.adjustBalanceTitle') }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4 py-2">
+          <div class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustAmount') }}</Label>
+            <Input
+              v-model="balanceForm.yuan"
+              type="number"
+              step="0.01"
+              :placeholder="t('billing.fAdjustAmountPlaceholder')"
+            />
+            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustAmountHint') }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
+            <Input
+              v-model="balanceForm.reason"
+              :placeholder="t('billing.fAdjustReasonPlaceholder')"
+            />
+          </div>
         </div>
-        <div class="space-y-1.5">
-          <Label>{{ t('billing.fAdjustDelta') }}</Label>
-          <Input
-            v-model="resourceForm.delta"
-            type="number"
-            step="1"
-            :placeholder="t('billing.fAdjustDeltaPlaceholder')"
-          />
-          <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustDeltaHint') }}</p>
+        <DialogFooter>
+          <Button variant="outline" @click="balanceDialog = false">{{ t('crud.cancel') }}</Button>
+          <Button :disabled="balanceSubmitting" @click="submitBalance">
+            {{ balanceSubmitting ? t('common.loading') : t('crud.confirm') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 资源调整 Dialog -->
+    <Dialog v-model:open="resourceDialog">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ t('billing.adjustResourceTitle') }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4 py-2">
+          <div class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustSubject') }}</Label>
+            <Select v-model="resourceForm.subject">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="instance_seat">{{ t('billing.subject_instance_seat') }}</SelectItem>
+                <SelectItem value="boot_seat">{{ t('billing.subject_boot_seat') }}</SelectItem>
+                <SelectItem value="runtime_minute">{{ t('billing.subject_runtime_minute') }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustDelta') }}</Label>
+            <Input
+              v-model="resourceForm.delta"
+              type="number"
+              step="1"
+              :placeholder="t('billing.fAdjustDeltaPlaceholder')"
+            />
+            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustDeltaHint') }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
+            <Input
+              v-model="resourceForm.reason"
+              :placeholder="t('billing.fAdjustReasonPlaceholder')"
+            />
+          </div>
         </div>
-        <div class="space-y-1.5">
-          <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
-          <Input
-            v-model="resourceForm.reason"
-            :placeholder="t('billing.fAdjustReasonPlaceholder')"
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" @click="resourceDialog = false">{{ t('crud.cancel') }}</Button>
-        <Button :disabled="resourceSubmitting" @click="submitResource">
-          {{ resourceSubmitting ? t('common.loading') : t('crud.confirm') }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+        <DialogFooter>
+          <Button variant="outline" @click="resourceDialog = false">{{ t('crud.cancel') }}</Button>
+          <Button :disabled="resourceSubmitting" @click="submitResource">
+            {{ resourceSubmitting ? t('common.loading') : t('crud.confirm') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
 </template>
