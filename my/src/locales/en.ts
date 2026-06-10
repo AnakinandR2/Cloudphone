@@ -571,7 +571,7 @@ export default {
       fileUploadBtn: 'Upload',
       fileUploading: 'Uploading…',
       fileUploadOk: 'Uploaded',
-      fileUploadHint: 'Files were uploaded to /sdcard/Download (the platform does not support custom folders yet)',
+      fileUploadHint: 'Files were uploaded to /sdcard/Download',
       fileUploadLimit: 'You can upload at most {n} files at once',
       fileUploadFail: 'Upload failed',
       fileDropHint: 'Drop to upload to current folder',

@@ -401,6 +401,15 @@ onBeforeUnmount(() => {
           <FolderOpen class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.files') }}</span>
         </Button>
+        <Button
+          :variant="activePanel === 'upload' ? 'secondary' : 'ghost'"
+          class="h-auto flex-col gap-1 px-0.5 py-1.5"
+          :title="t('phone.rc.panelUpload')"
+          @click="togglePanel('upload')"
+        >
+          <CloudUpload class="size-4" />
+          <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.panelUpload') }}</span>
+        </Button>
         <Button variant="ghost" :disabled="!connected" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="screenshot">
           <Camera class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.screenshot') }}</span>
@@ -420,15 +429,6 @@ onBeforeUnmount(() => {
         >
           <AppWindow class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.apps') }}</span>
-        </Button>
-        <Button
-          :variant="activePanel === 'upload' ? 'secondary' : 'ghost'"
-          class="h-auto flex-col gap-1 px-0.5 py-1.5"
-          :title="t('phone.rc.panelUpload')"
-          @click="togglePanel('upload')"
-        >
-          <CloudUpload class="size-4" />
-          <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.panelUpload') }}</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
