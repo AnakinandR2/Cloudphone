@@ -5,6 +5,7 @@ import {
   Camera,
   ChevronLeft,
   Circle,
+  CloudUpload,
   FolderOpen,
   Keyboard,
   Maximize,
@@ -42,6 +43,7 @@ import {
 import GroupPhoneCell from './GroupPhoneCell.vue'
 import RemoteAppPanel from './RemoteAppPanel.vue'
 import RemoteFilePanel from './RemoteFilePanel.vue'
+import RemoteUploadPanel from './RemoteUploadPanel.vue'
 
 // 串流选项（与 useWebRTC 一致；群控「显示」统一下发到全部）。
 const RES_OPTIONS = [{ label: '360x640' }, { label: '720x1280' }, { label: '1080x1920' }]
@@ -86,7 +88,7 @@ function toggleAllCells() {
 }
 const selectedPhones = computed(() => phones.value.filter(p => selectedCells.value.has(p.id)))
 
-type Panel = 'display' | 'keys' | 'files' | 'apps' | null
+type Panel = 'display' | 'keys' | 'files' | 'apps' | 'upload' | null
 const activePanel = ref<Panel>(null)
 function togglePanel(name: Exclude<Panel, null>) {
   activePanel.value = activePanel.value === name ? null : name
@@ -338,7 +340,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- 文件（展示主控；上传/删除范围在面板内选择） -->
+      <!-- 文件（展示主控；文件浏览/下载/删除；上传见上传面板） -->
       <div v-if="activePanel === 'files'" class="w-[380px] shrink-0 overflow-hidden border-l bg-background">
         <RemoteFilePanel :key="masterPhoneId" :phone-id="masterPhoneId" :phones="selectedPhones" />
       </div>
@@ -346,6 +348,11 @@ onMounted(async () => {
       <!-- 应用（全体安装，列表读主控） -->
       <div v-if="activePanel === 'apps'" class="flex w-[420px] shrink-0 flex-col overflow-hidden border-l bg-background">
         <RemoteAppPanel :phone-ids="phones.map(p => p.id)" :master-id="masterPhoneId" />
+      </div>
+
+      <!-- 上传（固定 /sdcard/Download，可选主控/群控范围） -->
+      <div v-if="activePanel === 'upload'" class="w-[380px] shrink-0 overflow-hidden border-l bg-background">
+        <RemoteUploadPanel :key="masterPhoneId" :phone-id="masterPhoneId" :phones="selectedPhones" />
       </div>
 
       <!-- 侧栏 -->
@@ -402,6 +409,10 @@ onMounted(async () => {
           <Button :variant="activePanel === 'apps' ? 'secondary' : 'ghost'" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="togglePanel('apps')">
             <AppWindow class="size-4" />
             <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.apps') }}</span>
+          </Button>
+          <Button :variant="activePanel === 'upload' ? 'secondary' : 'ghost'" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="togglePanel('upload')">
+            <CloudUpload class="size-4" />
+            <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.panelUpload') }}</span>
           </Button>
 
           <DropdownMenu>
