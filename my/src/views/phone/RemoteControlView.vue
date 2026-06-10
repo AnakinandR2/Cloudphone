@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Circle,
   Clock,
+  CloudUpload,
   Download,
   Eraser,
   FolderOpen,
@@ -60,6 +61,7 @@ import { useRemoteInput } from '@/composables/useRemoteInput'
 import { useWebRTC } from '@/composables/useWebRTC'
 import RemoteAppPanel from './RemoteAppPanel.vue'
 import RemoteFilePanel from './RemoteFilePanel.vue'
+import RemoteUploadPanel from './RemoteUploadPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -197,8 +199,8 @@ function closeShot() {
   shotUrl.value = null
 }
 
-// 侧栏展开面板：display=显示参数 / keys=按键 / files=文件管理 / apps=应用。
-type Panel = 'display' | 'keys' | 'files' | 'apps' | null
+// 侧栏展开面板：display=显示参数 / keys=按键 / files=文件管理 / apps=应用 / upload=上传。
+type Panel = 'display' | 'keys' | 'files' | 'apps' | 'upload' | null
 const activePanel = ref<Panel>(null)
 
 // 布局常量（与模板里的宽度保持一致；无 padding / gap，元素直接相贴）。
@@ -214,6 +216,8 @@ function panelWidth(p: Panel): number {
     case 'files':
       return 380 // w-[380px]
     case 'apps':
+      return 380 // w-[380px]
+    case 'upload':
       return 380 // w-[380px]
     default:
       return 0
@@ -417,6 +421,15 @@ onBeforeUnmount(() => {
           <AppWindow class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.apps') }}</span>
         </Button>
+        <Button
+          :variant="activePanel === 'upload' ? 'secondary' : 'ghost'"
+          class="h-auto flex-col gap-1 px-0.5 py-1.5"
+          :title="t('phone.rc.panelUpload')"
+          @click="togglePanel('upload')"
+        >
+          <CloudUpload class="size-4" />
+          <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.panelUpload') }}</span>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5">
@@ -565,6 +578,16 @@ onBeforeUnmount(() => {
           class="flex w-[380px] shrink-0 flex-col overflow-hidden rounded-md border"
         >
           <RemoteAppPanel :phone-ids="[id]" :master-id="id" />
+        </div>
+      </Transition>
+
+      <!-- 展开面板：上传（固定上传到 /sdcard/Download） -->
+      <Transition name="panel">
+        <div
+          v-if="activePanel === 'upload'"
+          class="flex w-[380px] shrink-0 flex-col overflow-hidden rounded-md border"
+        >
+          <RemoteUploadPanel :phone-id="id" />
         </div>
       </Transition>
     </div>
