@@ -71,7 +71,7 @@ func TestPayWithBalanceFulfills(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(22000), d.Order.TotalCents)
 
-	paid, err := OrderService.PayWithBalance(ordUser, int(d.Order.ID))
+	paid, err := OrderService.PayOrder(ordUser, int(d.Order.ID))
 	require.NoError(t, err)
 	assert.Equal(t, OrderPaid, paid.Order.Status)
 	require.NotNil(t, paid.Order.PaidAt)
@@ -85,7 +85,7 @@ func TestPayWithBalanceFulfills(t *testing.T) {
 	assert.Equal(t, int64(2), snap.InstanceSeat)
 	assert.Equal(t, int64(60000), snap.RuntimeMinute)
 
-	_, err = OrderService.PayWithBalance(ordUser, int(d.Order.ID))
+	_, err = OrderService.PayOrder(ordUser, int(d.Order.ID))
 	assert.Error(t, err)
 	snap, _ = EntitlementService.Capacities(ordUser)
 	assert.Equal(t, int64(2), snap.InstanceSeat)
@@ -102,7 +102,7 @@ func TestPayWithBalanceInsufficient(t *testing.T) {
 		Items: []OrderItemRequest{{SkuCode: "instance_fee", CycleMonths: 1, Quantity: 2}}})
 	require.NoError(t, err)
 
-	_, err = OrderService.PayWithBalance(ordUser, int(d.Order.ID))
+	_, err = OrderService.PayOrder(ordUser, int(d.Order.ID))
 	assert.Error(t, err)
 
 	got, _ := OrderService.GetOrder(ordUser, int(d.Order.ID))
@@ -134,6 +134,31 @@ func TestMarkPaidFulfillsWithoutBalance(t *testing.T) {
 	assert.Equal(t, int64(0), acc.BalanceCents)
 }
 
+// 微信/支付宝即时到账桩：前台 PayOrder 直接结算发放，不扣余额。
+func TestPayOrderWechatSettlesWithoutBalance(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_orders", "billing_order_items", "billing_skus", "billing_discount_tiers",
+			"billing_accounts", "billing_ledger_entries", "billing_entitlement_batches")
+	})
+	require.NoError(t, SeedCatalog(framework.DB))
+
+	d, err := OrderService.CreateOrder(ordUser, &OrderCreate{PayMethod: PayAlipay,
+		Items: []OrderItemRequest{{SkuCode: "instance_fee", CycleMonths: 1, Quantity: 3}}})
+	require.NoError(t, err)
+
+	paid, err := OrderService.PayOrder(ordUser, int(d.Order.ID))
+	require.NoError(t, err)
+	assert.Equal(t, OrderPaid, paid.Order.Status)
+	require.NotNil(t, paid.Order.PaidAt)
+
+	// 余额未被扣（无充值仍可支付成功），权益已发放。
+	acc, _ := BillingService.GetAccount(ordUser)
+	assert.Equal(t, int64(0), acc.BalanceCents)
+	snap, err := EntitlementService.Capacities(ordUser)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), snap.InstanceSeat)
+}
+
 func TestPaidOrderLedgerLinkedByOrderID(t *testing.T) {
 	t.Cleanup(func() {
 		framework.CleanTable("billing_orders", "billing_order_items", "billing_skus", "billing_discount_tiers",
@@ -149,7 +174,7 @@ func TestPaidOrderLedgerLinkedByOrderID(t *testing.T) {
 			{SkuCode: "time_pack", CycleMonths: 0, Quantity: 1000},
 		}})
 	require.NoError(t, err)
-	_, err = OrderService.PayWithBalance(ordUser, int(d.Order.ID))
+	_, err = OrderService.PayOrder(ordUser, int(d.Order.ID))
 	require.NoError(t, err)
 
 	// 该订单关联的流水：1 条余额消费 + 2 条资源发放，都应带 OrderID

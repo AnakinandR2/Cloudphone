@@ -66,7 +66,7 @@ func GetMyOrder(c *gin.Context) {
 	framework.OKWithData(c, d)
 }
 
-// PayMyOrder 前台：余额支付
+// PayMyOrder 前台：支付订单（余额扣款；微信/支付宝即时到账桩）
 func PayMyOrder(c *gin.Context) {
 	uid, ok := currentUserID(c)
 	if !ok {
@@ -78,7 +78,7 @@ func PayMyOrder(c *gin.Context) {
 		framework.Fail(c, http.StatusBadRequest, "无效的ID")
 		return
 	}
-	d, err := OrderService.PayWithBalance(uid, id)
+	d, err := OrderService.PayOrder(uid, id)
 	if err != nil {
 		framework.FailErr(c, err)
 		return

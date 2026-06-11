@@ -77,8 +77,10 @@ func (s *orderServiceImpl) AdminListOrders(page, size, userID int, status string
 	return s.repo.adminListOrders((page-1)*size, size, userID, status)
 }
 
-// PayWithBalance 用余额支付本人订单（扣款+发放，单事务幂等）。
-func (s *orderServiceImpl) PayWithBalance(userID, id int) (*OrderDetail, error) {
+// PayOrder 前台支付本人订单（单事务幂等）。
+// 余额支付：扣余额 + 发放；微信/支付宝：即时到账桩（不扣余额，直接结算发放，
+// 模拟第三方支付秒回执），上线真实网关后改为创建预支付单并由回调结算。
+func (s *orderServiceImpl) PayOrder(userID, id int) (*OrderDetail, error) {
 	o, err := s.repo.getOwned(userID, id)
 	if err != nil {
 		if isNotFoundOrder(err) {
@@ -90,7 +92,7 @@ func (s *orderServiceImpl) PayWithBalance(userID, id int) (*OrderDetail, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.settle(o, items, true); err != nil {
+	if err := s.repo.settle(o, items, o.PayMethod == PayBalance); err != nil {
 		return nil, err
 	}
 	return &OrderDetail{Order: *o, Items: items}, nil

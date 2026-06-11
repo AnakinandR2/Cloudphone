@@ -279,12 +279,15 @@ export default defineFakeRoute([
       const entry = orders.find(o => o.order.id === Number(params.id))
       if (!entry) return fail('订单不存在')
       if (entry.order.status === 'paid') return fail('订单已支付')
-      if (account.balance_cents < entry.order.total_cents) return fail('余额不足')
-      account.balance_cents -= entry.order.total_cents
+      // 余额支付：校验并扣余额 + 记流水；微信/支付宝：即时到账桩，不扣余额。
+      if (entry.order.pay_method === 'balance') {
+        if (account.balance_cents < entry.order.total_cents) return fail('余额不足')
+        account.balance_cents -= entry.order.total_cents
+        addLedger('balance', 'purchase', -entry.order.total_cents, `支付订单 ${entry.order.order_no}`, entry.order.id)
+      }
       entry.order.status = 'paid'
       entry.order.paid_at = now()
       entry.order.updated_at = now()
-      addLedger('balance', 'purchase', -entry.order.total_cents, `支付订单 ${entry.order.order_no}`, entry.order.id)
       return ok({ ...entry })
     },
   },

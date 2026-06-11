@@ -259,21 +259,15 @@ async function doCreateAndPay(
       return false
     }
     const orderDetail = createRes.data
-    if (method === 'balance') {
-      const payRes = await billingApi.payOrder(orderDetail.order.id)
-      if (payRes.code !== 0) {
-        toast.error(payRes.message || t('billing.payFailed'))
-        return false
-      }
-      toast.success(t('billing.orderPaidOk'))
-      await loadOverview()
-      return true
+    // 所有支付方式点支付后均即时到账：余额扣款、微信/支付宝走即时到账桩。
+    const payRes = await billingApi.payOrder(orderDetail.order.id)
+    if (payRes.code !== 0) {
+      toast.error(payRes.message || t('billing.payFailed'))
+      return false
     }
-    else {
-      // wechat / alipay: Phase-1 stub — order created successfully
-      toast.info(t('billing.payPending'))
-      return true
-    }
+    toast.success(t('billing.orderPaidOk'))
+    await loadOverview()
+    return true
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
