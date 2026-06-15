@@ -42,6 +42,9 @@ const phones: PhoneRec[] = Array.from({ length: 4 }).map((_, i) => ({
 }))
 let seq = 3000
 
+// Root 演示态：phone id → 是否已 root
+const rootState: Record<number, boolean> = {}
+
 // ADB 演示态：phone id → { enabled, 白名单 IP }
 const adbState: Record<number, { enabled: boolean, whiteIp: string[] }> = {}
 function adbInfo(id: number) {
@@ -70,7 +73,12 @@ export default defineFakeRoute([
       if (status) list = list.filter(p => p.status === status)
       const total = list.length
       const start = (page - 1) * size
-      return ok({ list: list.slice(start, start + size), total })
+      const items = list.slice(start, start + size).map(p => ({
+        ...p,
+        adb_enabled: adbState[p.id]?.enabled ?? false,
+        rooted: rootState[p.id] ?? false,
+      }))
+      return ok({ list: items, total })
     },
   },
   {
@@ -254,6 +262,16 @@ export default defineFakeRoute([
     url: '/v1/phone/:id/apps/kill-all',
     method: 'post',
     response: () => ok(null),
+  },
+
+  // ---- Root 开关（演示用内存态：按 phone id 记 isRooted）----
+  {
+    url: '/v1/phone/:id/root',
+    method: 'post',
+    response: ({ params, body }) => {
+      rootState[Number(params.id)] = body?.enable === true
+      return ok(null)
+    },
   },
 
   // ---- ADB（演示用内存态：按 phone id 记 enabled + 白名单）----

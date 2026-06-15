@@ -321,6 +321,7 @@ export default {
     status_STOPPED: '已停止',
     status_STOPPING: '关机中',
     status_DESTROYING: '销毁中',
+    status_UNKNOWN: '同步中',
   },
   billing: {
     // 通用
@@ -337,6 +338,10 @@ export default {
     updateFail: '更新失败',
     deleteFail: '删除失败',
     // SKU 定价
+    runtimeConfigTitle: '时长费配置',
+    runtimeConfigDesc: '开机时长费单价（元/台/分钟）。仅对超出开机席位并发的运行时长按覆盖优先级扣费；单价 0 表示不收时长费。',
+    rtUnitPrice: '时长费单价（元/台/分钟）',
+    rtLowBalance: '低余额告警阈值（元）',
     pricingTitle: 'SKU 定价',
     pricingDesc: '配置不同 SKU（实例套餐 / 时长包）的计费单价与上下架状态。',
     addSku: '新增 SKU',

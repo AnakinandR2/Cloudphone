@@ -460,6 +460,7 @@ export default {
     status_STOPPING: 'Stopping',
     status_STOPPED: 'Stopped',
     status_DESTROYING: 'Destroying',
+    status_UNKNOWN: 'Syncing',
     status_ERROR: 'Error',
     createTitle: 'New Phone',
     editTitle: 'Edit Phone',
@@ -645,6 +646,12 @@ export default {
     app: {
       title: 'App Manager',
       desc: 'Install from My Apps / App Market, or uninstall installed apps.',
+    },
+    root: {
+      enable: 'Enable Root',
+      disable: 'Disable Root',
+      enableOk: 'Root enabled (effective in ~8s)',
+      disableOk: 'Root disabled',
     },
     runLog: {
       title: 'Run Logs',
@@ -1032,6 +1039,14 @@ export default {
     colBatchSourceRef: 'Source Ref',
     colBatchCreatedAt: 'Created At',
     // phase 2 placeholder
+    runtimeUsageTitle: 'Runtime Usage (Time Fee)',
+    runtimeUsageDesc: 'Charge slices billed by real power-on time, newest first. Unit-minutes = runtime exceeding concurrent boot-seat coverage.',
+    runtimeUsageEmpty: 'No runtime usage yet',
+    rtWindow: 'Window',
+    rtBillable: 'Billable unit-min',
+    rtCovered: 'Seat-covered',
+    rtPack: 'Pack min',
+    rtBalance: 'Balance charged',
     phase2Title: 'Runtime Usage Details (Phase 2)',
     phase2Desc: 'Runtime usage details will be available once the platform boot-time API is ready (Phase 2). No mock data is shown.',
     // trials

@@ -2,6 +2,7 @@ package phone
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,17 +74,16 @@ func TestCreateDegradedWithoutMidplat(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-// worker：创建任务在中台 ONLINE 后收敛到 CREATED。
+// worker：needStart=false，创建完成（中台 STOPPED）收敛到 CREATED（不自动开机）。
 func TestWorkerCreateSuccess(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
-	withFakeOps(t, &fakePort{statuses: map[string]string{"cp-x": MidplatReady}})
+	withFakeOps(t, &fakePort{statuses: map[string]string{"cp-x": MidplatStopped}})
 
 	p := insertPhone(t, userA, StatusCreating, "cp-x")
 	insertTask(t, p, TaskTypeCreate, time.Now().Add(time.Minute))
 
 	PhoneService.runDueTasks(context.Background())
-	// 中台 autoStart：创建完成（NORMAL）直接收敛到 RUNNING。
-	assert.Equal(t, StatusRunning, statusOf(t, p.ID))
+	assert.Equal(t, StatusCreated, statusOf(t, p.ID))
 }
 
 // worker：创建任务超时（中台迟迟未 ONLINE）→ CREATE_FAILED。
@@ -134,51 +134,73 @@ func TestWorkerStopSuccess(t *testing.T) {
 	assert.Equal(t, StatusStopped, statusOf(t, p.ID))
 }
 
-// 开机门禁：CREATED/STOPPED 可开机 → STARTING；其余拒绝。关机仅 RUNNING。
+// 开机门禁：按中台实时态判（STOPPED 可开机 → STARTING；关机仅 NORMAL/运行中）。
 func TestPowerGating(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
-	f := &fakePort{}
+	// fake 中台实时态：开关机门禁现按此判（与 UI 显示同源）。
+	f := &fakePort{statuses: map[string]string{
+		"cp-a": "STOPPED",      // 已停止 → 可开机
+		"cp-b": "NORMAL",       // 运行中 → 可关机
+		"cp-c": "INITIALIZING", // 创建中 → 不可开机
+		"cp-d": "NORMAL",       // 运行中 → 不可再开机
+		"cp-e": "STOPPED",      // 已停止 → 不可关机
+	}}
 	withFakeOps(t, f)
 
-	// CREATED → 开机 → STARTING
-	created := insertPhone(t, userA, StatusCreated, "cp-a")
-	require.NoError(t, PhoneService.Power(userA, int(created.ID), "开机"))
-	assert.Equal(t, StatusStarting, statusOf(t, created.ID))
+	// 中台 STOPPED → 开机 → 本地置 STARTING
+	a := insertPhone(t, userA, StatusStopped, "cp-a")
+	require.NoError(t, PhoneService.Power(userA, int(a.ID), "开机"))
+	assert.Equal(t, StatusStarting, statusOf(t, a.ID))
 	assert.Equal(t, "power:开机", f.lastOp)
 
-	// RUNNING → 关机 → STOPPING（异步，worker 收敛到 STOPPED）
-	running := insertPhone(t, userA, StatusRunning, "cp-b")
-	require.NoError(t, PhoneService.Power(userA, int(running.ID), "关机"))
-	assert.Equal(t, StatusStopping, statusOf(t, running.ID))
+	// 中台 NORMAL → 关机 → 本地置 STOPPING
+	b := insertPhone(t, userA, StatusRunning, "cp-b")
+	require.NoError(t, PhoneService.Power(userA, int(b.ID), "关机"))
+	assert.Equal(t, StatusStopping, statusOf(t, b.ID))
 	assert.Equal(t, "power:关机", f.lastOp)
 
-	// 非法过渡
-	creating := insertPhone(t, userA, StatusCreating, "cp-c")
-	assert.Error(t, PhoneService.Power(userA, int(creating.ID), "开机"), "CREATING 不可开机")
-	run2 := insertPhone(t, userA, StatusRunning, "cp-d")
-	assert.Error(t, PhoneService.Power(userA, int(run2.ID), "开机"), "RUNNING 不可再开机")
-	created2 := insertPhone(t, userA, StatusCreated, "cp-e")
-	assert.Error(t, PhoneService.Power(userA, int(created2.ID), "关机"), "CREATED 不可关机")
+	// 非法过渡（按实时态）
+	c := insertPhone(t, userA, StatusCreating, "cp-c")
+	assert.Error(t, PhoneService.Power(userA, int(c.ID), "开机"), "中台创建中不可开机")
+	d := insertPhone(t, userA, StatusRunning, "cp-d")
+	assert.Error(t, PhoneService.Power(userA, int(d.ID), "开机"), "中台运行中不可再开机")
+	e := insertPhone(t, userA, StatusStopped, "cp-e")
+	assert.Error(t, PhoneService.Power(userA, int(e.ID), "关机"), "中台已停止不可关机")
+
+	// 中台查不到（UNKNOWN）→ 拒绝
+	u := insertPhone(t, userA, StatusRunning, "cp-unknown")
+	assert.Error(t, PhoneService.Power(userA, int(u.ID), "关机"), "实时态未知应拒绝")
 }
 
-// 销毁门禁：CREATING/STARTING/RUNNING/DESTROYING 不可销毁；CREATE_FAILED/CREATED/STOPPED 可销毁。
+// 销毁门禁（按中台实时态）：过渡/运行态不可销毁；INIT_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。
 func TestDestroyGating(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
-	f := &fakePort{}
+	f := &fakePort{statuses: map[string]string{
+		"cp-INITIALIZING": "INITIALIZING",
+		"cp-STARTING":     "STARTING",
+		"cp-NORMAL":       "NORMAL",
+		"cp-DESTROYING":   "DESTROYING",
+		"cp-ok-failed":    "INIT_FAILED",
+		"cp-ok-stopped":   "STOPPED",
+	}}
 	withFakeOps(t, f)
 
-	for _, st := range []string{StatusCreating, StatusStarting, StatusRunning, StatusDestroying} {
-		p := insertPhone(t, userA, st, "cp-"+st)
-		assert.Error(t, PhoneService.Delete(userA, int(p.ID)), st+" 不应可销毁")
+	for _, raw := range []string{"INITIALIZING", "STARTING", "NORMAL", "DESTROYING"} {
+		p := insertPhone(t, userA, StatusRunning, "cp-"+raw)
+		assert.Error(t, PhoneService.Delete(userA, int(p.ID)), raw+" 不应可销毁")
 	}
 
-	// 可销毁状态：调中台 destroy + 置 DESTROYING + 建销毁任务（异步，不立即删本地）。
-	for _, st := range []string{StatusCreateFailed, StatusCreated, StatusStopped} {
-		p := insertPhone(t, userA, st, "cp-ok-"+st)
-		require.NoError(t, PhoneService.Delete(userA, int(p.ID)), st+" 应可销毁")
+	// 可销毁（中台 INIT_FAILED / STOPPED）：调中台 destroy + 置 DESTROYING + 建销毁任务（异步，不立即删本地）。
+	for _, cp := range []string{"cp-ok-failed", "cp-ok-stopped"} {
+		p := insertPhone(t, userA, StatusStopped, cp)
+		require.NoError(t, PhoneService.Delete(userA, int(p.ID)), cp+" 应可销毁")
 		assert.Equal(t, "destroy", f.lastOp, "应调用中台销毁")
 		assert.Equal(t, StatusDestroying, statusOf(t, p.ID), "销毁后应进入 DESTROYING")
 	}
+
+	// 中台查不到（UNKNOWN）→ 拒绝。
+	u := insertPhone(t, userA, StatusStopped, "cp-unknown")
+	assert.Error(t, PhoneService.Delete(userA, int(u.ID)), "实时态未知应拒绝销毁")
 }
 
 // 销毁 worker：中台确认实例消失（查不到）后删本地档案。
@@ -203,4 +225,29 @@ func TestDestroyWithoutCpIDDeletesNow(t *testing.T) {
 	require.NoError(t, PhoneService.Delete(userA, int(p.ID)))
 	_, err := PhoneService.GetByID(userA, int(p.ID))
 	assert.Error(t, err, "无中台实例应直接删本地")
+}
+
+// 展示纯实时：中台查不到/查询失败 → UNKNOWN；未开通(无 cpId) → 保留本地。
+func TestResolveLiveStatusesUnknown(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+
+	// 中台返回 cp-1=NORMAL；cp-2 不在返回里 → UNKNOWN。
+	f := &fakePort{statuses: map[string]string{"cp-1": "NORMAL"}}
+	withFakeOps(t, f)
+	items := []CloudPhone{
+		{CpID: "cp-1", Status: StatusStopped}, // 本地陈旧，应被实时 NORMAL→RUNNING 覆盖
+		{CpID: "cp-2", Status: StatusRunning}, // 中台查不到 → UNKNOWN
+		{CpID: "", Status: StatusCreated},     // 未开通 → 保留本地
+	}
+	PhoneService.resolveLiveStatuses(items)
+	assert.Equal(t, StatusRunning, items[0].Status)
+	assert.Equal(t, StatusUnknown, items[1].Status)
+	assert.Equal(t, StatusCreated, items[2].Status)
+
+	// 中台查询失败 → 有 cpId 的全部 UNKNOWN。
+	fe := &fakePort{err: errors.New("中台炸了")}
+	withFakeOps(t, fe)
+	items2 := []CloudPhone{{CpID: "cp-9", Status: StatusRunning}}
+	PhoneService.resolveLiveStatuses(items2)
+	assert.Equal(t, StatusUnknown, items2[0].Status)
 }

@@ -4,12 +4,15 @@ import type { CloudPhone, Tag as TagType } from '@/types/phone'
 import {
   ChevronDown,
   CircleStop,
+  FileClock,
   LayoutGrid,
   List,
   Monitor,
   MoreHorizontal,
   Plus,
   Power,
+  Shield,
+  ShieldCheck,
   SquarePen,
   Tag,
   Trash,
@@ -57,7 +60,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
 import { tagClass } from '@/utils/tagColor'
+import AndroidIcon from '@/components/icons/AndroidIcon.vue'
 import AdbDrawer from './AdbDrawer.vue'
+import RunLogDialog from './RunLogDialog.vue'
 import AppManagerDialog from './AppManagerDialog.vue'
 import PhoneFormDialog from './PhoneFormDialog.vue'
 import PhoneTagsDialog from './PhoneTagsDialog.vue'
@@ -189,6 +194,7 @@ const columns = computed<ColumnDef<CloudPhone>[]>(() => [
 const dialog = ref({ open: false, id: 0, mode: 'create' as 'create' | 'edit' | 'view' })
 const appDialog = ref({ open: false, phone: null as CloudPhone | null })
 const adbDrawer = ref({ open: false, phone: null as CloudPhone | null })
+const runLogDialog = ref({ open: false, phone: null as CloudPhone | null })
 const opBusy = ref(false)
 
 // 危险操作（销毁/删除/重置）统一用一个「受控 AlertDialog」确认：
@@ -220,10 +226,13 @@ function statusClass(status: string): string {
     return 'border-destructive text-destructive animate-pulse'
   if (status === 'CREATED')
     return 'border-blue-500 text-blue-600 dark:text-blue-400'
+  if (status === 'UNKNOWN')
+    return 'border-muted-foreground/40 text-muted-foreground animate-pulse'
   return ''
 }
 
-const TRANSIENT = ['CREATING', 'STARTING', 'STOPPING', 'DESTROYING']
+// UNKNOWN（中台暂不可用）也纳入轮询，自动重试拉取实时态。
+const TRANSIENT = ['CREATING', 'STARTING', 'STOPPING', 'DESTROYING', 'UNKNOWN']
 // 状态机门禁（与后端一致）：
 //   CREATING / STARTING：过渡态，禁止任何操作
 //   CREATE_FAILED：仅可删除         CREATED / STOPPED：可开机、可删除
@@ -315,6 +324,9 @@ function openAppManager(row: CloudPhone) {
 function openAdb(row: CloudPhone) {
   adbDrawer.value = { open: true, phone: row }
 }
+function openRunLogs(row: CloudPhone) {
+  runLogDialog.value = { open: true, phone: row }
+}
 
 // 通用操作执行：执行 -> 成功 toast -> 可选刷新列表
 async function runOp(fn: () => Promise<unknown>, okMsg: string, refresh = true) {
@@ -337,6 +349,13 @@ function powerOn(row: CloudPhone) {
 }
 function powerOff(row: CloudPhone) {
   runOp(() => phoneApi.power(row.id, '关机'), t('phone.op.powerOffOk'))
+}
+// Root 开关（中台同步生效 ~8s，刷新列表以更新标记）。
+function toggleRoot(row: CloudPhone, enable: boolean) {
+  runOp(
+    () => phoneApi.root(row.id, enable),
+    enable ? t('phone.root.enableOk') : t('phone.root.disableOk'),
+  )
 }
 
 onMounted(() => {
@@ -470,6 +489,16 @@ onUnmounted(() => {
             <Button v-if="isRunning(row.status)" size="sm" variant="outline" @click="openRemoteControl(row)">
               <Monitor class="size-4" /> {{ t('phone.op.remoteControl') }}
             </Button>
+            <Button
+              v-if="row.adb_enabled"
+              size="sm"
+              variant="outline"
+              class="gap-1 border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950"
+              :title="t('phone.adb.markerTip')"
+              @click="openAdb(row)"
+            >
+              <AndroidIcon class="size-4" /> ADB
+            </Button>
             <Popconfirm
               v-if="canPowerOff(row.status)"
               tone="warning"
@@ -505,6 +534,15 @@ onUnmounted(() => {
                 </DropdownMenuItem>
                 <DropdownMenuItem v-if="isRunning(row.status)" @click="openAdb(row)">
                   <Usb class="size-4" /> {{ t('phone.adb.title') }}
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="isRunning(row.status) && !row.rooted" @click="toggleRoot(row, true)">
+                  <Shield class="size-4" /> {{ t('phone.root.enable') }}
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="isRunning(row.status) && row.rooted" @click="toggleRoot(row, false)">
+                  <ShieldCheck class="size-4 text-emerald-600" /> {{ t('phone.root.disable') }}
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="row.cp_id" @click="openRunLogs(row)">
+                  <FileClock class="size-4" /> {{ t('phone.runLog.title') }}
                 </DropdownMenuItem>
                 <template v-if="canDestroy(row.status)">
                   <DropdownMenuSeparator />
@@ -622,6 +660,16 @@ onUnmounted(() => {
               <Button v-if="isRunning(row.status)" size="icon" variant="outline" class="size-8" :title="t('phone.op.remoteControl')" @click="openRemoteControl(row)">
                 <Monitor class="size-4" />
               </Button>
+              <Button
+                v-if="row.adb_enabled"
+                size="icon"
+                variant="outline"
+                class="size-8 border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700 dark:text-green-400 dark:hover:bg-green-950"
+                :title="t('phone.adb.markerTip')"
+                @click="openAdb(row)"
+              >
+                <AndroidIcon class="size-4" />
+              </Button>
               <Popconfirm
                 v-if="canPowerOff(row.status)"
                 tone="warning"
@@ -658,6 +706,15 @@ onUnmounted(() => {
                   <DropdownMenuItem v-if="isRunning(row.status)" @click="openAdb(row)">
                     <Usb class="size-4" /> {{ t('phone.adb.title') }}
                   </DropdownMenuItem>
+                  <DropdownMenuItem v-if="isRunning(row.status) && !row.rooted" @click="toggleRoot(row, true)">
+                    <Shield class="size-4" /> {{ t('phone.root.enable') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem v-if="isRunning(row.status) && row.rooted" @click="toggleRoot(row, false)">
+                    <ShieldCheck class="size-4 text-emerald-600" /> {{ t('phone.root.disable') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem v-if="row.cp_id" @click="openRunLogs(row)">
+                    <FileClock class="size-4" /> {{ t('phone.runLog.title') }}
+                  </DropdownMenuItem>
                   <template v-if="canDestroy(row.status)">
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -678,7 +735,8 @@ onUnmounted(() => {
     <PhoneFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" />
     <PhoneTagsDialog v-model="tagDialog.open" :ids="tagDialog.ids" :initial="tagDialog.initial" @success="refreshAfterTag" />
     <AppManagerDialog v-model="appDialog.open" :phone="appDialog.phone" />
-    <AdbDrawer v-model="adbDrawer.open" :phone="adbDrawer.phone" />
+    <AdbDrawer v-model="adbDrawer.open" :phone="adbDrawer.phone" @changed="load(true)" />
+    <RunLogDialog v-model="runLogDialog.open" :phone="runLogDialog.phone" />
 
     <!-- 危险操作统一确认弹框（根级，避免下拉里套气泡点不到） -->
     <AlertDialog v-model:open="confirmState.open">

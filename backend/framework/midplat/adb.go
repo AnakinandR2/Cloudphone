@@ -6,24 +6,37 @@ import (
 	"net/http"
 )
 
-// ADBTokenRequest 是 enable/disable 共用的请求体。
-//   - Containers 为云手机/容器 ID 列表（必填）。
-//   - ValidTime 为有效期，单位/语义按中台约定，可选；零值序列化时省略。
+// ===== ADB Token 接管（spec v3.25.9 §3.5）=====
+//
+// 🔑 v3.25.9 重大更正：对外仅保留 /adb/token/enable + /adb/token/disable 两个接口。
+// 旧 /adb/operate（及 /adb/enable、/adb/disable、/adb/whitelist/*）全部已废弃，
+// 之前 operate 报「所有服务器端口都被用了」+ adbAddress 为 null 的根因就是调用了废弃接口。
+// 渠道侧不管理白名单。
+
+// ADBTokenRequest 是 enable/disable 共用的请求体（§3.5.1/§3.5.2）。
+//   - Containers：云手机 cpId 列表（必填）。
+//   - ValidTime：有效期天数，校验范围 1-999；实测被中台忽略（固定 +60 天，由后台配置决定），
+//     这里一律不传（零值 omitempty）。
 type ADBTokenRequest struct {
 	Containers []string `json:"containers"`
 	ValidTime  int      `json:"validTime,omitempty"`
 }
 
 // ADBTokenContainer 是 enable/disable 响应里每个容器的 ADB 接入信息。
+// 字段为中台下划线命名。disable 时 AdbAddress 为 null（已吊销）。
 type ADBTokenContainer struct {
 	ContainerID string `json:"container_id"`
-	LoginCode   string `json:"login_code"`
-	AdbAddress  string `json:"adb_address"`
+	LoginCode   string `json:"login_code"`  // ⭐ ADB 登录 Token，用于 xlogin
+	AdbAddress  string `json:"adb_address"` // ⭐ ADB 连接地址（DNS 域名:端口），用于 adb connect
 }
 
-// ADBTokenResponse 是 enable/disable 接口返回的结构。
-// 中台外层 envelope.data 内还嵌套一层 {code,message,data:{containers:[]}}，
-// 这里对应内层结构；外层的 envelope.code 已经由 doJSON 校验过。
+// ADBTokenResponse 对应 envelope.data 这一层。
+// 中台 enable/disable 的响应是双层嵌套：
+//
+//	{ code:"SUCCESS", data:{ code:200, message, data:{ containers:[...] } } }
+//
+// doJSON 已校验并剥掉最外层 envelope.code，这里的 Code/Message 是中层 data.code/message，
+// Data.Containers 对应内层 data.data.containers。
 type ADBTokenResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -32,13 +45,14 @@ type ADBTokenResponse struct {
 	} `json:"data"`
 }
 
-// EnableADBToken 调用 POST /open/api/vendor/v1/adb/token/enable 为指定容器开启 ADB 接入。
+// EnableADBToken 调用 POST /open/api/vendor/v1/adb/token/enable 为指定容器签发 ADB Token。
+// 注意：重复调用会签发全新 token（非幂等），旧 token 随即失效——「续期」即重发本接口。
 func (c *Client) EnableADBToken(ctx context.Context, req ADBTokenRequest) (*ADBTokenResponse, error) {
 	const path = "/open/api/vendor/v1/adb/token/enable"
 	return c.doADBToken(ctx, path, req)
 }
 
-// DisableADBToken 调用 POST /open/api/vendor/v1/adb/token/disable 关闭指定容器的 ADB 接入。
+// DisableADBToken 调用 POST /open/api/vendor/v1/adb/token/disable 吊销 ADB Token（幂等）。
 func (c *Client) DisableADBToken(ctx context.Context, req ADBTokenRequest) (*ADBTokenResponse, error) {
 	const path = "/open/api/vendor/v1/adb/token/disable"
 	return c.doADBToken(ctx, path, req)
@@ -59,108 +73,96 @@ func (c *Client) doADBToken(ctx context.Context, path string, req ADBTokenReques
 	return &out, nil
 }
 
-// ===== ADB 统一操作（spec §3.1 /adb/operate）+ 白名单查询（§3.2）+ 连接信息（§2.16 page）=====
-
-// AdbOperateRequest 是 /adb/operate 的请求体（spec §3.1）。
-// operation: enable / disable / update_whitelist（全小写）。
-// 不传 vmId：中台按 containers 自行定位宿主 VM。
-type AdbOperateRequest struct {
-	Operation  string   `json:"operation"`
-	Containers []string `json:"containers"`
-	WhiteIP    []string `json:"whiteIp,omitempty"`
-	TTL        int      `json:"ttl,omitempty"`
+// CloudPhoneAdbInfo 是从 §2.6 v2 /cloud-phone/page 抽出的 ADB 连接信息。
+//
+// ⚠️ 字段名陷阱（§3.5.3）：连接地址在 adbAddr（旧字段），adbAddress 恒为 null 不可用。
+// 优先用 enable 响应里的 adb_address；§2.6 仅用于补 adbToken / adbTokenExpiredAt。
+type CloudPhoneAdbInfo struct {
+	CpID              string `json:"cpId"`
+	Status            string `json:"status"`
+	AdbAddress        string `json:"adbAddr"`
+	AdbToken          string `json:"adbToken"`
+	AdbTokenExpiredAt string `json:"adbTokenExpiredAt"`
+	IsRooted          bool   `json:"isRooted"` // §2.6：当前是否已 root（root 开关的前置判定从此读）
 }
 
-// AdbContainerDetail 是 /adb/operate 响应里每台机的结果。
-type AdbContainerDetail struct {
-	ContainerID string `json:"containerId"`
-	Proxy       string `json:"proxy"`
-	Success     bool   `json:"success"`
-	Error       string `json:"error"`
-}
-
-// AdbOperateResult 是 /adb/operate 的 data。
-type AdbOperateResult struct {
-	Operation         string               `json:"operation"`
-	VmID              string               `json:"vmId"`
-	AllSuccess        bool                 `json:"allSuccess"`
-	SuccessContainers []string             `json:"successContainers"`
-	FailedContainers  []string             `json:"failedContainers"`
-	ErrorMessage      string               `json:"errorMessage"`
-	ContainerDetails  []AdbContainerDetail `json:"containerDetails"`
-}
-
-// OperateAdb 调用 POST /open/api/vendor/v1/adb/operate 统一开启/关闭 ADB、改白名单。
-func (c *Client) OperateAdb(ctx context.Context, req AdbOperateRequest) (*AdbOperateResult, error) {
-	const path = "/open/api/vendor/v1/adb/operate"
-	raw, err := c.doJSON(ctx, http.MethodPost, path, nil, req)
+// BatchQueryAdbEnabled 用 §2.6 page（cpIds 过滤）批量判断哪些 cp 已开 ADB（adbToken 非空）。
+// 供列表标记「已开 ADB」用；best-effort，查不到的 cp 不出现在返回 map 里。
+func (c *Client) BatchQueryAdbEnabled(ctx context.Context, cpIDs []string) (map[string]bool, error) {
+	if len(cpIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+	const path = "/open/api/vendor/v1/cloud-phone/page"
+	body := map[string]any{"page": 1, "pageSize": len(cpIDs), "cpIds": cpIDs}
+	raw, err := c.doJSON(ctx, http.MethodPost, path, nil, body)
 	if err != nil {
+		if IsDataNotExist(err) {
+			return map[string]bool{}, nil
+		}
 		return nil, err
 	}
-	if len(raw) == 0 || string(raw) == "null" {
-		return &AdbOperateResult{}, nil
+	var page struct {
+		Data []CloudPhoneAdbInfo `json:"data"`
 	}
-	var out AdbOperateResult
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return nil, err
+		}
 	}
-	return &out, nil
-}
-
-// AdbWhitelistEntry 是 /adb/whitelist/cp/{cpId} 返回的一条白名单记录（spec §3.2）。
-type AdbWhitelistEntry struct {
-	ID         int64  `json:"id"`
-	CpID       string `json:"cpId"`
-	VmID       string `json:"vmId"`
-	IPAddress  string `json:"ipAddress"`
-	IPDesc     string `json:"ipDesc"`
-	Status     int    `json:"status"`
-	StatusDesc string `json:"statusDesc"`
-	ExpireTime string `json:"expireTime"`
-	Expired    bool   `json:"expired"`
-	CreateTime string `json:"createTime"`
-	UpdateTime string `json:"updateTime"`
-	CreateBy   string `json:"createBy"`
-	UpdateBy   string `json:"updateBy"`
-}
-
-// GetAdbWhitelist 调用 GET /open/api/vendor/v1/adb/whitelist/cp/{cpId} 查白名单。
-func (c *Client) GetAdbWhitelist(ctx context.Context, cpID string) ([]AdbWhitelistEntry, error) {
-	path := "/open/api/vendor/v1/adb/whitelist/cp/" + cpID
-	raw, err := c.doJSON(ctx, http.MethodGet, path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil, nil
-	}
-	var out []AdbWhitelistEntry
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
+	out := make(map[string]bool, len(page.Data))
+	for _, d := range page.Data {
+		out[d.CpID] = d.AdbToken != ""
 	}
 	return out, nil
 }
 
-// CloudPhoneAdbInfo 是从 §2.16 /cloud-phone/page 抽出的 ADB 连接信息。
-type CloudPhoneAdbInfo struct {
-	CpID              string `json:"cpId"`
-	Status            string `json:"status"`
-	AdbAddress        string `json:"adbAddress"`
-	AdbToken          string `json:"adbToken"`
-	AdbTokenExpiredAt string `json:"adbTokenExpiredAt"`
+// BatchQueryRootEnabled 用 §2.6 page（cpIds 过滤）批量判断哪些 cp 已 root（isRooted=true）。
+// 供列表标记「已 root」用；best-effort，查不到的 cp 不出现在返回 map 里。
+func (c *Client) BatchQueryRootEnabled(ctx context.Context, cpIDs []string) (map[string]bool, error) {
+	if len(cpIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+	const path = "/open/api/vendor/v1/cloud-phone/page"
+	body := map[string]any{"page": 1, "pageSize": len(cpIDs), "cpIds": cpIDs}
+	raw, err := c.doJSON(ctx, http.MethodPost, path, nil, body)
+	if err != nil {
+		if IsDataNotExist(err) {
+			return map[string]bool{}, nil
+		}
+		return nil, err
+	}
+	var page struct {
+		Data []CloudPhoneAdbInfo `json:"data"`
+	}
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return nil, err
+		}
+	}
+	out := make(map[string]bool, len(page.Data))
+	for _, d := range page.Data {
+		out[d.CpID] = d.IsRooted
+	}
+	return out, nil
 }
 
-// GetCloudPhoneAdbInfo 调用 POST /open/api/vendor/v1/cloud-phone/page（§2.16）取单台云机的 ADB 连接信息
-// （list 接口不返回 adbToken，只能走 page 详情）。
+// GetCloudPhoneAdbInfo 调用 POST /open/api/vendor/v1/cloud-phone/page（§2.6 v2）取单台云机的
+// ADB 连接信息（list 接口不返回 adbToken，只能走 page 详情）。
+//
+// P1-A10：对不存在的 cpId，中台返回 HTTP 400 + code="DATA_NOT_EXIST"。
+// 读不到 ≠ 报错——此时降级为「未开启」（仅带 CpID），交由上层呈现为未开通。
 func (c *Client) GetCloudPhoneAdbInfo(ctx context.Context, cpID string) (*CloudPhoneAdbInfo, error) {
 	const path = "/open/api/vendor/v1/cloud-phone/page"
 	body := map[string]any{"page": 1, "pageSize": 1, "cpId": cpID}
 	raw, err := c.doJSON(ctx, http.MethodPost, path, nil, body)
 	if err != nil {
+		if IsDataNotExist(err) {
+			return &CloudPhoneAdbInfo{CpID: cpID}, nil
+		}
 		return nil, err
 	}
 	if len(raw) == 0 || string(raw) == "null" {
-		return &CloudPhoneAdbInfo{}, nil
+		return &CloudPhoneAdbInfo{CpID: cpID}, nil
 	}
 	var page struct {
 		Data []CloudPhoneAdbInfo `json:"data"`

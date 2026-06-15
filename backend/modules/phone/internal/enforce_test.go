@@ -62,11 +62,21 @@ func (f *fakeOps) UninstallApp(_ context.Context, _ string, _ []int64, _ []strin
 func (f *fakeOps) StartApp(_ context.Context, _ string, _ []int64, _ []string) error { return nil }
 func (f *fakeOps) StopApp(_ context.Context, _ string, _ []int64, _ []string) error  { return nil }
 func (f *fakeOps) KillAllApps(_ context.Context, _ string) error                     { return nil }
-func (f *fakeOps) AdbOperate(_ context.Context, _, _ string, _ []string, _ int) (*midplat.AdbOperateResult, error) {
-	return &midplat.AdbOperateResult{}, nil
+func (f *fakeOps) AdbEnableToken(_ context.Context, _ string) (*midplat.ADBTokenContainer, error) {
+	return &midplat.ADBTokenContainer{}, nil
 }
-func (f *fakeOps) AdbWhitelist(_ context.Context, _ string) ([]midplat.AdbWhitelistEntry, error) {
+func (f *fakeOps) AdbDisableToken(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeOps) AdbEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
 	return nil, nil
+}
+func (f *fakeOps) Root(_ context.Context, _, _ string, _ bool) error { return nil }
+func (f *fakeOps) RootEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
+	return nil, nil
+}
+func (f *fakeOps) RunLogs(_ context.Context, _ string, _, _ int) (*midplat.RunLogPage, error) {
+	return &midplat.RunLogPage{}, nil
 }
 func (f *fakeOps) AdbInfo(_ context.Context, _ string) (*midplat.CloudPhoneAdbInfo, error) {
 	return &midplat.CloudPhoneAdbInfo{}, nil

@@ -75,7 +75,7 @@ func GetCloudPhone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	item, err := PhoneService.GetByID(uid, id)
+	item, err := PhoneService.GetByIDDisplay(uid, id)
 	if err != nil {
 		framework.FailErr(c, err)
 		return

@@ -102,6 +102,20 @@ export interface EntitlementBatch {
 }
 export interface EntitlementsResult { capacities: CapacitySnapshot, batches: EntitlementBatch[] }
 
+/** 时长费用量切片（一次结算一用户） */
+export interface RuntimeUsageSlice {
+  id: number
+  window_start: string
+  window_end: string
+  billable_unit_minutes: number
+  covered_seat_minutes: number
+  charged_pack_minutes: number
+  charged_balance_cents: number
+  unfunded_minutes: number
+  unit_price_cents: number
+  created_at: string
+}
+
 // 试用
 export interface TrialPolicy {
   id: number

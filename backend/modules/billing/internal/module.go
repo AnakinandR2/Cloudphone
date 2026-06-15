@@ -23,6 +23,7 @@ func (m *billingModule) Init(db *gorm.DB) error {
 	OrderService = newOrderService(newOrderRepository(db), CatalogService)
 	TrialService = newTrialService(newTrialRepository(db))
 	SeatService = newSeatService(newSeatRepository(db), EntitlementService)
+	RuntimeService = newRuntimeService(newRuntimeRepository(db), EntitlementService, newRepository(db))
 	return nil
 }
 
@@ -43,6 +44,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.POST("/orders/:id/pay", PayMyOrder)
 		g.GET("/trials", ListMyTrials)
 		g.POST("/trials/:code/claim", ClaimTrial)
+		g.GET("/runtime/usage", GetMyRuntimeUsage)
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -68,6 +70,8 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.DELETE("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteTrialPolicy)
 		admin.POST("/trials/:id/eligibility", staff.PermissionMiddleware("billing:manage"), AdminGrantTrialEligibility)
 		admin.GET("/trials/:id/grants", staff.PermissionMiddleware("billing:view"), AdminListTrialGrants)
+		admin.GET("/runtime-config", staff.PermissionMiddleware("billing:view"), AdminGetRuntimeConfig)
+		admin.PUT("/runtime-config", staff.PermissionMiddleware("billing:manage"), AdminSaveRuntimeConfig)
 	}
 }
 
@@ -94,7 +98,11 @@ func init() {
 
 	// 建表（幂等）：计费账户 + 统一流水 + 商品目录 + 折扣阶梯。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}); err != nil {
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}, &BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}); err != nil {
+			return err
+		}
+		// 时长费单行配置 seed（幂等：不存在才建，默认单价 0=未启用收费）。
+		if err := db.Where(BillingRuntimeConfig{ID: 1}).FirstOrCreate(&BillingRuntimeConfig{ID: 1}).Error; err != nil {
 			return err
 		}
 		return SeedCatalog(db)
@@ -104,7 +112,8 @@ func init() {
 // InitForTest 供其他模块的测试装配 billing（建表 + 装配服务）。仅测试用。
 func InitForTest(db *gorm.DB) error {
 	if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{},
-		&Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}); err != nil {
+		&Order{}, &OrderItem{}, &TrialPolicy{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{},
+		&BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}); err != nil {
 		return err
 	}
 	return (&billingModule{}).Init(db)

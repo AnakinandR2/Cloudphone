@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
-import type { BillingAccount, EntitlementBatch, EntitlementsResult } from '@/types/billing'
-import { Clock, Construction, Cpu, Smartphone, Wallet } from 'lucide-vue-next'
+import type { BillingAccount, EntitlementBatch, EntitlementsResult, RuntimeUsageSlice } from '@/types/billing'
+import { ChevronLeft, ChevronRight, Clock, Cpu, Smartphone, Wallet } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
 import DataTable from '@/components/DataTable.vue'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -71,6 +72,31 @@ async function load() {
 }
 
 onMounted(load)
+
+// ——— 运行用量（时长费切片，倒序分页）———
+const RT_SIZE = 10
+const runtimeSlices = ref<RuntimeUsageSlice[]>([])
+const runtimeTotal = ref(0)
+const runtimePage = ref(1)
+const runtimeLoading = ref(false)
+const runtimePages = computed(() => Math.max(1, Math.ceil(runtimeTotal.value / RT_SIZE)))
+async function loadRuntime() {
+  runtimeLoading.value = true
+  try {
+    const { data } = await billingApi.runtimeUsage({ page: runtimePage.value, size: RT_SIZE })
+    runtimeSlices.value = data.list ?? []
+    runtimeTotal.value = data.total ?? 0
+  }
+  catch { /* 静默：无数据不打扰 */ }
+  finally { runtimeLoading.value = false }
+}
+function goRuntime(p: number) {
+  if (p < 1 || p > runtimePages.value || runtimeLoading.value)
+    return
+  runtimePage.value = p
+  loadRuntime()
+}
+onMounted(loadRuntime)
 
 // ——— 汇总卡片 ———
 const balance = computed(() => accountData.value ? fmtCents(accountData.value.balance_cents) : '-')
@@ -255,15 +281,47 @@ const columns = computed<ColumnDef<EntitlementBatch>[]>(() => [
       </CardContent>
     </Card>
 
-    <!-- Phase 2 占位说明 -->
-    <Card class="border-dashed">
-      <CardContent class="flex items-start gap-3 py-4">
-        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400">
-          <Construction class="size-4" />
+    <!-- 运行用量（时长费） -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('billing.runtimeUsageTitle') }}</CardTitle>
+        <CardDescription>{{ t('billing.runtimeUsageDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent class="px-0">
+        <div v-if="runtimeLoading" class="flex items-center justify-center p-8 text-sm text-muted-foreground">
+          {{ t('common.loading', '加载中…') }}
         </div>
-        <div>
-          <div class="text-sm font-medium">{{ t('billing.phase2Title') }}</div>
-          <p class="text-muted-foreground mt-0.5 text-sm">{{ t('billing.phase2Desc') }}</p>
+        <div v-else-if="!runtimeSlices.length" class="p-8 text-center text-sm text-muted-foreground">
+          {{ t('billing.runtimeUsageEmpty') }}
+        </div>
+        <table v-else class="w-full text-sm">
+          <thead class="bg-muted/50 text-xs text-muted-foreground">
+            <tr>
+              <th class="px-4 py-2 text-left font-medium">{{ t('billing.rtWindow') }}</th>
+              <th class="px-4 py-2 text-right font-medium">{{ t('billing.rtBillable') }}</th>
+              <th class="px-4 py-2 text-right font-medium">{{ t('billing.rtCovered') }}</th>
+              <th class="px-4 py-2 text-right font-medium">{{ t('billing.rtPack') }}</th>
+              <th class="px-4 py-2 text-right font-medium">{{ t('billing.rtBalance') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in runtimeSlices" :key="s.id" class="border-t">
+              <td class="px-4 py-2 tabular-nums text-muted-foreground">{{ formatDateTime(s.window_start) }} ~ {{ formatDateTime(s.window_end) }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ s.billable_unit_minutes }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-green-600 dark:text-green-400">{{ s.covered_seat_minutes }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ s.charged_pack_minutes }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ fmtCents(s.charged_balance_cents) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="runtimeTotal > RT_SIZE" class="flex items-center justify-end gap-2 px-4 pt-3 text-xs text-muted-foreground">
+          <Button variant="outline" size="icon" class="size-7" :disabled="runtimePage <= 1 || runtimeLoading" @click="goRuntime(runtimePage - 1)">
+            <ChevronLeft class="size-4" />
+          </Button>
+          <span class="tabular-nums">{{ runtimePage }} / {{ runtimePages }}</span>
+          <Button variant="outline" size="icon" class="size-7" :disabled="runtimePage >= runtimePages || runtimeLoading" @click="goRuntime(runtimePage + 1)">
+            <ChevronRight class="size-4" />
+          </Button>
         </div>
       </CardContent>
     </Card>

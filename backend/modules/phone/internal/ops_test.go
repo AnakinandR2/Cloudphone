@@ -20,6 +20,10 @@ type fakePort struct {
 	err        error
 	statuses   map[string]string // 供 Statuses 返回的 cpId→status 桩数据
 	createCpID string            // Create 返回的 cpId（空则用 "cp-new"）
+
+	adbToken *midplat.ADBTokenContainer // 非空则覆盖 AdbEnableToken 返回
+	adbInfo  *midplat.CloudPhoneAdbInfo // 非空则覆盖 AdbInfo 返回（测过期补全 / DATA_NOT_EXIST 降级）
+	rooted   map[string]bool            // 供 RootEnabledMap 返回的 cpId→isRooted 桩数据
 }
 
 func (f *fakePort) Create(_ context.Context, args CreateArgs) (*CreateResult, error) {
@@ -88,21 +92,43 @@ func (f *fakePort) StopApp(_ context.Context, cpID string, _ []int64, _ []string
 	return f.note(cpID, "stopApp")
 }
 func (f *fakePort) KillAllApps(_ context.Context, cpID string) error { return f.note(cpID, "killall") }
-func (f *fakePort) AdbOperate(_ context.Context, cpID, operation string, _ []string, _ int) (*midplat.AdbOperateResult, error) {
-	if err := f.note(cpID, "adbOperate:"+operation); err != nil {
+func (f *fakePort) AdbEnableToken(_ context.Context, cpID string) (*midplat.ADBTokenContainer, error) {
+	if err := f.note(cpID, "adbEnableToken"); err != nil {
 		return nil, err
 	}
-	return &midplat.AdbOperateResult{AllSuccess: true, SuccessContainers: []string{cpID}}, nil
+	if f.adbToken != nil {
+		return f.adbToken, nil
+	}
+	return &midplat.ADBTokenContainer{ContainerID: cpID, LoginCode: "tk_demo", AdbAddress: cpID + ".test-adb.cphone.cn:30002"}, nil
 }
-func (f *fakePort) AdbWhitelist(_ context.Context, cpID string) ([]midplat.AdbWhitelistEntry, error) {
-	if err := f.note(cpID, "adbWhitelist"); err != nil {
+func (f *fakePort) AdbDisableToken(_ context.Context, cpID string) error {
+	return f.note(cpID, "adbDisableToken")
+}
+func (f *fakePort) AdbEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
+	return nil, nil
+}
+func (f *fakePort) Root(_ context.Context, _, cpID string, enable bool) error {
+	op := "rootEnable"
+	if !enable {
+		op = "rootDisable"
+	}
+	return f.note(cpID, op)
+}
+func (f *fakePort) RootEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
+	return f.rooted, nil
+}
+func (f *fakePort) RunLogs(_ context.Context, cpID string, _, _ int) (*midplat.RunLogPage, error) {
+	if err := f.note(cpID, "runLogs"); err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return &midplat.RunLogPage{PageNum: 1, PageSize: 20, TotalSize: 1, Data: []midplat.RunLogEntry{{LogNo: "LOG1", CpID: cpID, SessionStatus: "已关机"}}}, nil
 }
 func (f *fakePort) AdbInfo(_ context.Context, cpID string) (*midplat.CloudPhoneAdbInfo, error) {
 	if err := f.note(cpID, "adbInfo"); err != nil {
 		return nil, err
+	}
+	if f.adbInfo != nil {
+		return f.adbInfo, nil
 	}
 	return &midplat.CloudPhoneAdbInfo{CpID: cpID, AdbAddress: "10.0.0.1:5555", AdbToken: "tok", Status: "NORMAL"}, nil
 }
@@ -151,7 +177,7 @@ func provisionedPhone(t *testing.T, userID int, cpID string) int {
 
 func TestOpPassesCpIDAndChecksOwnership(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
-	f := &fakePort{}
+	f := &fakePort{statuses: map[string]string{"cp-aaa": "STOPPED"}} // 实时态：可开机
 	withFakeOps(t, f)
 
 	id := provisionedPhone(t, userA, "cp-aaa")
@@ -255,4 +281,59 @@ func TestOpDestroyRemovesLocalRecord(t *testing.T) {
 	// 本地档案应已删除
 	_, err := PhoneService.GetByID(userA, id)
 	assert.Error(t, err)
+}
+
+// TestAdbEnableReturnsTokenAndAddress 校验 enable 走 token 接口，
+// 以 enable 响应的 login_code / adb_address 为准，并 best-effort 从 §2.6 补过期时间。
+func TestAdbEnableReturnsTokenAndAddress(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	f := &fakePort{
+		adbToken: &midplat.ADBTokenContainer{ContainerID: "cp-aaa", LoginCode: "tk_zjdov8ohaevt", AdbAddress: "cp-aaa.test-adb.cphone.cn:30002"},
+		adbInfo:  &midplat.CloudPhoneAdbInfo{CpID: "cp-aaa", AdbToken: "tk_zjdov8ohaevt", AdbTokenExpiredAt: "2026-08-10T15:46:16", Status: "NORMAL"},
+	}
+	withFakeOps(t, f)
+	id := provisionedPhone(t, userA, "cp-aaa")
+
+	info, err := PhoneService.AdbEnable(userA, id)
+	require.NoError(t, err)
+	assert.True(t, info.Enabled)
+	assert.Equal(t, "tk_zjdov8ohaevt", info.AdbToken)
+	assert.Equal(t, "cp-aaa.test-adb.cphone.cn:30002", info.AdbAddress)
+	assert.Equal(t, "2026-08-10T15:46:16", info.AdbTokenExpiredAt)
+}
+
+// TestAdbEnableMissingLoginCodeErrors 校验中台没返回登录码时视为失败。
+func TestAdbEnableMissingLoginCodeErrors(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	f := &fakePort{adbToken: &midplat.ADBTokenContainer{ContainerID: "cp-aaa"}} // 无 login_code
+	withFakeOps(t, f)
+	id := provisionedPhone(t, userA, "cp-aaa")
+
+	_, err := PhoneService.AdbEnable(userA, id)
+	require.Error(t, err)
+}
+
+// TestAdbDisableCallsTokenDisable 校验关闭走 token disable。
+func TestAdbDisableCallsTokenDisable(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	f := &fakePort{}
+	withFakeOps(t, f)
+	id := provisionedPhone(t, userA, "cp-aaa")
+
+	require.NoError(t, PhoneService.AdbDisable(userA, id))
+	assert.Equal(t, "adbDisableToken", f.lastOp)
+}
+
+// TestAdbInfoDataNotExistDegradesToDisabled 覆盖 P1-A10：底层对不存在 cpId 降级返回空信息，
+// service 应呈现为「未开启」而非报错。
+func TestAdbInfoDataNotExistDegradesToDisabled(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	f := &fakePort{adbInfo: &midplat.CloudPhoneAdbInfo{CpID: "cp-aaa"}} // 无 token = 未开启
+	withFakeOps(t, f)
+	id := provisionedPhone(t, userA, "cp-aaa")
+
+	info, err := PhoneService.AdbInfo(userA, id)
+	require.NoError(t, err)
+	assert.False(t, info.Enabled)
+	assert.Empty(t, info.AdbToken)
 }

@@ -16,6 +16,8 @@ export interface CloudPhone {
   proxy_id: number
   remark: string
   tags?: Tag[]
+  adb_enabled?: boolean
+  rooted?: boolean
   created_at: string
   updated_at: string
 }
@@ -88,28 +90,27 @@ export interface PhoneFile {
   created?: number
 }
 
-/** ADB 连接信息（后端从中台详情抽出，enabled 由是否有 token 派生） */
+/** 运行会话日志一条（中台 §2.9，展示值由中台格式化好） */
+export interface RunLog {
+  rowNo: number
+  logNo: string
+  cpId: string
+  vmUid?: string
+  powerOnTime: string
+  powerOffTime: string // 运行中返回「运行中」
+  duration: string // 如 25m / 3h12m
+  powerOffReason: string // 正常关机 / 容器异常 / …
+  powerOffReasonCode?: string
+  sessionStatus: string // 运行中 / 已关机
+  tenantName?: string
+  updateTime?: string
+}
+
+/** ADB 连接信息（后端从中台 §2.6 详情抽出，enabled 由是否有 token 派生） */
 export interface AdbInfo {
   enabled: boolean
   adbAddress: string
   adbToken: string
   adbTokenExpiredAt: string
   status: string
-}
-
-/** ADB 白名单一条（中台 §3.2） */
-export interface AdbWhitelistEntry {
-  id: number
-  cpId: string
-  vmId: string
-  ipAddress: string
-  ipDesc?: string
-  status: number
-  statusDesc?: string
-  expireTime?: string
-  expired?: boolean
-  createTime?: string
-  updateTime?: string
-  createBy?: string
-  updateBy?: string
 }

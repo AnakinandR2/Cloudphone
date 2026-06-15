@@ -12,7 +12,7 @@ import (
 //
 //	CREATING        创建中（已调中台 create，等待 provisioning + 自动开机完成；期间禁止任何操作）
 //	CREATE_FAILED   创建失败（provisioning 超时/失败；仅可销毁）
-//	CREATED         已创建未开机（仅「无中台」降级路径会用到；中台 create 强制 autoStart 不经此态）
+//	CREATED         已创建未开机（needStart=false：中台创建完成且未开机后收敛于此；无中台降级也用此态）
 //	STARTING        开机中（已调中台 开机，等待 NORMAL；期间禁止任何操作）
 //	RUNNING         运行中（创建完成即到此态；可关机、可远控；不可销毁；需先停止）
 //	STOPPING        关机中（已调中台 关机，等待中台 STOPPED；期间禁止任何操作）
@@ -27,12 +27,14 @@ const (
 	StatusStopping     = "STOPPING"
 	StatusStopped      = "STOPPED"
 	StatusDestroying   = "DESTROYING"
+	// StatusUnknown 展示态：中台不可用/查不到该 cp 时的实时状态，不回退本地档案值。
+	StatusUnknown = "UNKNOWN"
 )
 
 // 中台云手机实时状态（CloudPhoneEnum，经 batch-query-status 查询）。
 // 注意：这套枚举与「服务器/VM 状态」(ONLINE/OFFLINE) 不是一套——云手机就绪是 NORMAL 不是 ONLINE。
 const (
-	MidplatReady     = "NORMAL"    // 已开机/就绪 —— 创建完成 / 开机成功的收敛信号（cp/create 强制 autoStart=true）
+	MidplatReady     = "NORMAL"    // 已开机/就绪 —— 开机成功的收敛信号
 	MidplatStopped   = "STOPPED"   // 已关机 —— 关机成功的收敛信号
 	MidplatDestroyed = "DESTROYED" // 已销毁
 )
@@ -77,8 +79,12 @@ type CloudPhone struct {
 	ProxyID uint   `gorm:"not null;default:0" json:"proxy_id"`
 	Remark  string `gorm:"type:varchar(255)" json:"remark"`
 	// Tags 云手机标签（多个）；DB 以 JSON 数组字符串存于 tags 列，API 输出为数组。
-	TagsJSON  string    `gorm:"column:tags;type:varchar(1000)" json:"-"`
-	Tags      []Tag     `gorm:"-" json:"tags"`
+	TagsJSON string `gorm:"column:tags;type:varchar(1000)" json:"-"`
+	Tags     []Tag  `gorm:"-" json:"tags"`
+	// AdbEnabled 由列表富化从中台 §2.6 实时判定（adbToken 非空），不入库；仅列表/卡片标记用。
+	AdbEnabled bool `gorm:"-" json:"adb_enabled"`
+	// Rooted 由列表富化从中台 §2.6 实时判定（isRooted），不入库；供列表标记 + 前端选对的 root 开关动作。
+	Rooted    bool      `gorm:"-" json:"rooted"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

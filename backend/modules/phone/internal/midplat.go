@@ -61,13 +61,25 @@ type midplatPort interface {
 	StopApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error
 	KillAllApps(ctx context.Context, cpID string) error
 
-	// ADB（spec §3.1 operate / §3.2 whitelist / §2.16 page 取连接信息）。
-	AdbOperate(ctx context.Context, cpID, operation string, whiteIP []string, ttl int) (*midplat.AdbOperateResult, error)
-	AdbWhitelist(ctx context.Context, cpID string) ([]midplat.AdbWhitelistEntry, error)
+	// ADB Token 接管（spec v3.25.9 §3.5）。enable 签发 token+地址，disable 吊销，§2.6 补过期时间。
+	AdbEnableToken(ctx context.Context, cpID string) (*midplat.ADBTokenContainer, error)
+	AdbDisableToken(ctx context.Context, cpID string) error
 	AdbInfo(ctx context.Context, cpID string) (*midplat.CloudPhoneAdbInfo, error)
 
 	// Statuses 批量查询云手机的实时状态（cpId → status），供列表用中台真实状态覆盖本地档案。
 	Statuses(ctx context.Context, cpIDs []string) (map[string]string, error)
+
+	// AdbEnabledMap 批量查询哪些 cp 已开 ADB（cpId → 是否有 adbToken），供列表标记。
+	AdbEnabledMap(ctx context.Context, cpIDs []string) (map[string]bool, error)
+
+	// Root 切换单台云手机的 root 权限（enable=true 开启 / false 关闭）。需 vmID + cpID。
+	Root(ctx context.Context, vmID, cpID string, enable bool) error
+
+	// RootEnabledMap 批量查询哪些 cp 已 root（cpId → isRooted），供列表标记 + 操作门禁。
+	RootEnabledMap(ctx context.Context, cpIDs []string) (map[string]bool, error)
+
+	// RunLogs 分页查询某台云手机的运行会话日志（spec §2.9）。
+	RunLogs(ctx context.Context, cpID string, page, size int) (*midplat.RunLogPage, error)
 }
 
 // sdkAdapter 用真实 midplat.Client 实现 midplatPort（把单台调用包成 SDK 的批量入参）。
@@ -128,6 +140,7 @@ func (a *sdkAdapter) Create(ctx context.Context, args CreateArgs) (*CreateResult
 
 	resp, err := a.c.CreateCloudPhones(ctx, midplat.CreateCPRequest{
 		Number:              1,
+		NeedStart:           false, // 创建后默认不开机
 		VmID:                srv.VmID,
 		ImageID:             imageID,
 		PlanID:              plan.ID,
@@ -322,17 +335,38 @@ func (a *sdkAdapter) KillAllApps(ctx context.Context, cpID string) error {
 	return err
 }
 
-func (a *sdkAdapter) AdbOperate(ctx context.Context, cpID, operation string, whiteIP []string, ttl int) (*midplat.AdbOperateResult, error) {
-	return a.c.OperateAdb(ctx, midplat.AdbOperateRequest{
-		Operation:  operation,
-		Containers: []string{cpID},
-		WhiteIP:    whiteIP,
-		TTL:        ttl,
-	})
+func (a *sdkAdapter) AdbEnableToken(ctx context.Context, cpID string) (*midplat.ADBTokenContainer, error) {
+	// 默认有效期 1 天（validTime 单位为天）。注意：实测中台当前忽略此值、固定 +60 天，
+	// 这里按业务期望显式下发 1，待中台修复后即生效。
+	res, err := a.c.EnableADBToken(ctx, midplat.ADBTokenRequest{Containers: []string{cpID}, ValidTime: 1})
+	if err != nil {
+		return nil, err
+	}
+	if res == nil || len(res.Data.Containers) == 0 {
+		return nil, nil
+	}
+	return &res.Data.Containers[0], nil
 }
 
-func (a *sdkAdapter) AdbWhitelist(ctx context.Context, cpID string) ([]midplat.AdbWhitelistEntry, error) {
-	return a.c.GetAdbWhitelist(ctx, cpID)
+func (a *sdkAdapter) AdbDisableToken(ctx context.Context, cpID string) error {
+	_, err := a.c.DisableADBToken(ctx, midplat.ADBTokenRequest{Containers: []string{cpID}})
+	return err
+}
+
+func (a *sdkAdapter) AdbEnabledMap(ctx context.Context, cpIDs []string) (map[string]bool, error) {
+	return a.c.BatchQueryAdbEnabled(ctx, cpIDs)
+}
+
+func (a *sdkAdapter) Root(ctx context.Context, vmID, cpID string, enable bool) error {
+	return a.c.UpdateRoot(ctx, midplat.UpdateRootRequest{VmID: vmID, Containers: []string{cpID}, Root: enable})
+}
+
+func (a *sdkAdapter) RootEnabledMap(ctx context.Context, cpIDs []string) (map[string]bool, error) {
+	return a.c.BatchQueryRootEnabled(ctx, cpIDs)
+}
+
+func (a *sdkAdapter) RunLogs(ctx context.Context, cpID string, page, size int) (*midplat.RunLogPage, error) {
+	return a.c.QueryRunLogs(ctx, midplat.RunLogQueryRequest{Page: page, PageSize: size, CpID: cpID})
 }
 
 func (a *sdkAdapter) AdbInfo(ctx context.Context, cpID string) (*midplat.CloudPhoneAdbInfo, error) {

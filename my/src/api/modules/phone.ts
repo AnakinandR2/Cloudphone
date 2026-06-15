@@ -1,6 +1,5 @@
 import type {
   AdbInfo,
-  AdbWhitelistEntry,
   CloudPhone,
   CloudPhoneCreate,
   CloudPhoneListParams,
@@ -8,6 +7,7 @@ import type {
   CloudPhoneUpdate,
   InstalledApp,
   PhoneFile,
+  RunLog,
   Tag,
   WebRTCAuth,
 } from '@/types/phone'
@@ -107,17 +107,18 @@ export default {
   uninstallApp: (id: number, payload: { appIds?: number[], packageNames?: string[] }) =>
     api.post<unknown, R<null>>(`phone/${id}/apps/uninstall`, payload),
 
-  // ---- ADB（中台 §3.1 operate / §3.2 whitelist / §2.16 page 连接信息）----
+  // ---- 运行日志（中台 §2.9，服务端分页）----
+  runLogs: (id: number, params: { page: number, size: number }) =>
+    api.get<unknown, R<{ list: RunLog[], total: number }>>(`phone/${id}/run-logs`, { params }),
+
+  // ---- ADB Token 接管（中台 v3.25.9 §3.5 token/enable·disable / §2.6 连接信息）。不管理白名单 ----
   adbInfo: (id: number) => api.get<unknown, R<AdbInfo>>(`phone/${id}/adb`),
 
-  adbEnable: (id: number, payload: { whiteIp?: string[], ttl?: number }) =>
-    api.post<unknown, R<AdbInfo>>(`phone/${id}/adb/enable`, payload),
+  // 开启即续期：再次调用签发全新 token（旧 token 失效）。有效期由中台固定，无需入参。
+  adbEnable: (id: number) => api.post<unknown, R<AdbInfo>>(`phone/${id}/adb/enable`),
 
   adbDisable: (id: number) => api.post<unknown, R<null>>(`phone/${id}/adb/disable`),
 
-  adbWhitelist: (id: number) =>
-    api.get<unknown, R<AdbWhitelistEntry[]>>(`phone/${id}/adb/whitelist`),
-
-  adbUpdateWhitelist: (id: number, whiteIp: string[]) =>
-    api.post<unknown, R<null>>(`phone/${id}/adb/whitelist`, { whiteIp }),
+  // ---- Root 开关（中台 §3.4.1 update-root，同步生效，需已开机）----
+  root: (id: number, enable: boolean) => api.post<unknown, R<null>>(`phone/${id}/root`, { enable }),
 }

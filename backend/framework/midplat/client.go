@@ -190,7 +190,15 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query neturl.V
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &HTTPError{Status: resp.StatusCode, Body: string(respBody)}
+		he := &HTTPError{Status: resp.StatusCode, Body: string(respBody)}
+		// best-effort：4xx 响应体若带统一包络，抽出 code/message（如 P1-A10 DATA_NOT_EXIST），
+		// 让上层能结构化判断而不必字符串匹配 Body。解析失败则保持原状。
+		var env Envelope
+		if json.Unmarshal(respBody, &env) == nil {
+			he.Code = env.Code
+			he.Message = env.Message
+		}
+		return nil, he
 	}
 
 	var env Envelope

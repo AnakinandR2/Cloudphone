@@ -12,6 +12,7 @@ import {
   FolderOpen,
   Keyboard,
   Maximize,
+  Mic,
   Monitor,
   MoreHorizontal,
   Power,
@@ -21,7 +22,9 @@ import {
   RotateCw,
   Search,
   SignalHigh,
+  Smartphone,
   Square,
+  Video,
   Volume1,
   Volume2,
   VolumeX,
@@ -51,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Switch } from '@/components/ui/switch'
 import {
   Tooltip,
   TooltipContent,
@@ -75,6 +79,27 @@ const {
   connState,
   connStatusText,
   connected,
+  controlReady,
+  landscape,
+  rotateDevice,
+  rttMs,
+  latencyLevel,
+  videoInjecting,
+  audioInjecting,
+  videoInjectBusy,
+  audioInjectBusy,
+  videoInputs,
+  audioInputs,
+  selectedVideoId,
+  selectedAudioId,
+  mirrorEnabled,
+  cameraPreviewStream,
+  refreshMediaDevices,
+  toggleVideoInject,
+  toggleAudioInject,
+  setVideoDevice,
+  setAudioDevice,
+  setMirror,
   isMuted,
   resOptions,
   qualityOptions,
@@ -102,6 +127,8 @@ const aspect = computed(() => {
     return `${streamW.value}/${streamH.value}`
   return `${deviceWidth.value}/${deviceHeight.value}`
 })
+// 横屏：实际推流宽>高（设备旋转后推流分辨率交换）。横屏时画面按可用区域等比收纳，避免撑爆窗口。
+const isLandscape = computed(() => streamW.value > 0 && streamW.value > streamH.value)
 
 // 标题写进 html title（替代原第一行），并带上连接状态（如「控制就绪」）。
 const docTitle = computed(() => {
@@ -116,6 +143,12 @@ watch(docTitle, (v) => {
 function onSettingChange() {
   if (connState.value === 'connected' || connState.value === 'connecting')
     retry()
+}
+
+// 旋转设备：发 rotate_device 指令，设备旋转后推流分辨率交换，由 onVideoReady 自动重排窗口。
+function onRotate() {
+  if (!rotateDevice())
+    toast.error(t('phone.rc.rotateFail'))
 }
 
 function fullscreen() {
@@ -199,8 +232,8 @@ function closeShot() {
   shotUrl.value = null
 }
 
-// 侧栏展开面板：display=显示参数 / keys=按键 / files=文件管理 / apps=应用 / upload=上传。
-type Panel = 'display' | 'keys' | 'files' | 'apps' | 'upload' | null
+// 侧栏展开面板：display=显示参数 / keys=按键 / files=文件管理 / apps=应用 / upload=上传 / camera=摄像头注入。
+type Panel = 'display' | 'keys' | 'files' | 'apps' | 'upload' | 'camera' | null
 const activePanel = ref<Panel>(null)
 
 // 布局常量（与模板里的宽度保持一致；无 padding / gap，元素直接相贴）。
@@ -219,6 +252,8 @@ function panelWidth(p: Panel): number {
       return 380 // w-[380px]
     case 'upload':
       return 380 // w-[380px]
+    case 'camera':
+      return 280 // w-[280px]
     default:
       return 0
   }
@@ -230,7 +265,10 @@ function setWindowWidth(panel: Panel) {
   if (!vw || typeof window.resizeTo !== 'function')
     return
   const chrome = Math.max(0, window.outerWidth - window.innerWidth)
-  const inner = Math.round(vw + SIDEBAR_W + panelWidth(panel))
+  let inner = Math.round(vw + SIDEBAR_W + panelWidth(panel))
+  // 横屏画面很宽，限制窗口不超过屏幕可用宽度，避免「撑得巨大」。
+  const maxInner = (window.screen?.availWidth ?? inner) - chrome
+  inner = Math.min(inner, maxInner)
   window.resizeTo(inner + chrome, window.outerHeight)
 }
 
@@ -253,6 +291,63 @@ function togglePanel(name: Exclude<Panel, null>) {
   activePanel.value = name
 }
 
+// ---- 摄像头/麦克风注入（直播）：视频与音频相互独立 ----
+const cameraPreviewRef = ref<HTMLVideoElement | null>(null)
+watch(cameraPreviewStream, (s) => {
+  if (cameraPreviewRef.value)
+    cameraPreviewRef.value.srcObject = s ?? null
+})
+// 打开面板时刷新设备列表。
+watch(activePanel, (p) => {
+  if (p === 'camera')
+    refreshMediaDevices()
+})
+// 可注入：已连接且控制通道就绪。
+const canInject = computed(() => connected.value && controlReady.value)
+
+function mapCameraError(e: any): string {
+  if (typeof window !== 'undefined' && window.isSecureContext === false)
+    return t('phone.rc.cameraErrInsecure')
+  switch (e?.name) {
+    case 'NotAllowedError': return t('phone.rc.cameraErrDenied')
+    case 'NotFoundError':
+    case 'OverconstrainedError': return t('phone.rc.cameraErrNoDevice')
+    case 'InvalidStateError': return t('phone.rc.cameraErrNotReady')
+    default: return t('phone.rc.cameraErrGeneric')
+  }
+}
+async function onToggleVideo() {
+  try {
+    await toggleVideoInject()
+    toast.success(videoInjecting.value ? t('phone.rc.cameraOn') : t('phone.rc.cameraOff'))
+  }
+  catch (e) {
+    toast.error(mapCameraError(e))
+  }
+}
+async function onToggleAudio() {
+  try {
+    await toggleAudioInject()
+    toast.success(audioInjecting.value ? t('phone.rc.micOn') : t('phone.rc.micOff'))
+  }
+  catch (e) {
+    toast.error(mapCameraError(e))
+  }
+}
+async function onToggleMirror(on: boolean) {
+  try { await setMirror(on) }
+  catch (e) { toast.error(mapCameraError(e)) }
+}
+// 设备下拉用可写 computed 桥接（set 里切换设备并 toast 错误）。
+const videoDeviceModel = computed({
+  get: () => selectedVideoId.value,
+  set: (v: string) => { setVideoDevice(v).catch(e => toast.error(mapCameraError(e))) },
+})
+const audioDeviceModel = computed({
+  get: () => selectedAudioId.value,
+  set: (v: string) => { setAudioDevice(v).catch(e => toast.error(mapCameraError(e))) },
+})
+
 // 画面尺寸就绪 / 变化时：记录真实串流比例并（等比例应用到 DOM 后）贴合窗口。
 async function onVideoReady() {
   const v = videoRef.value
@@ -264,8 +359,27 @@ async function onVideoReady() {
   fitWindow()
 }
 
-// 网络状况（模拟数据，功能开发中）：信号格固定绿色 + 固定延迟。
-const netLatency = 37
+// 网络状况：来自 WebRTC getStats() 的真实 RTT（latencyLevel 三档）。
+const netColorClass = computed(() => {
+  if (!connected.value)
+    return 'text-muted-foreground'
+  switch (latencyLevel.value) {
+    case 'good': return 'text-green-500'
+    case 'fair': return 'text-amber-500'
+    case 'poor': return 'text-red-500'
+    default: return 'text-muted-foreground'
+  }
+})
+const netTipText = computed(() => {
+  if (!connected.value)
+    return t('phone.rc.netOffline')
+  if (rttMs.value == null)
+    return t('phone.rc.netMeasuring')
+  const q = latencyLevel.value === 'good'
+    ? t('phone.rc.netGood')
+    : latencyLevel.value === 'fair' ? t('phone.rc.netFair') : t('phone.rc.netPoor')
+  return `${q} · ${t('phone.rc.netRtt', { ms: rttMs.value })}`
+})
 
 // 本次使用计时（前端模拟，尚未接入计费）。
 const elapsed = ref(0)
@@ -308,11 +422,13 @@ onBeforeUnmount(() => {
     <div class="flex min-h-0 flex-1 items-stretch">
       <div
         ref="frameRef"
-        class="relative flex h-full min-h-0 shrink-0 items-center"
+        class="relative flex h-full min-h-0 items-center justify-center"
+        :class="isLandscape ? 'min-w-0 flex-1' : 'shrink-0'"
       >
         <video
           ref="videoRef"
-          class="h-full w-auto max-w-full touch-none select-none bg-black object-contain"
+          class="touch-none select-none bg-black object-contain"
+          :class="isLandscape ? 'max-h-full max-w-full' : 'h-full w-auto max-w-full'"
           :style="{ aspectRatio: aspect }"
           autoplay
           playsinline
@@ -356,13 +472,13 @@ onBeforeUnmount(() => {
         <TooltipProvider :delay-duration="150">
           <Tooltip>
             <TooltipTrigger as-child>
-              <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
-                <SignalHigh class="size-4 text-green-500" />
+              <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5">
+                <SignalHigh class="size-4" :class="netColorClass" />
                 <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.net') }}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left" class="max-w-[220px] text-xs">
-              {{ t('phone.rc.netTip', { ms: netLatency }) }}
+              {{ netTipText }}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -414,11 +530,15 @@ onBeforeUnmount(() => {
           <Camera class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.screenshot') }}</span>
         </Button>
-        <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
-          <RotateCw class="size-4" />
+        <Button variant="ghost" :disabled="!controlReady" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="onRotate">
+          <Smartphone class="size-4 transition-transform" :class="landscape ? '-rotate-90' : ''" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.rotate') }}</span>
         </Button>
-        <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
+        <Button
+          :variant="activePanel === 'camera' ? 'secondary' : 'ghost'"
+          class="h-auto flex-col gap-1 px-0.5 py-1.5"
+          @click="togglePanel('camera')"
+        >
           <Radio class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.live') }}</span>
         </Button>
@@ -588,6 +708,99 @@ onBeforeUnmount(() => {
           class="flex w-[380px] shrink-0 flex-col overflow-hidden rounded-md border"
         >
           <RemoteUploadPanel :phone-id="id" />
+        </div>
+      </Transition>
+
+      <!-- 展开面板：摄像头/麦克风注入（直播）—— 把本机摄像头+麦克风推给云手机 -->
+      <Transition name="panel">
+        <div
+          v-if="activePanel === 'camera'"
+          class="flex w-[280px] shrink-0 flex-col gap-4 overflow-y-auto rounded-md border p-4"
+        >
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium">{{ t('phone.rc.cameraTitle') }}</span>
+            <span class="text-xs text-muted-foreground">{{ t('phone.rc.cameraDesc') }}</span>
+          </div>
+
+          <!-- ===== 摄像头 ===== -->
+          <div class="flex flex-col gap-2 rounded-md border p-3">
+            <div class="flex items-center gap-1.5 text-xs font-medium">
+              <Video class="size-3.5" /> {{ t('phone.rc.cameraSection') }}
+            </div>
+
+            <!-- 自拍预览 -->
+            <div class="relative aspect-[9/16] w-full overflow-hidden rounded-md border bg-black">
+              <video
+                ref="cameraPreviewRef"
+                class="size-full object-contain"
+                :class="mirrorEnabled ? 'scale-x-[-1]' : ''"
+                autoplay
+                playsinline
+                muted
+              />
+              <div v-if="!videoInjecting" class="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                {{ t('phone.rc.cameraPreviewOff') }}
+              </div>
+            </div>
+
+            <!-- 摄像头设备 -->
+            <NativeSelect v-if="videoInputs.length" v-model="videoDeviceModel" class="h-9 w-full">
+              <NativeSelectOption v-for="(c, i) in videoInputs" :key="c.deviceId" :value="c.deviceId">
+                {{ c.label || t('phone.rc.cameraDeviceN', { n: i + 1 }) }}
+              </NativeSelectOption>
+            </NativeSelect>
+            <div v-else class="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-muted-foreground">
+              {{ t('phone.rc.cameraNoDevice') }}
+            </div>
+
+            <!-- 镜像开关 -->
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-muted-foreground">{{ t('phone.rc.cameraMirror') }}</label>
+              <Switch :model-value="mirrorEnabled" @update:model-value="(v) => onToggleMirror(v === true)" />
+            </div>
+
+            <Button
+              size="sm"
+              class="gap-1"
+              :variant="videoInjecting ? 'destructive' : 'default'"
+              :disabled="!canInject || videoInjectBusy || (!videoInjecting && !videoInputs.length)"
+              @click="onToggleVideo"
+            >
+              <RefreshCw v-if="videoInjectBusy" class="size-4 animate-spin" />
+              <Video v-else class="size-4" />
+              {{ videoInjecting ? t('phone.rc.cameraStop') : t('phone.rc.cameraStart') }}
+            </Button>
+          </div>
+
+          <!-- ===== 麦克风 ===== -->
+          <div class="flex flex-col gap-2 rounded-md border p-3">
+            <div class="flex items-center gap-1.5 text-xs font-medium">
+              <Mic class="size-3.5" /> {{ t('phone.rc.micSection') }}
+            </div>
+
+            <NativeSelect v-if="audioInputs.length" v-model="audioDeviceModel" class="h-9 w-full">
+              <NativeSelectOption v-for="(c, i) in audioInputs" :key="c.deviceId" :value="c.deviceId">
+                {{ c.label || t('phone.rc.micDeviceN', { n: i + 1 }) }}
+              </NativeSelectOption>
+            </NativeSelect>
+            <div v-else class="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-muted-foreground">
+              {{ t('phone.rc.micNoDevice') }}
+            </div>
+
+            <Button
+              size="sm"
+              class="gap-1"
+              :variant="audioInjecting ? 'destructive' : 'default'"
+              :disabled="!canInject || audioInjectBusy || (!audioInjecting && !audioInputs.length)"
+              @click="onToggleAudio"
+            >
+              <RefreshCw v-if="audioInjectBusy" class="size-4 animate-spin" />
+              <Mic v-else class="size-4" />
+              {{ audioInjecting ? t('phone.rc.micStop') : t('phone.rc.micStart') }}
+            </Button>
+          </div>
+
+          <p v-if="!canInject" class="text-xs text-muted-foreground">{{ t('phone.rc.cameraNeedConn') }}</p>
         </div>
       </Transition>
     </div>

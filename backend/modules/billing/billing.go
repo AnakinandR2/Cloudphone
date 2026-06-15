@@ -5,6 +5,8 @@
 package billing
 
 import (
+	"time"
+
 	billinginternal "manager-backend/modules/billing/internal"
 
 	"gorm.io/gorm"
@@ -37,6 +39,27 @@ const (
 	DunningFrozen   = billinginternal.DunningFrozen
 	DunningRecycled = billinginternal.DunningRecycled
 )
+
+// ---- 时长费计量（Metering，供 phone 结算编排 + 护栏调用）----
+
+// RuntimeInterval 一段运行区间（End=nil 表示运行中）。
+type RuntimeInterval = billinginternal.RuntimeInterval
+
+// RuntimeCoverage 覆盖能力快照。
+type RuntimeCoverage = billinginternal.RuntimeCoverage
+
+// SettleResult 一次结算扣费结果。
+type SettleResult = billinginternal.SettleResult
+
+// SettleRuntime 结算某用户已发生的运行分钟（覆盖优先级扣费，幂等）。
+func SettleRuntime(userID int, windowEnd time.Time, intervals []RuntimeInterval) (SettleResult, error) {
+	return billinginternal.RuntimeService.SettleRuntime(userID, windowEnd, intervals)
+}
+
+// GetRuntimeCoverage 读用户覆盖能力（护栏用）。
+func GetRuntimeCoverage(userID int) (RuntimeCoverage, error) {
+	return billinginternal.RuntimeService.RuntimeCoverage(userID)
+}
 
 // InitForTest 测试用：供其他模块装配 billing。
 func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }

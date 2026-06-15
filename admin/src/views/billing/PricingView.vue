@@ -58,6 +58,34 @@ async function load() {
 
 onMounted(load)
 
+// ——— 时长费配置（单价 元/台/分钟，输入用元、存分）———
+const rtUnitYuan = ref(0)
+const rtLowYuan = ref(0)
+const rtSaving = ref(false)
+async function loadRuntimeConfig() {
+  try {
+    const { data } = await billingApi.getRuntimeConfig()
+    rtUnitYuan.value = data.unit_price_cents_per_minute / 100
+    rtLowYuan.value = data.low_balance_alert_cents / 100
+  }
+  catch { /* ignore */ }
+}
+async function saveRuntimeConfig() {
+  rtSaving.value = true
+  try {
+    await billingApi.saveRuntimeConfig({
+      unit_price_cents_per_minute: Math.round(rtUnitYuan.value * 100),
+      low_balance_alert_cents: Math.round(rtLowYuan.value * 100),
+    })
+    toast.success(t('crud.updateOk'))
+  }
+  catch {
+    toast.error(t('billing.loadFail'))
+  }
+  finally { rtSaving.value = false }
+}
+onMounted(loadRuntimeConfig)
+
 const CATEGORIES = ['instance_fee', 'boot_pack', 'time_pack'] as const
 
 function catLabel(cat: string) {
@@ -186,6 +214,27 @@ async function remove(s: Sku) {
 
 <template>
   <div class="flex flex-col gap-6">
+    <!-- 时长费配置 -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('billing.runtimeConfigTitle') }}</CardTitle>
+        <CardDescription>{{ t('billing.runtimeConfigDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent class="flex flex-wrap items-end gap-4">
+        <div class="flex flex-col gap-1.5">
+          <Label>{{ t('billing.rtUnitPrice') }}</Label>
+          <Input v-model.number="rtUnitYuan" type="number" min="0" step="0.01" class="w-40" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <Label>{{ t('billing.rtLowBalance') }}</Label>
+          <Input v-model.number="rtLowYuan" type="number" min="0" step="0.01" class="w-40" />
+        </div>
+        <Button v-auth="'billing:manage'" :disabled="rtSaving" @click="saveRuntimeConfig">
+          {{ t('crud.save') }}
+        </Button>
+      </CardContent>
+    </Card>
+
     <Card>
       <CardHeader class="flex-row items-start justify-between gap-3 space-y-0">
         <div class="space-y-1.5">

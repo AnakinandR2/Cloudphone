@@ -460,6 +460,7 @@ export default {
     status_STOPPING: '关机中',
     status_STOPPED: '已停止',
     status_DESTROYING: '销毁中',
+    status_UNKNOWN: '同步中',
     status_ERROR: '异常',
     createTitle: '新增云手机',
     editTitle: '编辑云手机',
@@ -645,6 +646,12 @@ export default {
     app: {
       title: '应用管理',
       desc: '从我的应用 / 应用市场安装，或卸载已安装的应用。',
+    },
+    root: {
+      enable: '开启 Root',
+      disable: '关闭 Root',
+      enableOk: 'Root 已开启（约 8 秒生效）',
+      disableOk: 'Root 已关闭',
     },
     runLog: {
       title: '运行日志',
@@ -1032,6 +1039,14 @@ export default {
     colBatchSourceRef: '来源单号',
     colBatchCreatedAt: '创建时间',
     // Phase 2 占位
+    runtimeUsageTitle: '运行用量（时长费）',
+    runtimeUsageDesc: '按真实开机时长计费的扣费切片，倒序展示。台·分钟 = 超出开机席位并发的运行时长。',
+    runtimeUsageEmpty: '暂无运行用量',
+    rtWindow: '结算窗口',
+    rtBillable: '应计台·分钟',
+    rtCovered: '席位覆盖',
+    rtPack: '扣时长包(分钟)',
+    rtBalance: '扣余额',
     phase2Title: '开机用量明细（Phase 2）',
     phase2Desc: '开机用量明细将在中台开机时长接口就绪后上线（Phase 2），当前页面不显示模拟数据。',
     // 试用领取

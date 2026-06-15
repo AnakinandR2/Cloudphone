@@ -4,6 +4,7 @@ import type {
   DiscountTier,
   Order,
   OrderDetail,
+  RuntimeConfig,
   Sku,
   SkuCreate,
   SkuUpdate,
@@ -29,6 +30,10 @@ export default {
   createTier: (skuId: number, d: TierCreate) => api.post<unknown, R<DiscountTier>>(`admin/billing/skus/${skuId}/tiers`, d),
   updateTier: (tierId: number, d: TierUpdate) => api.put<unknown, R<DiscountTier>>(`admin/billing/tiers/${tierId}`, d),
   deleteTier: (tierId: number) => api.delete<unknown, R<null>>(`admin/billing/tiers/${tierId}`),
+
+  // 时长费配置
+  getRuntimeConfig: () => api.get<unknown, R<RuntimeConfig>>('admin/billing/runtime-config'),
+  saveRuntimeConfig: (d: RuntimeConfig) => api.put<unknown, R<RuntimeConfig>>('admin/billing/runtime-config', d),
 
   // 订单
   orders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>

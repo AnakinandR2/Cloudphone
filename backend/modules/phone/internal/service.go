@@ -45,7 +45,9 @@ func (s *serviceImpl) GetList(userID, page, size int, kw, status, tag, order, so
 	if err != nil {
 		return nil, 0, err
 	}
-	s.enrichStatuses(items)
+	s.resolveLiveStatuses(items)
+	s.enrichAdb(items)
+	s.enrichRoot(items)
 	return items, total, nil
 }
 
@@ -111,18 +113,53 @@ func mapMidplatStatus(m string) string {
 		return StatusCreating
 	case "INIT_FAILED":
 		return StatusCreateFailed
-	case "DISTROYING", "DESTROYING": // 中台 wire 协议拼写为 DISTROYING
+	case "DISTROYING", "DESTROYING", "DESTROYED": // 中台 wire 协议拼写为 DISTROYING；已销毁也展示为销毁中
 		return StatusDestroying
-	case "DESTROYED", "":
-		return "" // 已销毁 / 查不到：不覆盖，交给本地态与销毁 worker 处理
 	default:
 		return m // 其它中台态（REBOOTING/RESETTING/FAULTED…）原样透出，保持与中台一致
 	}
 }
 
-// enrichStatuses 用中台实时状态覆盖「已开通（有 cpId）」云手机的展示状态（只改返回值，不写库）。
-// best-effort：中台未配置/查询失败/查不到该 cp 时静默保留本地档案状态。
-func (s *serviceImpl) enrichStatuses(items []CloudPhone) {
+// resolveLiveStatuses 把「已开通（有 cpId）」云手机的展示状态改为中台实时态（只改返回值，不写库）。
+// 这是所有用户可见读的统一入口：中台查询失败 / 该 cp 不在返回里 → UNKNOWN（不回退本地档案值）；
+// 未开通（无 cpId）→ 保留本地 CREATED/CREATE_FAILED（中台无可查）。
+func (s *serviceImpl) resolveLiveStatuses(items []CloudPhone) {
+	if s.ops == nil {
+		return // 本地降级无中台：均为未开通(无 cpId)，保留本地态
+	}
+	cpIDs := make([]string, 0, len(items))
+	for i := range items {
+		if items[i].CpID != "" {
+			cpIDs = append(cpIDs, items[i].CpID)
+		}
+	}
+	if len(cpIDs) == 0 {
+		return
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	statuses, err := s.ops.Statuses(ctx, cpIDs)
+	queryFailed := err != nil
+	for i := range items {
+		if items[i].CpID == "" {
+			continue // 未开通：保留本地态
+		}
+		if queryFailed {
+			items[i].Status = StatusUnknown
+			continue
+		}
+		raw, ok := statuses[items[i].CpID]
+		if !ok || raw == "" {
+			items[i].Status = StatusUnknown // 中台查不到该 cp
+			continue
+		}
+		items[i].Status = mapMidplatStatus(raw)
+	}
+}
+
+// enrichAdb 批量标记「已开 ADB」（adbToken 非空），供列表/卡片显示安卓图标。
+// best-effort：中台未配置/查询失败时静默保留 false。
+func (s *serviceImpl) enrichAdb(items []CloudPhone) {
 	if s.ops == nil {
 		return
 	}
@@ -137,16 +174,41 @@ func (s *serviceImpl) enrichStatuses(items []CloudPhone) {
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	statuses, err := s.ops.Statuses(ctx, cpIDs)
+	enabled, err := s.ops.AdbEnabledMap(ctx, cpIDs)
 	if err != nil {
 		return
 	}
 	for i := range items {
-		if items[i].CpID == "" {
-			continue
+		if items[i].CpID != "" && enabled[items[i].CpID] {
+			items[i].AdbEnabled = true
 		}
-		if b := mapMidplatStatus(statuses[items[i].CpID]); b != "" {
-			items[i].Status = b
+	}
+}
+
+// enrichRoot 批量标记「已 root」（isRooted），供列表/卡片显示 + 前端选对的 root 开关动作。
+// best-effort：中台未配置/查询失败时静默保留 false。
+func (s *serviceImpl) enrichRoot(items []CloudPhone) {
+	if s.ops == nil {
+		return
+	}
+	cpIDs := make([]string, 0, len(items))
+	for i := range items {
+		if items[i].CpID != "" {
+			cpIDs = append(cpIDs, items[i].CpID)
+		}
+	}
+	if len(cpIDs) == 0 {
+		return
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	rooted, err := s.ops.RootEnabledMap(ctx, cpIDs)
+	if err != nil {
+		return
+	}
+	for i := range items {
+		if items[i].CpID != "" && rooted[items[i].CpID] {
+			items[i].Rooted = true
 		}
 	}
 }
@@ -157,6 +219,33 @@ func (s *serviceImpl) GetByID(userID, id int) (*CloudPhone, error) {
 		return nil, apperr.NotFound("云手机不存在")
 	}
 	return item, nil
+}
+
+// GetByIDDisplay 详情/单台用户读：状态走中台实时（查不到→UNKNOWN）。内部逻辑仍用 GetByID（本地态）。
+func (s *serviceImpl) GetByIDDisplay(userID, id int) (*CloudPhone, error) {
+	item, err := s.GetByID(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	one := []CloudPhone{*item}
+	s.resolveLiveStatuses(one)
+	return &one[0], nil
+}
+
+// liveStatus 查单台云手机的中台实时展示态；中台不可用/查不到 → UNKNOWN。供操作门禁用。
+func (s *serviceImpl) liveStatus(ctx context.Context, cpID string) string {
+	if s.ops == nil || cpID == "" {
+		return StatusUnknown
+	}
+	statuses, err := s.ops.Statuses(ctx, []string{cpID})
+	if err != nil {
+		return StatusUnknown
+	}
+	raw, ok := statuses[cpID]
+	if !ok || raw == "" {
+		return StatusUnknown
+	}
+	return mapMidplatStatus(raw)
 }
 
 // Create 创建一台云手机。
@@ -203,13 +292,13 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 		_ = billing.ReleaseInstanceSeat(userID)
 		return nil, err
 	}
-	// 入库创建任务：worker 轮询中台直到 cpId 状态 = ONLINE → CREATED；超时 → CREATE_FAILED。
+	// 入库创建任务：needStart=false，worker 轮询中台直到 cpId = STOPPED（已创建未开机）→ CREATED；超时 → CREATE_FAILED。
 	_ = s.repo.createTask(&CpTask{
 		UserID:        uint(userID),
 		CloudPhoneID:  item.ID,
 		CpID:          res.CpID,
 		Type:          TaskTypeCreate,
-		ExpectedState: MidplatReady,
+		ExpectedState: MidplatStopped,
 		Status:        TaskPending,
 		Deadline:      time.Now().Add(createTimeout),
 	})
@@ -223,7 +312,7 @@ func (s *serviceImpl) Update(userID, id int, req *CloudPhoneUpdate) (*CloudPhone
 	if err := s.repo.update(userID, id, updateFields(req)); err != nil {
 		return nil, err
 	}
-	return s.GetByID(userID, id)
+	return s.GetByIDDisplay(userID, id)
 }
 
 // Delete 销毁一台云手机（异步）。
@@ -236,9 +325,19 @@ func (s *serviceImpl) Delete(userID, id int) error {
 	if err != nil {
 		return err
 	}
-	switch p.Status {
-	case StatusCreating, StatusStarting, StatusStopping, StatusRunning, StatusDestroying:
-		return apperr.Validation("当前状态不可销毁，请先停止")
+	// 门禁按中台实时态判（与 UI 显示同源）：仅 STOPPED/CREATED/CREATE_FAILED 可销毁。
+	if p.CpID != "" && s.ops != nil {
+		ctx, cancel := opCtx()
+		live := s.liveStatus(ctx, p.CpID)
+		cancel()
+		switch live {
+		case StatusStopped, StatusCreated, StatusCreateFailed:
+			// 可销毁
+		case StatusUnknown:
+			return apperr.Validation("状态未知，请稍后重试")
+		default:
+			return apperr.Validation("当前状态不可销毁，请先停止")
+		}
 	}
 	if p.CpID == "" || s.ops == nil {
 		if err := s.repo.delete(userID, id); err != nil {
@@ -304,7 +403,7 @@ func (s *serviceImpl) AdminList(page, size int, kw, status, tag string, userID i
 	if err != nil {
 		return nil, 0, err
 	}
-	s.enrichStatuses(items)
+	s.resolveLiveStatuses(items)
 	return items, total, nil
 }
 
@@ -355,6 +454,12 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 	ctx, cancel := opCtx()
 	defer cancel()
 
+	// 门禁按中台实时态判（与 UI 显示同源），UNKNOWN 一律拒绝。
+	live := s.liveStatus(ctx, p.CpID)
+	if live == StatusUnknown {
+		return apperr.Validation("状态未知，请稍后重试")
+	}
+
 	if operation == "开机" {
 		frozen, err := billing.IsFrozen(userID)
 		if err != nil {
@@ -363,7 +468,7 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		if frozen {
 			return apperr.Forbidden("账户已冻结，无法开机，请续费实例席位")
 		}
-		if p.Status != StatusCreated && p.Status != StatusStopped {
+		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}
 		if err := s.ops.StartOrShutdown(ctx, p.CpID, "开机"); err != nil {
@@ -385,7 +490,7 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 	}
 
 	// 关机：仅 RUNNING 可关机 → 置 STOPPING + 关机任务，worker 轮询中台到 STOPPED 再收敛。
-	if p.Status != StatusRunning {
+	if live != StatusRunning {
 		return apperr.Validation("当前状态不可关机")
 	}
 	if err := s.ops.StartOrShutdown(ctx, p.CpID, "关机"); err != nil {
@@ -642,7 +747,7 @@ func (s *serviceImpl) KillAllApps(userID, id int) error {
 	return s.ops.KillAllApps(ctx, p.CpID)
 }
 
-// --- ADB（spec §3.1 operate / §3.2 whitelist / §2.16 page 连接信息）---
+// --- ADB Token 接管（spec v3.25.9 §3.5）。enable 签发 token，disable 吊销，§2.6 取连接信息 ---
 
 // AdbConnInfo 是返回给前台的 ADB 连接信息（含派生的 enabled）。
 type AdbConnInfo struct {
@@ -680,25 +785,59 @@ func (s *serviceImpl) AdbInfo(userID, id int) (*AdbConnInfo, error) {
 	return s.adbInfo(ctx, p.CpID)
 }
 
-// AdbEnable 开启 ADB（可带白名单 IP 与 token 有效期秒数），成功后回查连接信息返回。
-func (s *serviceImpl) AdbEnable(userID, id int, whiteIP []string, ttl int) (*AdbConnInfo, error) {
+// AdbEnable 开启 ADB（签发 Token）。token 有效期由中台后台配置固定（实测 +60 天，validTime 不生效）。
+// 「续期」复用本方法：再次 enable 即签发全新 token（旧 token 失效）。
+//
+// 连接地址 / token 以 enable 响应为准（§3.5.1 的 adb_address / login_code 最可靠）；
+// 过期时间 enable 不返回，best-effort 再查 §2.6 补上。
+func (s *serviceImpl) AdbEnable(userID, id int) (*AdbConnInfo, error) {
 	p, err := s.resolveCp(userID, id)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	res, err := s.ops.AdbOperate(ctx, p.CpID, "enable", whiteIP, ttl)
+	ct, err := s.ops.AdbEnableToken(ctx, p.CpID)
 	if err != nil {
 		return nil, err
 	}
-	if res != nil && !res.AllSuccess {
-		return nil, apperr.Internal(adbErr(res, "开启 ADB 失败"))
+	if ct == nil || ct.LoginCode == "" {
+		return nil, apperr.Internal("开启 ADB 失败：中台未返回登录码")
 	}
-	return s.adbInfo(ctx, p.CpID)
+	out := &AdbConnInfo{
+		Enabled:    true,
+		AdbAddress: ct.AdbAddress,
+		AdbToken:   ct.LoginCode,
+	}
+	// 过期时间 / 状态 best-effort 从 §2.6 补全（失败不影响开启结果）。
+	if info, ierr := s.ops.AdbInfo(ctx, p.CpID); ierr == nil && info != nil {
+		out.AdbTokenExpiredAt = info.AdbTokenExpiredAt
+		out.Status = info.Status
+		if out.AdbAddress == "" {
+			out.AdbAddress = info.AdbAddress
+		}
+	}
+	return out, nil
 }
 
-// AdbDisable 关闭 ADB。
+// RunLogs 分页查询某台云手机的运行会话日志（spec §2.9）。size 限定 1..100。
+func (s *serviceImpl) RunLogs(userID, id, page, size int) (*midplat.RunLogPage, error) {
+	p, err := s.resolveCp(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	return s.ops.RunLogs(ctx, p.CpID, page, size)
+}
+
+// AdbDisable 关闭 ADB（吊销 Token，中台幂等）。
 func (s *serviceImpl) AdbDisable(userID, id int) error {
 	p, err := s.resolveCp(userID, id)
 	if err != nil {
@@ -706,62 +845,48 @@ func (s *serviceImpl) AdbDisable(userID, id int) error {
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	res, err := s.ops.AdbOperate(ctx, p.CpID, "disable", []string{}, 0)
-	if err != nil {
-		return err
-	}
-	if res != nil && !res.AllSuccess {
-		return apperr.Internal(adbErr(res, "关闭 ADB 失败"))
-	}
-	return nil
+	return s.ops.AdbDisableToken(ctx, p.CpID)
 }
 
-// AdbUpdateWhitelist 更新 ADB 白名单 IP（覆盖式）。
-func (s *serviceImpl) AdbUpdateWhitelist(userID, id int, whiteIP []string) error {
+// Root 开启 / 关闭云手机 root 权限（§3.4.1 update-root）。
+//   - 前置：设备须 NORMAL（已开机）；开启要求当前未 root，关闭要求当前已 root。
+//   - 同步生效（~8s），不重启、不丢运行态；不建异步任务。
+func (s *serviceImpl) Root(userID, id int, enable bool) error {
 	p, err := s.resolveCp(userID, id)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	res, err := s.ops.AdbOperate(ctx, p.CpID, "update_whitelist", whiteIP, 0)
-	if err != nil {
-		return err
-	}
-	if res != nil && !res.AllSuccess {
-		return apperr.Internal(adbErr(res, "更新白名单失败"))
-	}
-	return nil
-}
 
-// AdbWhitelist 查询 ADB 白名单记录。
-func (s *serviceImpl) AdbWhitelist(userID, id int) ([]midplat.AdbWhitelistEntry, error) {
-	p, err := s.resolveCp(userID, id)
-	if err != nil {
-		return nil, err
+	// 门禁按中台实时态判（与 UI 同源），UNKNOWN 一律拒绝；root 仅在已开机时可切换。
+	live := s.liveStatus(ctx, p.CpID)
+	if live == StatusUnknown {
+		return apperr.Validation("状态未知，请稍后重试")
 	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	return s.ops.AdbWhitelist(ctx, p.CpID)
-}
+	if live != StatusRunning {
+		return apperr.Validation("请先开机后再切换 Root")
+	}
 
-// adbErr 从 operate 结果里挑一条可读错误。
-func adbErr(res *midplat.AdbOperateResult, fallback string) string {
-	if res.ErrorMessage != "" {
-		return res.ErrorMessage
-	}
-	for _, d := range res.ContainerDetails {
-		if !d.Success && d.Error != "" {
-			return d.Error
+	// 前置校验：避免对已是目标态的设备误调（中台会报「未 root/已 root」）。best-effort，查不到则放行交由中台判。
+	if rooted, rerr := s.ops.RootEnabledMap(ctx, []string{p.CpID}); rerr == nil {
+		if cur, ok := rooted[p.CpID]; ok {
+			if enable && cur {
+				return apperr.Validation("该云手机已开启 Root")
+			}
+			if !enable && !cur {
+				return apperr.Validation("该云手机未开启 Root")
+			}
 		}
 	}
-	return fallback
+
+	return s.ops.Root(ctx, p.VmID, p.CpID, enable)
 }
 
 // --- 异步任务收敛（worker tick）---
 
 // runDueTasks 处理所有未收敛任务：批量查中台实时状态，把云手机从过渡态收敛到稳定态。
-//   - 创建/开机：中台 NORMAL → RUNNING（任务 succeeded）；失败态/超时 → CREATE_FAILED / STOPPED（timeout）。
+//   - 创建（needStart=false）：中台 STOPPED → CREATED；开机：中台 NORMAL → RUNNING；失败态/超时 → CREATE_FAILED / STOPPED（timeout）。
 //   - 销毁：中台 DESTROYED 或查不到（已消失）→ 删本地档案；超时也强制删本地（best-effort）。
 //   - 其余：仍在等待，标记任务 running。
 //
@@ -823,7 +948,8 @@ func (s *serviceImpl) runDueTasks(ctx context.Context) {
 
 // midplatTarget 该任务期望收敛到的中台实时状态：关机 → STOPPED；创建/开机 → NORMAL。
 func midplatTarget(taskType string) string {
-	if taskType == TaskTypeStop {
+	// 创建后不自动开机（needStart=false）→ 收敛信号为「已创建且关机」STOPPED；关机同理。
+	if taskType == TaskTypeStop || taskType == TaskTypeCreate {
 		return MidplatStopped
 	}
 	return MidplatReady
@@ -843,13 +969,16 @@ func (s *serviceImpl) settleTask(t CpTask, phoneStatus, taskStatus, lastErr stri
 	_ = s.repo.updateTask(t.ID, taskStatus, lastErr)
 }
 
-// taskSuccessStatus 成功收敛态：关机 → STOPPED；创建/开机 → RUNNING
-// （中台 cp/create 强制 autoStart=true，创建完成即自动开机，故创建成功也直接 RUNNING）。
+// taskSuccessStatus 成功收敛态：关机 → STOPPED；创建（needStart=false，不自动开机）→ CREATED；开机 → RUNNING。
 func taskSuccessStatus(taskType string) string {
-	if taskType == TaskTypeStop {
+	switch taskType {
+	case TaskTypeStop:
 		return StatusStopped
+	case TaskTypeCreate:
+		return StatusCreated // 创建完成且未开机 → CREATED（可开机/可销毁）
+	default:
+		return StatusRunning
 	}
-	return StatusRunning
 }
 
 // taskFailureStatus 失败/超时收敛态：创建 → CREATE_FAILED；开机/关机 → STOPPED。

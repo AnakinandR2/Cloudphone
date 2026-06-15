@@ -1,7 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { ConnState } from './useWebRTC'
-import { useRemoteInput } from './useRemoteInput'
+import { mapDeviceCoords, useRemoteInput } from './useRemoteInput'
+
+describe('mapDeviceCoords · 旋转坐标变换', () => {
+  it('竖屏（rotation 0、尺寸一致）原样返回', () => {
+    expect(mapDeviceCoords(100, 200, 720, 1280, 720, 1280, 0)).toEqual({ x: 100, y: 200 })
+  })
+  it('竖屏分辨率不一致时等比缩放（360×640 → 720×1280：坐标 ×2）', () => {
+    expect(mapDeviceCoords(100, 200, 360, 640, 720, 1280, 0)).toEqual({ x: 200, y: 400 })
+  })
+  it('横屏（rotation -90，1280×720）中心映射到中心', () => {
+    expect(mapDeviceCoords(640, 360, 1280, 720, 1280, 720, -90)).toEqual({ x: 640, y: 360 })
+  })
+  it('横屏 -90 角点映射（px = W·(1 − vy/H)，py = H·(vx/W)，对齐官方 SDK 矩阵）', () => {
+    expect(mapDeviceCoords(0, 0, 1280, 720, 1280, 720, -90)).toEqual({ x: 1280, y: 0 })
+    expect(mapDeviceCoords(1280, 720, 1280, 720, 1280, 720, -90)).toEqual({ x: 0, y: 720 })
+    expect(mapDeviceCoords(0, 720, 1280, 720, 1280, 720, -90)).toEqual({ x: 0, y: 0 })
+  })
+})
 
 // 构造一个最小可用的 <video> 桩：getCoords 仅依赖 getBoundingClientRect + videoWidth/Height。
 function makeVideo(

@@ -6,8 +6,53 @@
 import { computed, type Ref, ref } from 'vue'
 import phoneApi from '@/api/modules/phone'
 import type { WebRTCAuth } from '@/types/phone'
+import { useCameraInjection } from './useCameraInjection'
 
 export type ConnState = 'disconnected' | 'connecting' | 'connected' | 'failed'
+export type LatencyLevel = 'good' | 'fair' | 'poor'
+
+// pickRttMs 从一次 getStats() 报告里取出 WebRTC 往返时延（毫秒）。
+// 优先用 transport 选中的候选对（媒体实际走的那条 ICE 路径）的 currentRoundTripTime，
+// 退而求其次用 nominated/succeeded 的候选对，再不行用 remote-inbound-rtp 的 roundTripTime。
+// WebRTC 里这些字段单位是「秒」，统一 ×1000 取整为毫秒；取不到返回 null。
+export function pickRttMs(stats: RTCStatsReport): number | null {
+  const pairs = new Map<string, any>()
+  let selectedPairId: string | undefined
+  let nominatedRtt: number | null = null
+  let remoteInboundRtt: number | null = null
+
+  stats.forEach((r: any) => {
+    if (r.type === 'transport' && r.selectedCandidatePairId)
+      selectedPairId = r.selectedCandidatePairId
+    else if (r.type === 'candidate-pair') {
+      pairs.set(r.id, r)
+      if (nominatedRtt == null && (r.nominated || r.selected) && r.state === 'succeeded' && typeof r.currentRoundTripTime === 'number')
+        nominatedRtt = r.currentRoundTripTime * 1000
+    }
+    else if (r.type === 'remote-inbound-rtp' && remoteInboundRtt == null && typeof r.roundTripTime === 'number') {
+      remoteInboundRtt = r.roundTripTime * 1000
+    }
+  })
+
+  if (selectedPairId) {
+    const p = pairs.get(selectedPairId)
+    if (p && typeof p.currentRoundTripTime === 'number')
+      return Math.round(p.currentRoundTripTime * 1000)
+  }
+  const ms = nominatedRtt ?? remoteInboundRtt
+  return ms == null ? null : Math.round(ms)
+}
+
+// rttToLevel 把时延毫秒映射成三档网络状况。阈值按云手机串流体验经验取。
+export function rttToLevel(ms: number | null): LatencyLevel | null {
+  if (ms == null)
+    return null
+  if (ms < 80)
+    return 'good'
+  if (ms < 200)
+    return 'fair'
+  return 'poor'
+}
 
 export interface UseWebRTCOptions {
   id: Ref<number>
@@ -25,6 +70,34 @@ export function useWebRTC(opts: UseWebRTCOptions) {
   let pc: RTCPeerConnection | null = null
   let dc: RTCDataChannel | null = null
   let connTimeout: ReturnType<typeof setTimeout> | null = null
+
+  // 网络往返时延（毫秒，null=未测得）+ 三档状况，由 pc.getStats() 周期采样。
+  const rttMs = ref<number | null>(null)
+  const latencyLevel = computed(() => rttToLevel(rttMs.value))
+  let statsTimer: ReturnType<typeof setInterval> | null = null
+
+  async function sampleRtt() {
+    if (!pc)
+      return
+    try {
+      rttMs.value = pickRttMs(await pc.getStats())
+    }
+    catch {
+      /* getStats 偶发失败忽略，保留上次值 */
+    }
+  }
+  function startStats() {
+    stopStats()
+    sampleRtt()
+    statsTimer = setInterval(sampleRtt, 2000)
+  }
+  function stopStats() {
+    if (statsTimer) {
+      clearInterval(statsTimer)
+      statsTimer = null
+    }
+    rttMs.value = null
+  }
 
   // 串流参数：分辨率 / 质量(qualityLevel) / 帧率，可在连接前后调整（改后需重连生效）。
   const resOptions = [
@@ -77,6 +150,36 @@ export function useWebRTC(opts: UseWebRTCOptions) {
   }
 
   const connected = computed(() => connState.value === 'connected')
+
+  // 控制通道（DataChannel）是否就绪——摄像头注入依赖它发 camera_control + binary_pcm。
+  const controlReady = ref(false)
+
+  // 屏幕方向：竖屏(false)/横屏(true)。rotateDevice 经 DataChannel 发 rotate_device 切换，
+  // 设备旋转后推流分辨率交换，由 videoRef 的 @resize 触发重排。
+  const landscape = ref(false)
+  function rotateDevice(): boolean {
+    if (!dc || dc.readyState !== 'open')
+      return false
+    const v = videoRef.value
+    const isLandscape = v && v.videoWidth && v.videoHeight ? v.videoWidth > v.videoHeight : landscape.value
+    const angle = isLandscape ? 0 : -90 // -90=横屏，0=竖屏（与 SDK rotate_device 一致）
+    try {
+      dc.send(JSON.stringify({ type: 'rotate_device', angle }))
+      landscape.value = !isLandscape
+      return true
+    }
+    catch {
+      return false
+    }
+  }
+
+  // 摄像头/麦克风注入（上行）。读取本 composable 的私有 pc/dc 与串流参数。
+  const camera = useCameraInjection({
+    getPc: () => pc,
+    getDc: () => dc,
+    getFps: () => selectedFps.value,
+    getDims: () => ({ w: deviceWidth.value, h: deviceHeight.value }),
+  })
 
   // sendDC 经远端建立的数据通道下发一条 JSON 控制消息（触摸/按键/系统键）。
   function sendDC(msg: Record<string, unknown>): boolean {
@@ -193,8 +296,8 @@ export function useWebRTC(opts: UseWebRTCOptions) {
         }
         pc.ondatachannel = (e: RTCDataChannelEvent) => {
           dc = e.channel
-          dc.onopen = () => { connStatusText.value = '控制就绪' }
-          dc.onclose = () => { connStatusText.value = '控制断开' }
+          dc.onopen = () => { connStatusText.value = '控制就绪'; controlReady.value = true }
+          dc.onclose = () => { connStatusText.value = '控制断开'; controlReady.value = false }
         }
         pc.onconnectionstatechange = () => {
           const st = pc?.connectionState
@@ -205,6 +308,7 @@ export function useWebRTC(opts: UseWebRTCOptions) {
             }
             connState.value = 'connected'
             connStatusText.value = '已连接'
+            startStats()
           }
           else if (st === 'failed') {
             connState.value = 'failed'
@@ -215,6 +319,8 @@ export function useWebRTC(opts: UseWebRTCOptions) {
             connStatusText.value = '已断开'
           }
         }
+        // 预留上行视频轨（占位黑屏），须在 createAnswer 之前，answer SDP 才带上行 m-line。
+        camera.attachPlaceholder()
         await pc.setRemoteDescription(new RTCSessionDescription(msg.data))
         const answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
@@ -249,6 +355,10 @@ export function useWebRTC(opts: UseWebRTCOptions) {
   }
 
   function cleanup() {
+    stopStats()
+    camera.reset()
+    controlReady.value = false
+    landscape.value = false
     if (connTimeout) {
       clearTimeout(connTimeout)
       connTimeout = null
@@ -282,6 +392,28 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     connState,
     connStatusText,
     connected,
+    controlReady,
+    landscape,
+    rotateDevice,
+    rttMs,
+    latencyLevel,
+    // 摄像头/麦克风注入（上行，相互独立）
+    videoInjecting: camera.videoEnabled,
+    audioInjecting: camera.audioEnabled,
+    videoInjectBusy: camera.videoBusy,
+    audioInjectBusy: camera.audioBusy,
+    videoInputs: camera.videoList,
+    audioInputs: camera.audioList,
+    selectedVideoId: camera.selectedVideoId,
+    selectedAudioId: camera.selectedAudioId,
+    mirrorEnabled: camera.mirrorEnabled,
+    cameraPreviewStream: camera.previewStream,
+    refreshMediaDevices: camera.refreshDeviceList,
+    toggleVideoInject: camera.toggleVideo,
+    toggleAudioInject: camera.toggleAudio,
+    setVideoDevice: camera.setVideoDevice,
+    setAudioDevice: camera.setAudioDevice,
+    setMirror: camera.setMirror,
     isMuted,
     resOptions,
     qualityOptions,

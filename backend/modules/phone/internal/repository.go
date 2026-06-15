@@ -1,6 +1,10 @@
 package phone
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // repository 云手机档案持久化。前台读写一律以 userID 约束（IDOR 防护）；
 // admin* 方法供后台运营查看/删除全量实例（不限属主）。
@@ -29,9 +33,71 @@ type repository interface {
 	createTask(t *CpTask) error
 	dueTasks() ([]CpTask, error)
 	updateTask(id uint, status, lastErr string) error
+	// 运行会话（计费同步/结算/护栏）
+	ownersByCpIDs(cpIDs []string) (map[string]uint, error)
+	upsertRunSession(rs *RunSession) (isNew bool, err error)
+	runningSessions() ([]RunSession, error)
+	sessionsOverlapping(since time.Time) ([]RunSession, error)
 }
 
 type gormRepository struct{ db *gorm.DB }
+
+// ownersByCpIDs 批量解析 cpId → 属主 userId（只含我方在册实例）。
+func (r *gormRepository) ownersByCpIDs(cpIDs []string) (map[string]uint, error) {
+	out := map[string]uint{}
+	if len(cpIDs) == 0 {
+		return out, nil
+	}
+	var rows []CloudPhone
+	if err := r.db.Select("cp_id, user_id").Where("cp_id IN ?", cpIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, p := range rows {
+		if p.CpID != "" {
+			out[p.CpID] = p.UserID
+		}
+	}
+	return out, nil
+}
+
+// upsertRunSession 按 LogNo upsert：不存在则插入（isNew=true）；已存在则更新可变字段（关机时间/状态等）。
+func (r *gormRepository) upsertRunSession(rs *RunSession) (bool, error) {
+	var existing RunSession
+	err := r.db.Where("log_no = ?", rs.LogNo).First(&existing).Error
+	if err == gorm.ErrRecordNotFound {
+		if err := r.db.Create(rs).Error; err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, r.db.Model(&RunSession{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
+		"power_off_at":          rs.PowerOffAt,
+		"session_status":        rs.SessionStatus,
+		"power_off_reason_code": rs.PowerOffReasonCode,
+		"vm_uid":                rs.VmUID,
+		"user_id":               rs.UserID,
+		"synced_at":             rs.SyncedAt,
+	}).Error
+}
+
+// runningSessions 返回所有运行中（未关机）会话，供护栏统计并发运行台。
+func (r *gormRepository) runningSessions() ([]RunSession, error) {
+	var out []RunSession
+	err := r.db.Where("power_off_at IS NULL").Order("user_id, power_on_at").Find(&out).Error
+	return out, err
+}
+
+// sessionsOverlapping 返回与 [since, now] 有交集的会话（结算窗口用）：
+// 仍运行中，或关机时间晚于 since。
+func (r *gormRepository) sessionsOverlapping(since time.Time) ([]RunSession, error) {
+	var out []RunSession
+	err := r.db.Where("power_off_at IS NULL OR power_off_at > ?", since).
+		Order("user_id, power_on_at").Find(&out).Error
+	return out, err
+}
 
 func newRepository(db *gorm.DB) repository { return &gormRepository{db: db} }
 

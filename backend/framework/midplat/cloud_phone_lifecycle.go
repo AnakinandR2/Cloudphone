@@ -21,6 +21,10 @@ type CreateCPRequest struct {
 	ImageID string `json:"imageId"`
 	PlanID  int    `json:"planId"`
 
+	// NeedStart 控制创建后是否自动开机。我们置 false：创建后默认不开机（用户再手动开机）。
+	// 始终下发（非 omitempty），与 §2.2 组 8 早期被强制 true 的 autoStart 区分。
+	NeedStart bool `json:"needStart"`
+
 	// 套餐资源约束（必填，来自 BootPlan）。用非指针确保始终序列化，避免 omitempty 丢字段触发校验失败。
 	MinCore   float64 `json:"minCore"`
 	MaxCore   float64 `json:"maxCore"`

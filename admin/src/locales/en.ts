@@ -321,6 +321,7 @@ export default {
     status_STOPPED: 'Stopped',
     status_STOPPING: 'Stopping',
     status_DESTROYING: 'Destroying',
+    status_UNKNOWN: 'Syncing',
   },
   billing: {
     unit: 'units',
@@ -336,6 +337,10 @@ export default {
     updateFail: 'Update failed',
     deleteFail: 'Delete failed',
     // SKU pricing
+    runtimeConfigTitle: 'Runtime Fee Config',
+    runtimeConfigDesc: 'Time-fee unit price (¥ per phone·minute). Only runtime exceeding concurrent boot-seat coverage is charged by priority; 0 means no time fee.',
+    rtUnitPrice: 'Unit price (¥/phone·min)',
+    rtLowBalance: 'Low-balance alert (¥)',
     pricingTitle: 'SKU Pricing',
     pricingDesc: 'Configure unit prices and availability for each SKU (instance plans / hour packages).',
     addSku: 'New SKU',

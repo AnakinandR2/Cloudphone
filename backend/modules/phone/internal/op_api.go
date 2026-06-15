@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strconv"
 
 	"manager-backend/framework"
 	"manager-backend/framework/midplat"
@@ -425,34 +426,49 @@ func AdbInfoCloudPhone(c *gin.Context) {
 	framework.OKWithData(c, info)
 }
 
-// adbEnableBody 是开启 ADB 的请求体。
-type adbEnableBody struct {
-	WhiteIP []string `json:"whiteIp"`
-	TTL     int      `json:"ttl"`
-}
-
-// EnableAdbCloudPhone 开启 ADB（可带白名单 IP 与 token 有效期）
-// @Summary 开启 ADB
+// EnableAdbCloudPhone 开启 ADB（签发 Token）；再次调用即续期（签发全新 token）。
+// 有效期由中台后台配置固定，无需入参。
+// @Summary 开启/续期 ADB
 // @Tags 我的云手机
-// @Accept json
 // @Produce json
 // @Security Bearer
 // @Param id path int true "ID"
-// @Param body body adbEnableBody false "{whiteIp?, ttl?}"
 // @Router /phone/{id}/adb/enable [post]
 func EnableAdbCloudPhone(c *gin.Context) {
 	uid, id, ok := opCloudPhone(c)
 	if !ok {
 		return
 	}
-	var req adbEnableBody
-	_ = c.ShouldBindJSON(&req)
-	info, err := PhoneService.AdbEnable(uid, id, req.WhiteIP, req.TTL)
+	info, err := PhoneService.AdbEnable(uid, id)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
 	framework.OKWithData(c, info)
+}
+
+// RunLogsCloudPhone 云手机运行日志（分页，spec §2.9）
+// @Summary 运行日志列表
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Param id path int true "ID"
+// @Param page query int false "页码" default(1)
+// @Param size query int false "每页数量" default(20)
+// @Router /phone/{id}/run-logs [get]
+func RunLogsCloudPhone(c *gin.Context) {
+	uid, id, ok := opCloudPhone(c)
+	if !ok {
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	res, err := PhoneService.RunLogs(uid, id, page, size)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithPage(c, res.Data, res.TotalSize)
 }
 
 // DisableAdbCloudPhone 关闭 ADB
@@ -474,48 +490,28 @@ func DisableAdbCloudPhone(c *gin.Context) {
 	framework.OK(c)
 }
 
-// AdbWhitelistCloudPhone 查 ADB 白名单
-// @Summary ADB 白名单
-// @Tags 我的云手机
-// @Produce json
-// @Security Bearer
-// @Param id path int true "ID"
-// @Router /phone/{id}/adb/whitelist [get]
-func AdbWhitelistCloudPhone(c *gin.Context) {
-	uid, id, ok := opCloudPhone(c)
-	if !ok {
-		return
-	}
-	list, err := PhoneService.AdbWhitelist(uid, id)
-	if err != nil {
-		framework.FailErr(c, err)
-		return
-	}
-	framework.OKWithData(c, list)
-}
-
-// adbWhitelistBody 是更新白名单的请求体。
-type adbWhitelistBody struct {
-	WhiteIP []string `json:"whiteIp"`
-}
-
-// UpdateAdbWhitelistCloudPhone 更新 ADB 白名单（覆盖式）
-// @Summary 更新 ADB 白名单
+// RootCloudPhone 开启 / 关闭云手机 root 权限（§3.4.1 update-root）
+// @Summary 切换 Root
 // @Tags 我的云手机
 // @Accept json
 // @Produce json
 // @Security Bearer
 // @Param id path int true "ID"
-// @Param body body adbWhitelistBody true "{whiteIp}"
-// @Router /phone/{id}/adb/whitelist [post]
-func UpdateAdbWhitelistCloudPhone(c *gin.Context) {
+// @Param body body object true "{enable: true 开启 / false 关闭}"
+// @Router /phone/{id}/root [post]
+func RootCloudPhone(c *gin.Context) {
 	uid, id, ok := opCloudPhone(c)
 	if !ok {
 		return
 	}
-	var req adbWhitelistBody
-	_ = c.ShouldBindJSON(&req)
-	if err := PhoneService.AdbUpdateWhitelist(uid, id, req.WhiteIP); err != nil {
+	var req struct {
+		Enable bool `json:"enable"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	if err := PhoneService.Root(uid, id, req.Enable); err != nil {
 		framework.FailErr(c, err)
 		return
 	}

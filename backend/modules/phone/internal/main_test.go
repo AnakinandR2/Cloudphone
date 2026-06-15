@@ -10,7 +10,7 @@ import (
 
 func TestMain(m *testing.M) {
 	tdb, _ := framework.SetupTestDB(m)
-	if err := framework.DB.AutoMigrate(&CloudPhone{}, &CpTask{}); err != nil {
+	if err := framework.DB.AutoMigrate(&CloudPhone{}, &CpTask{}, &RunSession{}); err != nil {
 		panic(err)
 	}
 	if err := (&phoneModule{}).Init(framework.DB); err != nil {

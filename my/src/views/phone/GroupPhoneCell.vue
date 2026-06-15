@@ -20,6 +20,8 @@ const {
   connState,
   connStatusText,
   connected,
+  rttMs,
+  latencyLevel,
   isMuted,
   deviceWidth,
   deviceHeight,
@@ -34,6 +36,16 @@ const {
 } = useWebRTC({ id: idRef, videoRef })
 
 const aspect = computed(() => `${deviceWidth.value}/${deviceHeight.value}`)
+
+// 每格自己的网络延迟指示：标题栏小圆点按档位变色。
+const rttDotClass = computed(() => {
+  switch (latencyLevel.value) {
+    case 'good': return 'bg-green-500'
+    case 'fair': return 'bg-amber-500'
+    case 'poor': return 'bg-red-500'
+    default: return 'bg-muted-foreground'
+  }
+})
 
 function genId(): string {
   const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -224,6 +236,10 @@ onBeforeUnmount(() => {
       >
       <Crown v-if="master" class="size-3.5 text-amber-400" />
       <span class="truncate">{{ name }}</span>
+      <span v-if="connected" class="ml-auto flex shrink-0 items-center gap-1" :title="t('phone.rc.net')">
+        <span class="size-1.5 rounded-full" :class="rttDotClass" />
+        <span class="tabular-nums text-[10px] opacity-90">{{ rttMs == null ? '—' : `${rttMs}ms` }}</span>
+      </span>
     </div>
 
     <div class="relative w-full" :style="{ aspectRatio: aspect }">

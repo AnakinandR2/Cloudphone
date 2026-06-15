@@ -59,11 +59,11 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 		g.POST("/:id/apps/start", StartAppCloudPhone)
 		g.POST("/:id/apps/stop", StopAppCloudPhone)
 		g.POST("/:id/apps/kill-all", KillAllAppsCloudPhone)
-		g.GET("/:id/adb", AdbInfoCloudPhone)                       // ADB：连接信息
-		g.POST("/:id/adb/enable", EnableAdbCloudPhone)             // ADB：开启
-		g.POST("/:id/adb/disable", DisableAdbCloudPhone)           // ADB：关闭
-		g.GET("/:id/adb/whitelist", AdbWhitelistCloudPhone)        // ADB：查白名单
-		g.POST("/:id/adb/whitelist", UpdateAdbWhitelistCloudPhone) // ADB：改白名单
+		g.GET("/:id/run-logs", RunLogsCloudPhone)        // 运行日志（分页，§2.9）
+		g.GET("/:id/adb", AdbInfoCloudPhone)             // ADB：连接信息
+		g.POST("/:id/adb/enable", EnableAdbCloudPhone)   // ADB：开启 / 续期
+		g.POST("/:id/adb/disable", DisableAdbCloudPhone) // ADB：关闭
+		g.POST("/:id/root", RootCloudPhone)              // Root：开启 / 关闭（§3.4.1）
 	}
 
 	// 管理侧：实例全量查看/删除（staff 登录 + 权限）。
@@ -83,6 +83,12 @@ var phoneWorker *taskWorker
 // enforceRunner 欠费执行 runner（仅中台已配置时运行）。
 var enforceRunner *framework.PeriodicRunner
 
+// meterRunner 运行日志同步 + 时长费结算 runner（1 分钟）。
+var meterRunner *framework.PeriodicRunner
+
+// guardRunner 准实时护栏 runner（30 秒）：余额/时长不足时关停超额运行中实例。
+var guardRunner *framework.PeriodicRunner
+
 func (m *phoneModule) OnStart() error {
 	if PhoneService != nil && PhoneService.ops != nil {
 		phoneWorker = newTaskWorker(PhoneService, m.db)
@@ -95,6 +101,25 @@ func (m *phoneModule) OnStart() error {
 			return nil
 		})
 		enforceRunner.Start()
+
+		// 时长费：每分钟同步运行日志 + 结算已发生分钟。
+		meterRunner = framework.NewPeriodicRunner(m.db, "phone:metering", time.Minute, 50*time.Second, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			PhoneService.syncRunSessions(ctx)
+			PhoneService.runSettlement(ctx)
+			return nil
+		})
+		meterRunner.Start()
+
+		// 准实时护栏：每 30 秒检查余额/时长，关停无覆盖的超额运行中实例。
+		guardRunner = framework.NewPeriodicRunner(m.db, "phone:runtime-guard", 30*time.Second, 25*time.Second, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			PhoneService.runRuntimeGuard(ctx)
+			return nil
+		})
+		guardRunner.Start()
 	}
 	return nil
 }
@@ -108,6 +133,14 @@ func (m *phoneModule) OnStop() error {
 		enforceRunner.Stop()
 		enforceRunner = nil
 	}
+	if meterRunner != nil {
+		meterRunner.Stop()
+		meterRunner = nil
+	}
+	if guardRunner != nil {
+		guardRunner.Stop()
+		guardRunner = nil
+	}
 	return nil
 }
 
@@ -116,6 +149,6 @@ func init() {
 
 	// 建表（幂等）：云手机实例表 + 异步任务追踪表。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		return db.AutoMigrate(&CloudPhone{}, &CpTask{})
+		return db.AutoMigrate(&CloudPhone{}, &CpTask{}, &RunSession{})
 	})
 }

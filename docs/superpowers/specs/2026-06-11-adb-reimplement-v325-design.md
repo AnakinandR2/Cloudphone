@@ -1,5 +1,14 @@
 # ADB 功能重构（对齐中台 v3.25 现状版）设计
 
+> ⚠️ **2026-06-11 已被 v3.25.9 推翻 —— 本文档仅存档，勿照此实现。**
+> 中台 v3.25.9「重大更正」：正确接口是 `/adb/token/enable` + `/adb/token/disable`；
+> 本文档基于的 `/adb/operate`、`/adb/whitelist/*` 等**全部已废弃**。实际实现以 v3.25.9 为准：
+> - SDK：`EnableADBToken` / `DisableADBToken`（双层嵌套响应，取 `login_code` + `adb_address`）；
+> - §2.6 连接地址在 `adbAddr` 字段（`adbAddress` 恒为 null）；
+> - token 有效期由中台后台固定（实测 +60 天），`validTime` 不生效；续期 = 重发 enable；
+> - 连接两步：`adb connect <addr>` → `adb -s <addr> shell xlogin <token>`。
+> 详见 `docs/云手机中台-渠道接入手册-v3.25.9-现状版.md` §3.5。
+
 - 日期：2026-06-11
 - 范围：全量对齐 v3.25 + 重新启用前端
 - 参考文档：`docs/云手机中台-渠道接入手册-v3.25-现状版.md` §3.5（ADB 管理）、§2.6（查询云手机 v2）

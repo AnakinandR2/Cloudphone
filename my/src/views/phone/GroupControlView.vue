@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Power,
   RotateCw,
-  SignalHigh,
   Square,
   Video,
   Volume1,
@@ -34,12 +33,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import GroupPhoneCell from './GroupPhoneCell.vue'
 import RemoteAppPanel from './RemoteAppPanel.vue'
 import RemoteFilePanel from './RemoteFilePanel.vue'
@@ -65,7 +58,6 @@ const masterIdx = ref(0)
 const masterPhoneId = computed(() => phones.value[masterIdx.value]?.id ?? 0)
 const masterName = computed(() => phones.value[masterIdx.value]?.name ?? '')
 const groupMuted = ref(true)
-const netLatency = 37
 
 // 展示缩放（cell 像素宽，slider 50%~200% 映射到 80~320px）+ 主控放大模式。
 const zoom = ref(100)
@@ -356,21 +348,8 @@ onMounted(async () => {
       </div>
 
       <!-- 侧栏 -->
-      <TooltipProvider :delay-duration="150">
-        <div class="flex w-16 shrink-0 flex-col gap-0.5 overflow-y-auto border-l bg-background p-1">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5">
-                <SignalHigh class="size-4 text-green-500" />
-                <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.net') }}</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" class="max-w-[220px] text-xs">
-              {{ t('phone.group.netMasterOnly', { ms: netLatency }) }}
-            </TooltipContent>
-          </Tooltip>
-
-          <Button :variant="activePanel === 'display' ? 'secondary' : 'ghost'" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="togglePanel('display')">
+      <div class="flex w-16 shrink-0 flex-col gap-0.5 overflow-y-auto border-l bg-background p-1">
+        <Button :variant="activePanel === 'display' ? 'secondary' : 'ghost'" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="togglePanel('display')">
             <Monitor class="size-4" />
             <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.display') }}</span>
           </Button>
@@ -440,7 +419,6 @@ onMounted(async () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </TooltipProvider>
     </div>
   </div>
 </template>

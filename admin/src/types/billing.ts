@@ -1,4 +1,7 @@
 export interface Sku { id: number, code: string, category: string, name: string, description: string, unit_price_cents: number, unit: string, listed: boolean, sort: number }
+
+/** 时长费配置（单行） */
+export interface RuntimeConfig { unit_price_cents_per_minute: number, low_balance_alert_cents: number }
 export interface DiscountTier { id: number, sku_id: number, cycle_months: number, min_quantity: number, discount_bps: number }
 export interface SkuCreate { code: string, category: string, name: string, description?: string, unit_price_cents: number, unit?: string, listed?: boolean, sort?: number }
 export interface SkuUpdate { name?: string, description?: string, unit_price_cents?: number, unit?: string, listed?: boolean, sort?: number }

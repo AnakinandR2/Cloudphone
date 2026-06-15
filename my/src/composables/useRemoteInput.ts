@@ -15,6 +15,49 @@ export interface UseRemoteInputOptions {
   tryAutoUnmute: () => void
 }
 
+// ===== 旋转坐标变换（移植自官方 SDK 的仿射矩阵，保证与设备端一致）=====
+// 仿射矩阵以数组 [a,b,c,d,e,f] 表示：x' = a·x + c·y + e，y' = b·x + d·y + f。
+type Affine = [number, number, number, number, number, number]
+function mMul(m: Affine, n: Affine): Affine {
+  return [
+    m[0] * n[0] + m[2] * n[1],
+    m[1] * n[0] + m[3] * n[1],
+    m[0] * n[2] + m[2] * n[3],
+    m[1] * n[2] + m[3] * n[3],
+    m[0] * n[4] + m[2] * n[5] + m[4],
+    m[1] * n[4] + m[3] * n[5] + m[5],
+  ]
+}
+function rotAffine(rotation: number): Affine {
+  switch (rotation) {
+    case -90: return [0, -1, 1, 0, 0, 1]
+    case 90: return [0, 1, -1, 0, 1, 0]
+    case 180: return [-1, 0, 0, -1, 1, 1]
+    case 270: return [0, -1, 1, 0, 0, 1]
+    default: return [1, 0, 0, 1, 0, 0]
+  }
+}
+
+// mapDeviceCoords 把视频像素坐标(vx,vy) 映射到设备坐标（含分辨率缩放 + 旋转）。
+// videoW/H：当前推流分辨率；targetW/H：设备当前横竖屏分辨率；rotation：0 或 -90。
+export function mapDeviceCoords(
+  vx: number,
+  vy: number,
+  videoW: number,
+  videoH: number,
+  targetW: number,
+  targetH: number,
+  rotation: number,
+): { x: number, y: number } {
+  if (rotation === 0 && videoW === targetW && videoH === targetH)
+    return { x: Math.round(vx), y: Math.round(vy) }
+  // transform = ndcToPixels(target) · rotate · ndcFromPixels(video)
+  const ndcFrom: Affine = [1 / videoW, 0, 0, -1 / videoH, 0, 1]
+  const ndcTo: Affine = [targetW, 0, 0, -targetH, 0, targetH]
+  const t = mMul(mMul(ndcTo, rotAffine(rotation)), ndcFrom)
+  return { x: Math.round(vx * t[0] + vy * t[2] + t[4]), y: Math.round(vx * t[1] + vy * t[3] + t[5]) }
+}
+
 export function useRemoteInput(opts: UseRemoteInputOptions) {
   const { videoRef, connState, deviceWidth, deviceHeight, sendDC, tryAutoUnmute } = opts
 
@@ -32,29 +75,44 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
     return `${uuid}-${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, '0')}${String(n.getDate()).padStart(2, '0')} ${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}:${String(n.getMilliseconds()).padStart(3, '0')}`
   }
 
-  // 把浏览器坐标（相对视口）换算到设备像素空间。<video> 用 object-contain，需先扣掉黑边偏移再缩放。
-  function getCoords(e: MouseEvent | Touch): { x: number, y: number } | null {
+  // 上一次下发的方向元信息，供 onGlobalMouseUp 等无事件场景复用。
+  let lastMeta = { width: 0, height: 0, rotation: 0 }
+
+  // 把浏览器坐标换算到「设备坐标 + 当前分辨率 + 旋转」。
+  // <video> 用 object-contain，先扣黑边得到视频像素坐标，再按横竖屏做旋转矩阵变换。
+  function resolvePos(e: MouseEvent | Touch): { x: number, y: number, width: number, height: number, rotation: number } | null {
     if (!videoRef.value)
       return null
     const rect = videoRef.value.getBoundingClientRect()
-    const cx = e.clientX
-    const cy = e.clientY
-    const dx = cx - rect.left
-    const dy = cy - rect.top
+    const dx = e.clientX - rect.left
+    const dy = e.clientY - rect.top
     if (dx < 0 || dx > rect.width || dy < 0 || dy > rect.height)
       return null
     const vw = videoRef.value.videoWidth || deviceWidth.value
     const vh = videoRef.value.videoHeight || deviceHeight.value
     const scale = Math.max(rect.width / vw, rect.height / vh)
-    const dw = vw * scale
-    const dh = vh * scale
-    const ox = (rect.width - dw) / 2
-    const oy = (rect.height - dh) / 2
-    const srcX = (dx - ox) / scale
-    const srcY = (dy - oy) / scale
+    const ox = (rect.width - vw * scale) / 2
+    const oy = (rect.height - vh * scale) / 2
+    // 视频像素坐标（限定在画面内）。
+    const px = Math.max(0, Math.min((dx - ox) / scale, vw - 1))
+    const py = Math.max(0, Math.min((dy - oy) / scale, vh - 1))
+
+    // 当前横竖屏：推流宽>高即横屏。目标分辨率取所选分辨率的横/竖排列，旋转角对齐设备。
+    const landscape = vw > vh
+    const selW = deviceWidth.value
+    const selH = deviceHeight.value
+    const tw = landscape ? Math.max(selW, selH) : Math.min(selW, selH)
+    const th = landscape ? Math.min(selW, selH) : Math.max(selW, selH)
+    const rotation = landscape ? -90 : 0
+
+    const d = mapDeviceCoords(px, py, vw, vh, tw, th, rotation)
+    lastMeta = { width: tw, height: th, rotation }
     return {
-      x: Math.max(0, Math.min(Math.round(srcX), deviceWidth.value - 1)),
-      y: Math.max(0, Math.min(Math.round(srcY), deviceHeight.value - 1)),
+      x: Math.max(0, Math.min(d.x, tw - 1)),
+      y: Math.max(0, Math.min(d.y, th - 1)),
+      width: tw,
+      height: th,
+      rotation,
     }
   }
 
@@ -63,46 +121,46 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
       return
     e.preventDefault()
     tryAutoUnmute()
-    const c = getCoords(e)
-    if (!c)
+    const p = resolvePos(e)
+    if (!p)
       return
     currentDownEventId = genId()
     isDragging = false
-    dragStartX = c.x
-    dragStartY = c.y
-    sendDC({ type: 'mouse_down', x: c.x, y: c.y, button: e.button, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, messageId: currentDownEventId })
+    dragStartX = p.x
+    dragStartY = p.y
+    sendDC({ type: 'mouse_down', x: p.x, y: p.y, button: e.button, rotation: p.rotation, width: p.width, height: p.height, messageId: currentDownEventId })
   }
 
   function onMouseMove(e: MouseEvent) {
     if (!currentDownEventId || connState.value !== 'connected')
       return
     e.preventDefault()
-    const c = getCoords(e)
-    if (!c)
+    const p = resolvePos(e)
+    if (!p)
       return
-    if (!isDragging && Math.abs(c.x - dragStartX) < 5 && Math.abs(c.y - dragStartY) < 5)
+    if (!isDragging && Math.abs(p.x - dragStartX) < 5 && Math.abs(p.y - dragStartY) < 5)
       return
     isDragging = true
-    sendDC({ type: 'mouse_move', x: c.x, y: c.y, deltaX: c.x - dragStartX, deltaY: c.y - dragStartY, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_move', x: p.x, y: p.y, deltaX: p.x - dragStartX, deltaY: p.y - dragStartY, rotation: p.rotation, width: p.width, height: p.height, downEventId: currentDownEventId, messageId: genId() })
   }
 
   function onMouseUp(e: MouseEvent) {
     if (!currentDownEventId || connState.value !== 'connected')
       return
     e.preventDefault()
-    const c = getCoords(e)
-    if (!c)
+    const p = resolvePos(e)
+    if (!p)
       return
-    sendDC({ type: 'mouse_up', x: c.x, y: c.y, button: e.button, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_up', x: p.x, y: p.y, button: e.button, rotation: p.rotation, width: p.width, height: p.height, downEventId: currentDownEventId, messageId: genId() })
     currentDownEventId = null
     isDragging = false
   }
 
-  // 指针在按下状态离开视频区域时补一个 mouse_up，避免设备侧卡在「手指按下」。
+  // 指针在按下状态离开视频区域时补一个 mouse_up，避免设备侧卡在「手指按下」。复用上次的方向元信息。
   function onGlobalMouseUp() {
     if (!currentDownEventId)
       return
-    sendDC({ type: 'mouse_up', x: dragStartX, y: dragStartY, button: 0, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_up', x: dragStartX, y: dragStartY, button: 0, rotation: lastMeta.rotation, width: lastMeta.width, height: lastMeta.height, downEventId: currentDownEventId, messageId: genId() })
     currentDownEventId = null
     isDragging = false
   }
@@ -113,20 +171,20 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
       return
     e.preventDefault()
     tryAutoUnmute()
-    const c = getCoords(e.touches[0])
-    if (!c)
+    const p = resolvePos(e.touches[0])
+    if (!p)
       return
     currentDownEventId = genId()
-    sendDC({ type: 'mouse_down', x: c.x, y: c.y, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_down', x: p.x, y: p.y, rotation: p.rotation, width: p.width, height: p.height, downEventId: currentDownEventId, messageId: genId() })
   }
   function onTouchMove(e: TouchEvent) {
     if (!currentDownEventId || connState.value !== 'connected' || !e.touches[0])
       return
     e.preventDefault()
-    const c = getCoords(e.touches[0])
-    if (!c)
+    const p = resolvePos(e.touches[0])
+    if (!p)
       return
-    sendDC({ type: 'mouse_move', x: c.x, y: c.y, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_move', x: p.x, y: p.y, rotation: p.rotation, width: p.width, height: p.height, downEventId: currentDownEventId, messageId: genId() })
   }
   function onTouchEnd(e: TouchEvent) {
     if (!currentDownEventId || connState.value !== 'connected')
@@ -135,10 +193,10 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
     const tt = e.changedTouches[0]
     if (!tt)
       return
-    const c = getCoords(tt)
-    if (!c)
+    const p = resolvePos(tt)
+    if (!p)
       return
-    sendDC({ type: 'mouse_up', x: c.x, y: c.y, rotation: 0, width: deviceWidth.value, height: deviceHeight.value, downEventId: currentDownEventId, messageId: genId() })
+    sendDC({ type: 'mouse_up', x: p.x, y: p.y, rotation: p.rotation, width: p.width, height: p.height, downEventId: currentDownEventId, messageId: genId() })
     currentDownEventId = null
   }
 

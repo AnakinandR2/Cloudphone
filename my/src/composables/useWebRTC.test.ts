@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import { useWebRTC } from './useWebRTC'
+import { pickRttMs, rttToLevel, useWebRTC } from './useWebRTC'
 
 // 隔离 api：构造 useWebRTC 不应触碰真实后端（connect() 才会用到）。
 vi.mock('@/api/modules/phone', () => ({
@@ -67,5 +67,52 @@ describe('useWebRTC · 状态与控制', () => {
     expect(rtc.isMuted.value).toBe(false)
     expect(videoRef.value!.muted).toBe(false)
     expect(play).toHaveBeenCalled()
+  })
+})
+
+describe('pickRttMs · 从 getStats 报告取 RTT', () => {
+  // RTCStatsReport 是 Map 形态（forEach/get），测试直接用 Map 构造。
+  function report(entries: any[]): RTCStatsReport {
+    return new Map(entries.map(e => [e.id, e])) as unknown as RTCStatsReport
+  }
+
+  it('优先用 transport 选中的候选对 currentRoundTripTime（秒→毫秒）', () => {
+    const stats = report([
+      { id: 't1', type: 'transport', selectedCandidatePairId: 'cp-sel' },
+      { id: 'cp-sel', type: 'candidate-pair', currentRoundTripTime: 0.042 },
+      { id: 'cp-other', type: 'candidate-pair', currentRoundTripTime: 0.999, nominated: true, state: 'succeeded' },
+    ])
+    expect(pickRttMs(stats)).toBe(42)
+  })
+
+  it('无 transport 选中时退回 nominated+succeeded 的候选对', () => {
+    const stats = report([
+      { id: 'cp1', type: 'candidate-pair', nominated: true, state: 'succeeded', currentRoundTripTime: 0.118 },
+    ])
+    expect(pickRttMs(stats)).toBe(118)
+  })
+
+  it('再退回 remote-inbound-rtp 的 roundTripTime', () => {
+    const stats = report([
+      { id: 'r1', type: 'remote-inbound-rtp', roundTripTime: 0.2 },
+    ])
+    expect(pickRttMs(stats)).toBe(200)
+  })
+
+  it('取不到任何 RTT 时返回 null', () => {
+    expect(pickRttMs(report([{ id: 'x', type: 'codec' }]))).toBeNull()
+    expect(pickRttMs(report([]))).toBeNull()
+  })
+})
+
+describe('rttToLevel · 三档映射', () => {
+  it('按阈值分档', () => {
+    expect(rttToLevel(null)).toBeNull()
+    expect(rttToLevel(0)).toBe('good')
+    expect(rttToLevel(79)).toBe('good')
+    expect(rttToLevel(80)).toBe('fair')
+    expect(rttToLevel(199)).toBe('fair')
+    expect(rttToLevel(200)).toBe('poor')
+    expect(rttToLevel(500)).toBe('poor')
   })
 })
