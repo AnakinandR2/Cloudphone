@@ -837,6 +837,44 @@ func (s *serviceImpl) AdbEnable(userID, id int) (*AdbConnInfo, error) {
 	return out, nil
 }
 
+// RuntimeInfo 远控真实开机时长（spec 2026-06-17）：服务端按中台运行日志算开机秒数，前端只读累加。
+type RuntimeInfo struct {
+	Running       bool   `json:"running"`
+	PowerOnAt     string `json:"power_on_at,omitempty"` // RFC3339，仅 running 时给
+	UptimeSeconds int64  `json:"uptime_seconds"`        // 服务端算 now-powerOnAt，clamp ≥0
+}
+
+// Runtime 取某台云手机当前运行会话的真实开机时长：实时查中台运行日志最新一条，
+// 运行中则由服务端算 now-powerOnAt（规避客户端时区/时钟偏差）；无日志/最新已关机/解析失败 → running=false。
+func (s *serviceImpl) Runtime(userID, id int) (*RuntimeInfo, error) {
+	p, err := s.resolveCp(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	page, err := s.ops.RunLogs(ctx, p.CpID, 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	if page == nil || len(page.Data) == 0 {
+		return &RuntimeInfo{Running: false}, nil
+	}
+	e := page.Data[0]
+	on, ok := parseRunLogTime(e.PowerOnTime)
+	if !ok {
+		return &RuntimeInfo{Running: false}, nil
+	}
+	if _, ended := parseRunLogTime(e.PowerOffTime); ended {
+		return &RuntimeInfo{Running: false}, nil // 最新会话已关机
+	}
+	up := int64(time.Since(on).Seconds())
+	if up < 0 {
+		up = 0
+	}
+	return &RuntimeInfo{Running: true, PowerOnAt: on.Format(time.RFC3339), UptimeSeconds: up}, nil
+}
+
 // RunLogs 分页查询某台云手机的运行会话日志（spec §2.9）。size 限定 1..100。
 func (s *serviceImpl) RunLogs(userID, id, page, size int) (*midplat.RunLogPage, error) {
 	p, err := s.resolveCp(userID, id)

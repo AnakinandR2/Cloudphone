@@ -8,6 +8,9 @@ import type {
   InstalledApp,
   PhoneFile,
   RunLog,
+  RuntimeInfo,
+  ScriptRunResult,
+  ScriptTaskDetail,
   Tag,
   WebRTCAuth,
 } from '@/types/phone'
@@ -110,6 +113,8 @@ export default {
   // ---- 运行日志（中台 §2.9，服务端分页）----
   runLogs: (id: number, params: { page: number, size: number }) =>
     api.get<unknown, R<{ list: RunLog[], total: number }>>(`phone/${id}/run-logs`, { params }),
+  // 远控真实开机时长（按中台运行日志，服务端算秒数）
+  runtime: (id: number) => api.get<unknown, R<RuntimeInfo>>(`phone/${id}/runtime`),
 
   // ---- ADB Token 接管（中台 v3.25.9 §3.5 token/enable·disable / §2.6 连接信息）。不管理白名单 ----
   adbInfo: (id: number) => api.get<unknown, R<AdbInfo>>(`phone/${id}/adb`),
@@ -121,4 +126,11 @@ export default {
 
   // ---- Root 开关（中台 §3.4.1 update-root，同步生效，需已开机）----
   root: (id: number, enable: boolean) => api.post<unknown, R<null>>(`phone/${id}/root`, { enable }),
+
+  // ---- 自动化脚本最小闭环（中台 §7）----
+  // 下发一个 hello-world 示例脚本任务（需已开机），返回任务主键供轮询。
+  runHelloScript: (id: number) => api.post<unknown, R<ScriptRunResult>>(`phone/${id}/script/hello`),
+  // 查脚本任务状态/报告（轮询用）。
+  scriptTask: (id: number, taskId: number | string) =>
+    api.get<unknown, R<ScriptTaskDetail>>(`phone/${id}/script/task/${taskId}`),
 }

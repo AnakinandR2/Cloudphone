@@ -381,10 +381,13 @@ const netTipText = computed(() => {
   return `${q} · ${t('phone.rc.netRtt', { ms: rttMs.value })}`
 })
 
-// 本次使用计时（前端模拟，尚未接入计费）。
+// 真实开机时长：锚定中台运行日志（服务端给秒数），本地每秒累加；取不到则显示占位。
 const elapsed = ref(0)
+const hasRealtime = ref(false)
 let timerHandle: ReturnType<typeof setInterval> | null = null
 const elapsedText = computed(() => {
+  if (!hasRealtime.value)
+    return '--:--:--'
   const s = elapsed.value
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
@@ -392,9 +395,6 @@ const elapsedText = computed(() => {
 
 onMounted(async () => {
   window.addEventListener('mouseup', input.onGlobalMouseUp)
-  timerHandle = setInterval(() => {
-    elapsed.value++
-  }, 1000)
   await nextTick()
   // 初始就按画面实际宽度贴合窗口一次（不必等连接）；后续画面就绪/改分辨率时由 onVideoReady 再贴合。
   fitWindow()
@@ -403,6 +403,18 @@ onMounted(async () => {
     phone.value = res.data
   }
   catch { /* ignore */ }
+  // 真实开机时长：从中台运行日志锚定服务端算的秒数；运行中才启动本地累加，否则保持占位。
+  try {
+    const rt = await phoneApi.runtime(id.value)
+    if (rt.data.running) {
+      elapsed.value = rt.data.uptime_seconds
+      hasRealtime.value = true
+      timerHandle = setInterval(() => {
+        elapsed.value++
+      }, 1000)
+    }
+  }
+  catch { /* 取不到 → 占位 --:--:-- */ }
   connect()
 })
 

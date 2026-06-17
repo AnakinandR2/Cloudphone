@@ -114,3 +114,30 @@ export interface AdbInfo {
   adbTokenExpiredAt: string
   status: string
 }
+
+/** 自动化脚本任务受理结果（中台 §7.2 create-scheduled） */
+export interface ScriptRunResult {
+  task_id: number
+  task_no: string
+}
+
+/** 远控真实开机时长（后端按中台运行日志算秒数） */
+export interface RuntimeInfo {
+  running: boolean
+  power_on_at?: string // RFC3339，仅 running 时给
+  uptime_seconds: number // 服务端算 now-powerOnAt
+}
+
+/** 自动化脚本任务状态/报告合并视图（中台 §7.6.2 + §7.6.8） */
+export interface ScriptTaskDetail {
+  task_id: number
+  task_no: string
+  status: string // WAITING_PUBLISH/.../COMPLETED/FAILED/CANCELLED
+  status_desc: string
+  exec_result: number | null // 0=失败 / 1=成功 / null=未跑
+  terminal: boolean
+  run_duration_ms: number
+  run_log: string
+  result: string // report_result 上报内容
+  screenshot_url: string
+}
