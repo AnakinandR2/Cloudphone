@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"manager-backend/framework"
 	"manager-backend/framework/midplat"
@@ -103,6 +104,261 @@ func UploadApp(c *gin.Context) {
 		return
 	}
 	framework.OKWithData(c, rec)
+}
+
+// ── 浏览器驱动的分片上传流水线（前台 my 用） ─────────────────────────────────
+// 浏览器切片并逐片驱动：initiate → part → complete → parse →（用户确认）→ create →（轮询）status。
+// uploadId 一律以字符串透传，避免 JS number 精度问题；后端转 int64 调中台。
+
+// parseUploadID 把字符串 uploadId 解析成 int64；空串/非法 → 0（秒传命中时为 0，合法）。
+func parseUploadID(s string) int64 {
+	id, _ := strconv.ParseInt(s, 10, 64)
+	return id
+}
+
+// uploadAppInfoDTO 是秒传命中 / 解析返回的应用元信息（前端确认面板用）。
+type uploadAppInfoDTO struct {
+	AppName     string `json:"appName"`
+	PackageName string `json:"packageName"`
+	Version     string `json:"version"`
+	IconPath    string `json:"iconPath"`
+	FileSize    string `json:"fileSize"`
+	MD5         string `json:"md5"`
+}
+
+// initiateRespDTO 是 /app/upload/initiate 的响应（uploadId 转字符串）。
+type initiateRespDTO struct {
+	UploadID      string            `json:"uploadId"`
+	PartSize      int64             `json:"partSize"`
+	TotalParts    int               `json:"totalParts"`
+	UploadSuccess bool              `json:"uploadSuccess"`
+	AppInfo       *uploadAppInfoDTO `json:"appInfo,omitempty"`
+}
+
+// InitiateUpload 启动分片上传会话（§1.3）。命中秒传时返回 uploadSuccess=true + appInfo。
+// @Summary 启动分片上传
+// @Tags 应用管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "{fileName, fileSize, contentMd5}"
+// @Router /app/upload/initiate [post]
+func InitiateUpload(c *gin.Context) {
+	if _, ok := currentUserID(c); !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	var req struct {
+		FileName   string `json:"fileName"`
+		FileSize   int64  `json:"fileSize"`
+		ContentMD5 string `json:"contentMd5"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.FileName == "" {
+		framework.Fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	resp, err := AppService.InitiateUpload(midplat.InitiateUploadRequest{
+		FileName: req.FileName, FileSize: req.FileSize, ContentMD5: req.ContentMD5,
+	})
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	out := initiateRespDTO{
+		PartSize:      resp.PartSize,
+		TotalParts:    resp.TotalParts,
+		UploadSuccess: resp.UploadSuccess,
+	}
+	if resp.UploadID != nil {
+		out.UploadID = strconv.FormatInt(*resp.UploadID, 10)
+	}
+	if resp.UploadSuccess && resp.AppInfo != nil {
+		ai := resp.AppInfo
+		out.AppInfo = &uploadAppInfoDTO{
+			AppName:     ai.AppName,
+			PackageName: ai.PackageName,
+			Version:     ai.Version,
+			IconPath:    ai.IconPath,
+			FileSize:    ai.FileSize,
+			MD5:         ai.AppMD5,
+		}
+	}
+	framework.OKWithData(c, out)
+}
+
+// UploadPart 上传单个分片（§1.4）。uploadId/partNumber/contentMd5 走 query，二进制走 form 字段 file。
+// @Summary 上传分片
+// @Tags 应用管理
+// @Accept multipart/form-data
+// @Produce json
+// @Security Bearer
+// @Router /app/upload/part [post]
+func UploadPart(c *gin.Context) {
+	if _, ok := currentUserID(c); !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	uploadID := parseUploadID(c.Query("uploadId"))
+	partNumber, _ := strconv.Atoi(c.Query("partNumber"))
+	if uploadID == 0 || partNumber <= 0 {
+		framework.Fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	fh, err := c.FormFile("file")
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "未收到分片数据")
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		framework.Fail(c, http.StatusInternalServerError, "读取分片失败")
+		return
+	}
+	defer f.Close()
+	resp, err := AppService.UploadPart(uploadID, partNumber, c.Query("contentMd5"), f, fh.Filename)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, resp)
+}
+
+// CompleteUpload 完成分片合并（§1.5）。
+// @Summary 完成分片合并
+// @Tags 应用管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "{uploadId}"
+// @Router /app/upload/complete [post]
+func CompleteUpload(c *gin.Context) {
+	if _, ok := currentUserID(c); !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	var req struct {
+		UploadID string `json:"uploadId"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	uploadID := parseUploadID(req.UploadID)
+	if uploadID == 0 {
+		framework.Fail(c, http.StatusBadRequest, "缺少 uploadId")
+		return
+	}
+	url, err := AppService.CompleteUpload(uploadID)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{"downloadUrl": url})
+}
+
+// ParseApp 解析已上传 APK 元信息（§1.6）。
+// @Summary 解析已上传应用
+// @Tags 应用管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "{uploadId}"
+// @Router /app/upload/parse [post]
+func ParseApp(c *gin.Context) {
+	if _, ok := currentUserID(c); !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	var req struct {
+		UploadID string `json:"uploadId"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	uploadID := parseUploadID(req.UploadID)
+	if uploadID == 0 {
+		framework.Fail(c, http.StatusBadRequest, "缺少 uploadId")
+		return
+	}
+	parsed, err := AppService.ParseUpload(uploadID)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{
+		"uploadId":    req.UploadID,
+		"appName":     parsed.AppName,
+		"packageName": parsed.PackageName,
+		"version":     parsed.Version,
+		"iconPath":    parsed.IconPath,
+		"fileSize":    parsed.FileSize,
+		"md5":         parsed.MD5,
+	})
+}
+
+// CreateAppFromUpload 由已上传文件创建应用并落本地绑定（§1.8）。秒传时 uploadId 为空。
+// @Summary 创建已上传应用
+// @Tags 应用管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "{uploadId, appName, packageName, version, iconPath, fileSize, md5, appDesc}"
+// @Router /app/upload/create [post]
+func CreateAppFromUpload(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	var req struct {
+		UploadID    string `json:"uploadId"`
+		AppName     string `json:"appName"`
+		PackageName string `json:"packageName"`
+		Version     string `json:"version"`
+		IconPath    string `json:"iconPath"`
+		FileSize    string `json:"fileSize"`
+		MD5         string `json:"md5"`
+		AppDesc     string `json:"appDesc"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		framework.Fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	rec, err := AppService.CreateFromUpload(uid, midplat.CreateFromUploadedFileRequest{
+		UploadID:    parseUploadID(req.UploadID),
+		AppName:     req.AppName,
+		PackageName: req.PackageName,
+		Version:     req.Version,
+		IconPath:    req.IconPath,
+		FileSize:    req.FileSize,
+		MD5:         req.MD5,
+		AppDesc:     req.AppDesc,
+	})
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, rec)
+}
+
+// UploadStatus 查询上传任务状态（§1.9）。
+// @Summary 查询上传状态
+// @Tags 应用管理
+// @Produce json
+// @Security Bearer
+// @Param uploadId query string true "上传会话 ID"
+// @Router /app/upload/status [get]
+func UploadStatus(c *gin.Context) {
+	if _, ok := currentUserID(c); !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	uploadID := parseUploadID(c.Query("uploadId"))
+	if uploadID == 0 {
+		framework.Fail(c, http.StatusBadRequest, "缺少 uploadId")
+		return
+	}
+	status, err := AppService.QueryUploadStatus(uploadID)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{"status": status})
 }
 
 // BatchDeleteApps 批量删除（仅本人上传的应用，按本地绑定 id）

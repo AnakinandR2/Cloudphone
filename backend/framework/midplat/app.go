@@ -363,7 +363,9 @@ func (c *Client) CheckAppNameExists(ctx context.Context, appName string) (bool, 
 
 // CreateFromUploadedFileRequest 是 §1.8 的请求体。
 type CreateFromUploadedFileRequest struct {
-	UploadID        int64  `json:"uploadId"`
+	// 秒传命中时 uploadId 为 0：必须 omitempty 省略它，让中台按 MD5 定位已存在文件。
+	// 若发成 "uploadId":0，中台会去找编号 0 的上传记录 → 报「上传记录不存在或文件路径为空」。
+	UploadID        int64  `json:"uploadId,omitempty"`
 	AppName         string `json:"appName"`
 	PackageName     string `json:"packageName,omitempty"`
 	Version         string `json:"version,omitempty"`

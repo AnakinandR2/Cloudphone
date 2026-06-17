@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"manager-backend/framework"
@@ -9,12 +10,21 @@ import (
 )
 
 // midplatPort 是 app 模块对云手机中台「应用域」的依赖端口（六边形出站端口）。
-// 只封装应用库相关的少数能力：列表 / 批量删除 / 从本地文件整链上传。
+// 封装应用库能力：列表 / 批量删除 / 从本地文件整链上传，以及浏览器驱动的分片上传流水线
+// （initiate → part → complete → parse → create → status，参考 mcn 的逐片上传交互）。
 type midplatPort interface {
 	ListApps(ctx context.Context, req midplat.ListAppsRequest) (*midplat.ListAppsResponse, error)
 	BatchDeleteApps(ctx context.Context, ids []int64) error
-	// UploadAppFromFile 编排：分片上传(秒传) → 合并 → 解析 APK → 创建 app_info。
+	// UploadAppFromFile 编排：分片上传(秒传) → 合并 → 解析 APK → 创建 app_info（服务端整链，给后台商店用）。
 	UploadAppFromFile(ctx context.Context, path string, opts midplat.UploadAppOptions) (*midplat.CreatedApp, error)
+
+	// 浏览器驱动的分片上传流水线（前台 my 用：浏览器切片、逐片上传，进度更细、支持秒传）。
+	InitiateAppUpload(ctx context.Context, req midplat.InitiateUploadRequest) (*midplat.InitiateUploadResponse, error)
+	UploadPart(ctx context.Context, uploadID int64, partNumber int, contentMD5 string, part io.Reader, fileName string) (*midplat.UploadPartResponse, error)
+	CompleteAppUpload(ctx context.Context, uploadID int64) (string, error)
+	GetAppInfoFromFile(ctx context.Context, uploadID int64) (*midplat.ParsedAppInfo, error)
+	CreateAppFromUploadedFile(ctx context.Context, req midplat.CreateFromUploadedFileRequest) (*midplat.CreatedApp, error)
+	QueryUploadStatus(ctx context.Context, uploadID int64) (string, error)
 }
 
 type sdkAdapter struct{ c *midplat.Client }
@@ -29,6 +39,30 @@ func (a *sdkAdapter) BatchDeleteApps(ctx context.Context, ids []int64) error {
 
 func (a *sdkAdapter) UploadAppFromFile(ctx context.Context, path string, opts midplat.UploadAppOptions) (*midplat.CreatedApp, error) {
 	return a.c.UploadAppFromFile(ctx, path, opts)
+}
+
+func (a *sdkAdapter) InitiateAppUpload(ctx context.Context, req midplat.InitiateUploadRequest) (*midplat.InitiateUploadResponse, error) {
+	return a.c.InitiateAppUpload(ctx, req)
+}
+
+func (a *sdkAdapter) UploadPart(ctx context.Context, uploadID int64, partNumber int, contentMD5 string, part io.Reader, fileName string) (*midplat.UploadPartResponse, error) {
+	return a.c.UploadPart(ctx, uploadID, partNumber, contentMD5, part, fileName)
+}
+
+func (a *sdkAdapter) CompleteAppUpload(ctx context.Context, uploadID int64) (string, error) {
+	return a.c.CompleteAppUpload(ctx, uploadID)
+}
+
+func (a *sdkAdapter) GetAppInfoFromFile(ctx context.Context, uploadID int64) (*midplat.ParsedAppInfo, error) {
+	return a.c.GetAppInfoFromFile(ctx, uploadID)
+}
+
+func (a *sdkAdapter) CreateAppFromUploadedFile(ctx context.Context, req midplat.CreateFromUploadedFileRequest) (*midplat.CreatedApp, error) {
+	return a.c.CreateAppFromUploadedFile(ctx, req)
+}
+
+func (a *sdkAdapter) QueryUploadStatus(ctx context.Context, uploadID int64) (string, error) {
+	return a.c.QueryUploadStatus(ctx, uploadID)
 }
 
 // newMidplatPort 从 framework.AppConfig 构造真实适配器；中台未配置时返回 nil。

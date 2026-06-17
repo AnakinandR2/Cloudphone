@@ -24,3 +24,39 @@ export interface AppItem {
  * 后端 /app/market 返回与「我的应用」相同的本地绑定结构（含 cpAppId，安装时用它）。
  */
 export type MarketApp = AppItem
+
+// ── 分片上传流水线（参考 mcn） ──
+
+/** 秒传命中 / 解析返回的应用元信息（确认面板展示用）。 */
+export interface UploadAppInfo {
+  appName: string
+  packageName: string
+  version: string
+  iconPath: string
+  fileSize: string
+  md5: string
+}
+
+/** §1.3 initiate 响应：协商分片参数，或命中秒传（uploadSuccess + appInfo）。 */
+export interface UploadInitiateResp {
+  /** 上传会话 id（字符串透传；秒传命中时为空串）。 */
+  uploadId: string
+  partSize: number
+  totalParts: number
+  uploadSuccess: boolean
+  appInfo?: UploadAppInfo
+}
+
+/** §1.6 parse 响应：解析出的 APK 元信息。 */
+export interface ParsedAppInfo {
+  uploadId: string
+  appName: string
+  packageName: string
+  version: string
+  iconPath: string
+  fileSize: string
+  md5: string
+}
+
+/** §1.9 上传任务处理状态。 */
+export type UploadStatus = 'OSS_UPLOADING' | 'OSS_SUCCESS' | 'OSS_FAILED' | ''
