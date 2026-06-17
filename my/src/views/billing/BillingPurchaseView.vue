@@ -254,24 +254,14 @@ async function doCreateAndPay(
   submitting.value = true
   try {
     const createRes = await billingApi.createOrder({ items, pay_method: method })
-    if (createRes.code !== 0) {
-      toast.error(createRes.message || t('billing.orderFailed'))
-      return false
-    }
-    const orderDetail = createRes.data
     // 所有支付方式点支付后均即时到账：余额扣款、微信/支付宝走即时到账桩。
-    const payRes = await billingApi.payOrder(orderDetail.order.id)
-    if (payRes.code !== 0) {
-      toast.error(payRes.message || t('billing.payFailed'))
-      return false
-    }
+    await billingApi.payOrder(createRes.data.order.id)
     toast.success(t('billing.orderPaidOk'))
     await loadOverview()
     return true
   }
-  catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    toast.error(msg || t('billing.orderFailed'))
+  catch {
+    // 失败提示（余额不足等）由 axios 响应拦截器统一弹出，这里不重复 toast。
     return false
   }
   finally {
