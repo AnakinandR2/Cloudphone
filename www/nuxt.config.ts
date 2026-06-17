@@ -10,6 +10,13 @@ export default defineNuxtConfig({
   // 可用同名大写环境变量覆盖：NUXT_BACKEND_BASE_URL / NUXT_PUBLIC_USER_COOKIE_NAME / NUXT_PUBLIC_MY_APP_PATH
   runtimeConfig: {
     backendBaseUrl: 'http://localhost:9981/api/v1',
+    // 内容中台 Pub API（服务端私有，勿放入 public —— 密钥不得进入浏览器）。
+    //  - pubBaseUrl    ← NUXT_PUB_BASE_URL（如 http://192.168.10.110:9981/api/v1/pub）
+    //  - contentApiKey ← NUXT_CONTENT_API_KEY（cp_ 开头的只读密钥）
+    //  - contentSpace  博客内容空间 slug
+    pubBaseUrl: '',
+    contentApiKey: '',
+    contentSpace: 'blog',
     public: {
       userCookieName: 'user_token',
       myAppPath: '/my/',
