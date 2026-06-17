@@ -471,6 +471,23 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}
+		// 时长费已启用（单价>0）时，开机需有可用开机席位或剩余时长包（余额按分钟付费不计入开机门禁）。
+		// 与护栏 runRuntimeGuard 同源判并发：开机后并发台数若超出席位且无时长包则拒绝，避免开机即被护栏关停。
+		cov, err := billing.GetRuntimeCoverage(userID)
+		if err != nil {
+			return err
+		}
+		if cov.UnitPriceCents > 0 {
+			running, err := s.repo.runningSessionCountByUser(userID)
+			if err != nil {
+				return err
+			}
+			hasSeat := running < cov.AvailableBootSeats // 开机后仍在并发席位内
+			hasPack := cov.RemainingPackMinutes > 0
+			if !hasSeat && !hasPack {
+				return apperr.Forbidden("没有可用的开机席位或时长包，无法开机，请购买包月开机包或时长包")
+			}
+		}
 		if err := s.ops.StartOrShutdown(ctx, p.CpID, "开机"); err != nil {
 			return err
 		}
@@ -846,6 +863,28 @@ func (s *serviceImpl) AdbDisable(userID, id int) error {
 	ctx, cancel := opCtx()
 	defer cancel()
 	return s.ops.AdbDisableToken(ctx, p.CpID)
+}
+
+// OwnedCpIDs 返回某用户名下已开通的全部 cpId（跨模块归属校验门面用）。
+func (s *serviceImpl) OwnedCpIDs(userID int) ([]string, error) {
+	return s.repo.ownedCpIDs(userID)
+}
+
+// OwnsCpID 校验某 cpId 是否属于该用户且已开通。
+func (s *serviceImpl) OwnsCpID(userID int, cpID string) (bool, error) {
+	if cpID == "" {
+		return false, nil
+	}
+	ids, err := s.repo.ownedCpIDs(userID)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		if id == cpID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Root 开启 / 关闭云手机 root 权限（§3.4.1 update-root）。

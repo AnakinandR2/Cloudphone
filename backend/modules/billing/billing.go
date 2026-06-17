@@ -74,3 +74,21 @@ func GrantInstanceSeatsForTest(userID, n int) error {
 	_, err := billinginternal.EntitlementService.Grant(userID, billinginternal.SubjectInstanceSeat, int64(n), nil, billinginternal.SourceAdjust, "test", billinginternal.LedgerAdjustGrant, "staff:1")
 	return err
 }
+
+// GrantBootSeatsForTest 测试用：给用户发放 n 个开机席位（并发免时长费）。
+func GrantBootSeatsForTest(userID, n int) error {
+	_, err := billinginternal.EntitlementService.Grant(userID, billinginternal.SubjectBootSeat, int64(n), nil, billinginternal.SourceAdjust, "test", billinginternal.LedgerAdjustGrant, "staff:1")
+	return err
+}
+
+// GrantRuntimeMinutesForTest 测试用：给用户发放 n 分钟时长包。
+func GrantRuntimeMinutesForTest(userID, n int) error {
+	_, err := billinginternal.EntitlementService.Grant(userID, billinginternal.SubjectRuntimeMinute, int64(n), nil, billinginternal.SourceAdjust, "test", billinginternal.LedgerAdjustGrant, "staff:1")
+	return err
+}
+
+// SetRuntimeUnitPriceForTest 测试用：设置时长费单价（分/台/分钟），>0 表示启用时长费。
+func SetRuntimeUnitPriceForTest(cents int64) error {
+	_, err := billinginternal.RuntimeService.SaveConfig(cents, 0)
+	return err
+}

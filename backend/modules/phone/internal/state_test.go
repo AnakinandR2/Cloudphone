@@ -172,6 +172,38 @@ func TestPowerGating(t *testing.T) {
 	assert.Error(t, PhoneService.Power(userA, int(u.ID), "关机"), "实时态未知应拒绝")
 }
 
+// 开机门禁（时长费）：单价>0 时需有可用开机席位或剩余时长包（余额不计入）；单价=0（未启用）不拦截。
+func TestPowerRuntimeGate(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "run_sessions")
+		_ = billing.SetRuntimeUnitPriceForTest(0) // 复位全局单价，避免影响其它用例
+	})
+	f := &fakePort{statuses: map[string]string{
+		"cp-rt1": "STOPPED", "cp-rt2": "STOPPED", "cp-rt3": "STOPPED",
+	}}
+	withFakeOps(t, f)
+	require.NoError(t, billing.SetRuntimeUnitPriceForTest(10)) // 启用时长费
+
+	// 用户1：无席位无时长包 → 拒绝；发放时长包后 → 放行。
+	const u1 = 970201
+	p1 := insertPhone(t, u1, StatusStopped, "cp-rt1")
+	assert.Error(t, PhoneService.Power(u1, int(p1.ID), "开机"), "无席位无时长包应拒绝开机")
+	require.NoError(t, billing.GrantRuntimeMinutesForTest(u1, 60))
+	require.NoError(t, PhoneService.Power(u1, int(p1.ID), "开机"))
+	assert.Equal(t, StatusStarting, statusOf(t, p1.ID))
+
+	// 用户2：仅 1 个开机席位。席位空 → 第 1 台放行；占满唯一席位后无时长包的第 2 台 → 拒绝。
+	const u2 = 970202
+	require.NoError(t, billing.GrantBootSeatsForTest(u2, 1))
+	p2 := insertPhone(t, u2, StatusStopped, "cp-rt2")
+	require.NoError(t, PhoneService.Power(u2, int(p2.ID), "开机"), "席位内应可开机")
+	require.NoError(t, framework.DB.Create(&RunSession{ // 模拟该台已在运行，占满唯一席位
+		LogNo: "RT-S1", CpID: "cp-rt2", UserID: uint(u2), PowerOnAt: time.Now(), SessionStatus: "RUNNING",
+	}).Error)
+	p3 := insertPhone(t, u2, StatusStopped, "cp-rt3")
+	assert.Error(t, PhoneService.Power(u2, int(p3.ID), "开机"), "席位占满且无时长包应拒绝")
+}
+
 // 销毁门禁（按中台实时态）：过渡/运行态不可销毁；INIT_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。
 func TestDestroyGating(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
