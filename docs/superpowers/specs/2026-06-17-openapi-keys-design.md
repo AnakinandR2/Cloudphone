@@ -11,7 +11,7 @@
 ### 范围（本期）
 
 - API 密钥：签发、列表（掩码）、撤销；明文密钥仅创建时返回一次。
-- 开放 REST API：`/api/v1/open/v1/*`，用 API 密钥（Bearer）鉴权，覆盖下列能力。
+- 开放 REST API：`/api/open/v1/*`，用 API 密钥（Bearer）鉴权，覆盖下列能力。
 - my 前端：重做 `ApiMcpView`，API 密钥卡片真实可用；MCP 卡片保留「即将推出」占位。
 
 ### 不在本期
@@ -25,7 +25,7 @@
 ## 2. 关键决策（评审锁定）
 
 1. **分期**：先做 API 密钥 + 开放 API；MCP 下期（鉴权复用本期密钥）。
-2. **API 形态**：专门的「开放 API」子集 `/api/v1/open/v1/*`，与内部接口**路径/版本解耦**；DTO v1 暂复用现有 service 的 JSON 形状。
+2. **API 形态**：专门的「开放 API」子集 `/api/open/v1/*`，与内部接口**路径/版本解耦**；DTO v1 暂复用现有 service 的 JSON 形状。
 3. **v1 能力集**：云手机列表/详情、创建/销毁、开关机/重启、应用装/卸/查已装、自动化跑脚本+查结果。
 4. **鉴权**：`Authorization: Bearer <key>` → 中间件解析到属主用户；独立于改密的 `token_version`，有自己的撤销生命周期。
 5. **无 per-key scope**（v1）：每把 key 授予该用户的全部开放 API 能力。
@@ -70,7 +70,7 @@ backend/modules/openapi/
 - **鉴权**：中间件读 `Authorization: Bearer gp_live_…` → `sha256` → 按 `key_hash` 查；未命中 / `revoked_at` 非空 → 401。命中则 `c.Set("userID", key.UserID)`（与现有 handler 一致），并节流更新 `last_used_at`（距上次 <60s 则跳过写库）。
 - **撤销**：置 `revoked_at`（软删）→ 立即失效；不可恢复。
 
-## 4. 开放 API 端点（`/api/v1/open/v1/*`）
+## 4. 开放 API 端点（`/api/open/v1/*`）
 
 路径参数用**本地 phone id**（与列表返回 `id` 一致）；脚本用 automation 脚本 id；任务用中台任务主键。
 
@@ -127,7 +127,7 @@ backend/modules/openapi/
 ## 8. 接线
 
 - 模块 `init()` 注册 + `RegisterSetup` 建 `api_keys` 表；`main.go` / `apptest/main_test.go` 加 blank import（scaffold:module-imports 锚点）。
-- 两组路由：`/api/v1/user/api-keys/*`（`user.AuthMiddleware()`）+ `/api/v1/open/v1/*`（key 鉴权中间件）。
+- 两组路由：`/api/v1/user/api-keys/*`（`user.AuthMiddleware()`）+ `/api/open/v1/*`（key 鉴权中间件）。
 - 无新增 RBAC 权限。
 
 ## 9. 安全要点

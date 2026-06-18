@@ -1,0 +1,7 @@
+{
+  "type": "module",
+  "name": "cphone-webrtc-sdk-modules",
+  "version": "1.0.0",
+  "description": "cphone-webrtc-sdk ES6 modules",
+  "private": true
+}

@@ -1,0 +1,21 @@
+{
+  "type": "module",
+  "name": "cphone-webrtc-sdk",
+  "version": "1.0.0",
+  "description": "云手机中台 WebRTC 远程画面 / 控制 SDK（渠道接入用）",
+  "main": "index.js",
+  "module": "src/main.js",
+  "files": [
+    "index.js",
+    "src/",
+    "public/"
+  ],
+  "keywords": [
+    "cloud-phone",
+    "webrtc",
+    "remote-control",
+    "cphone"
+  ],
+  "browser": true,
+  "license": "UNLICENSED"
+}
