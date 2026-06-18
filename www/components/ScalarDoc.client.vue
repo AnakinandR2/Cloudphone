@@ -82,23 +82,43 @@ function configuration() {
   }
 }
 
+let builtDark: boolean | null = null
+
 function mount() {
-  if (!el.value) return
-  instance = createApiReference(el.value, configuration())
+  if (!el.value || instance) return
+  el.value.innerHTML = '' // 宿主置空，确保 Scalar 走 createApp 而非 SSR 水合分支
+  builtDark = colorMode.value === 'dark'
+  try {
+    instance = createApiReference(el.value, configuration())
+  } catch (e) {
+    console.error('[ScalarDoc] createApiReference 失败', e)
+  }
 }
 function unmount() {
-  if (instance?.destroy) instance.destroy()
-  else instance?.app?.unmount?.()
+  try {
+    if (instance?.destroy) instance.destroy()
+    else instance?.app?.unmount?.()
+  } catch {}
   instance = null
-  if (el.value) el.value.innerHTML = '' // 清空宿主，避免重建时走 Scalar 的 SSR 水合分支
+  if (el.value) el.value.innerHTML = ''
+}
+// 延迟到水合完成之后再挂载：刷新场景下页面数据已在 SSR payload 里，<ScalarDoc> 会在
+// 父应用「水合期间」挂载，此时再去 createApp 启一个嵌套 Scalar 应用会与水合冲突导致空白。
+// nextTick + rAF 把挂载推到水合结束后；客户端导航场景也照常工作。
+function scheduleMount() {
+  nextTick(() => requestAnimationFrame(mount))
 }
 
-onMounted(mount)
-// 站点切换明暗 → 重建实例，让代码块高亮等也跟着换配色（customCss token 已随 .dark 自动联动）
-watch(() => colorMode.value, () => {
-  unmount()
-  nextTick(mount)
-})
+onMounted(scheduleMount)
+// 仅当明暗「真正翻转」且已有实例时才重建（避免初次颜色结算时误重建打断初始化）。
+watch(
+  () => colorMode.value === 'dark',
+  (dark) => {
+    if (!instance || dark === builtDark) return
+    unmount()
+    scheduleMount()
+  },
+)
 onBeforeUnmount(unmount)
 </script>
 
