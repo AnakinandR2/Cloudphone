@@ -16,7 +16,7 @@ export const GP_CONTENT = {
     nav: {
       home: '首页', product: '产品', features: '功能特性', scenarios: '应用场景',
       pricing: '价格套餐', specs: '性能规格', customers: '客户案例',
-      download: '下载', blog: '博客', help: '帮助中心', docs: '文档', faq: '常见问题', news: '新闻动态',
+      download: '下载', blog: '博客', help: '帮助中心', resources: '资源', docs: '帮助文档', faq: '常见问题', apiDocs: 'API 文档', news: '新闻动态',
       login: '登录', signup: '免费注册', trial: '免费试用',
       console: '控制台', logout: '退出登录', account: '账户',
     },
@@ -214,7 +214,7 @@ export const GP_CONTENT = {
     nav: {
       home: 'Home', product: 'Product', features: 'Features', scenarios: 'Use cases',
       pricing: 'Pricing', specs: 'Performance', customers: 'Customers',
-      download: 'Download', blog: 'Blog', help: 'Help', docs: 'Docs', faq: 'FAQ', news: 'News',
+      download: 'Download', blog: 'Blog', help: 'Help', resources: 'Resources', docs: 'Docs', faq: 'FAQ', apiDocs: 'API Docs', news: 'News',
       login: 'Sign in', signup: 'Sign up free', trial: 'Free trial',
       console: 'Console', logout: 'Sign out', account: 'Account',
     },

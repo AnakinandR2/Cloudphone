@@ -35,14 +35,15 @@ const links = computed<NavLink[]>(() => [
   { id: 'scenarios', href: localePath('/') + '#scenarios', label: t.value.nav.scenarios },
   { id: 'pricing', href: localePath('/') + '#pricing', label: t.value.nav.pricing },
   { id: 'download', href: localePath('/') + '#download', label: t.value.nav.download },
-  { id: 'blog', href: localePath('/blog'), label: t.value.nav.blog },
   {
-    id: 'help',
-    href: localePath('/help'),
-    label: t.value.nav.help,
+    id: 'resources',
+    href: localePath('/blog'),
+    label: t.value.nav.resources,
     children: [
+      { id: 'blog', href: localePath('/blog'), label: t.value.nav.blog },
       { id: 'docs', href: localePath('/help'), label: t.value.nav.docs },
       { id: 'faq', href: localePath('/faq'), label: t.value.nav.faq },
+      { id: 'apiDocs', href: localePath('/api-docs'), label: t.value.nav.apiDocs },
     ],
   },
 ])

@@ -68,23 +68,25 @@ export async function contentFetch<T>(
 }
 
 /**
- * 回源内容中台的「文本/文件」（web-files）并原样返回字节。
- * by-path 直接返回原始字节（非信封），保留上游 Content-Type / ETag。
- * lang 留空时走中台的语言回退链（→ 全局 → zh-CN）。
+ * 回源内容中台任意「原始字节」端点（非信封，如 web-files / api-docs spec）。
+ * 透传上游 Content-Type / ETag；按 text 取，保留原始内容。
  */
-export async function proxyWebFile(event: H3Event, urlPath: string, lang?: string): Promise<string> {
+export async function proxyRaw(
+  event: H3Event,
+  path: string,
+  query: Record<string, string> = {},
+): Promise<string> {
   const cfg = useRuntimeConfig()
   const base = (cfg.pubBaseUrl as string) || ''
   const key = (cfg.contentApiKey as string) || ''
   if (!base || !key) {
     throw createError({ statusCode: 500, statusMessage: '内容中台未配置（缺少 NUXT_PUB_BASE_URL / NUXT_CONTENT_API_KEY）' })
   }
-  const query: Record<string, string> = { path: urlPath }
-  if (lang) query.lang = lang
   try {
-    const res = await $fetch.raw<string>(base + '/web-files/by-path', {
+    const res = await $fetch.raw<string>(base + path, {
       query,
       headers: { 'X-API-Key': key },
+      responseType: 'text',
     })
     const ct = res.headers.get('content-type')
     if (ct) setResponseHeader(event, 'content-type', ct)
@@ -93,6 +95,16 @@ export async function proxyWebFile(event: H3Event, urlPath: string, lang?: strin
     return (res._data as string) ?? ''
   } catch (e: unknown) {
     const err = e as { response?: { status?: number } }
-    throw createError({ statusCode: err?.response?.status === 404 ? 404 : 502, statusMessage: '文件不存在' })
+    throw createError({ statusCode: err?.response?.status === 404 ? 404 : 502, statusMessage: '资源不存在' })
   }
+}
+
+/**
+ * 回源内容中台的「文本/文件」（web-files）。
+ * lang 留空时走中台的语言回退链（→ 全局 → zh-CN）。
+ */
+export function proxyWebFile(event: H3Event, urlPath: string, lang?: string): Promise<string> {
+  const query: Record<string, string> = { path: urlPath }
+  if (lang) query.lang = lang
+  return proxyRaw(event, '/web-files/by-path', query)
 }

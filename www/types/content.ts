@@ -90,3 +90,13 @@ export interface SeoResolveResult {
   config_id?: number
   metas: SeoMeta[]
 }
+
+/** API 文档列表项（仅安全字段，正文 spec 另取）。 */
+export interface ApiDocSummary {
+  slug: string
+  name: string
+  description: string
+  visibility: string
+  spec_title: string
+  spec_version: string
+}
