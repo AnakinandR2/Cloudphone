@@ -19,6 +19,10 @@
     "postinstall": "simple-git-hooks"
   },
   "dependencies": {
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/legacy-modes": "^6.5.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.43.1",
     "@fontsource/fira-code": "^5.2.7",
     "@fontsource/fira-sans": "^5.2.7",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
@@ -30,6 +34,7 @@
     "axios": "^1.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
     "lucide-vue-next": "^0.525.0",
     "pinia": "^3.0.3",
     "reka-ui": "^2.9.8",

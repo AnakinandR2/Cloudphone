@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   SquarePen,
   Tag,
+  Terminal,
   Trash,
   Usb,
   Users,
@@ -63,6 +64,8 @@ import { tagClass } from '@/utils/tagColor'
 import AndroidIcon from '@/components/icons/AndroidIcon.vue'
 import AdbDrawer from './AdbDrawer.vue'
 import RunLogDialog from './RunLogDialog.vue'
+import TaskCreateDialog from '../automation/TaskCreateDialog.vue'
+import TaskReportDialog from '../automation/TaskReportDialog.vue'
 import AppManagerDialog from './AppManagerDialog.vue'
 import PhoneFormDialog from './PhoneFormDialog.vue'
 import PhoneTagsDialog from './PhoneTagsDialog.vue'
@@ -195,6 +198,8 @@ const dialog = ref({ open: false, id: 0, mode: 'create' as 'create' | 'edit' | '
 const appDialog = ref({ open: false, phone: null as CloudPhone | null })
 const adbDrawer = ref({ open: false, phone: null as CloudPhone | null })
 const runLogDialog = ref({ open: false, phone: null as CloudPhone | null })
+const scriptDialog = ref({ open: false, cpId: '' })
+const scriptReport = ref({ open: false, midTaskId: null as number | null })
 const opBusy = ref(false)
 
 // 危险操作（销毁/删除/重置）统一用一个「受控 AlertDialog」确认：
@@ -326,6 +331,13 @@ function openAdb(row: CloudPhone) {
 }
 function openRunLogs(row: CloudPhone) {
   runLogDialog.value = { open: true, phone: row }
+}
+function openScriptTest(row: CloudPhone) {
+  scriptDialog.value = { open: true, cpId: row.cp_id }
+}
+function onScriptCreated(firstTaskId: number | null) {
+  if (firstTaskId != null)
+    scriptReport.value = { open: true, midTaskId: firstTaskId }
 }
 
 // 通用操作执行：执行 -> 成功 toast -> 可选刷新列表
@@ -541,6 +553,9 @@ onUnmounted(() => {
                 <DropdownMenuItem v-if="isRunning(row.status) && row.rooted" @click="toggleRoot(row, false)">
                   <ShieldCheck class="size-4 text-emerald-600" /> {{ t('phone.root.disable') }}
                 </DropdownMenuItem>
+                <DropdownMenuItem v-if="isRunning(row.status)" @click="openScriptTest(row)">
+                  <Terminal class="size-4" /> {{ t('phone.script.menu') }}
+                </DropdownMenuItem>
                 <DropdownMenuItem v-if="row.cp_id" @click="openRunLogs(row)">
                   <FileClock class="size-4" /> {{ t('phone.runLog.title') }}
                 </DropdownMenuItem>
@@ -712,6 +727,9 @@ onUnmounted(() => {
                   <DropdownMenuItem v-if="isRunning(row.status) && row.rooted" @click="toggleRoot(row, false)">
                     <ShieldCheck class="size-4 text-emerald-600" /> {{ t('phone.root.disable') }}
                   </DropdownMenuItem>
+                  <DropdownMenuItem v-if="isRunning(row.status)" @click="openScriptTest(row)">
+                    <Terminal class="size-4" /> {{ t('phone.script.menu') }}
+                  </DropdownMenuItem>
                   <DropdownMenuItem v-if="row.cp_id" @click="openRunLogs(row)">
                     <FileClock class="size-4" /> {{ t('phone.runLog.title') }}
                   </DropdownMenuItem>
@@ -737,6 +755,8 @@ onUnmounted(() => {
     <AppManagerDialog v-model="appDialog.open" :phone="appDialog.phone" />
     <AdbDrawer v-model="adbDrawer.open" :phone="adbDrawer.phone" @changed="load(true)" />
     <RunLogDialog v-model="runLogDialog.open" :phone="runLogDialog.phone" />
+    <TaskCreateDialog v-model="scriptDialog.open" :preset-cp-id="scriptDialog.cpId" @created="onScriptCreated" />
+    <TaskReportDialog v-model="scriptReport.open" :mid-task-id="scriptReport.midTaskId" />
 
     <!-- 危险操作统一确认弹框（根级，避免下拉里套气泡点不到） -->
     <AlertDialog v-model:open="confirmState.open">
