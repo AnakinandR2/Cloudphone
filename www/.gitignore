@@ -7,3 +7,6 @@ node_modules
 .env
 dist
 .DS_Store
+
+# 自托管的 Scalar standalone 构建（由 nuxt.config 在 dev/build 时从 node_modules 拷贝生成）
+public/vendor/

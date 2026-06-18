@@ -1,4 +1,18 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+
+// 把 Scalar 的 standalone 浏览器构建拷到 public/，以 <script> 方式自托管加载，
+// 让它彻底脱离 Vite 模块图——规避 504 Outdated Optimize Dep、Pre-transform
+// "Maximum call stack size exceeded" 等大依赖在 dev 下的预转换/预打包问题。
+// 在 dev/build/prepare 每次加载配置时执行，确保产物存在（文件本身 gitignore）。
+try {
+  const scalarSrc = 'node_modules/@scalar/api-reference/dist/browser/standalone.js'
+  if (existsSync(scalarSrc)) {
+    mkdirSync('public/vendor', { recursive: true })
+    copyFileSync(scalarSrc, 'public/vendor/scalar-standalone.js')
+  }
+} catch {}
+
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
@@ -34,13 +48,6 @@ export default defineNuxtConfig({
     '@nuxtjs/color-mode',
     '@nuxtjs/i18n',
   ],
-
-  // Scalar 只在 ScalarDoc.client.vue（仅客户端）里 import，Vite 首次扫描发现不到，
-  // 会在运行时按需 optimize 并触发「504 Outdated Optimize Dep」。预先 include，
-  // 让 dev 启动即预打包，避免按需重优化导致的 504。仅影响 dev，不影响生产构建。
-  vite: {
-    optimizeDeps: { include: ['@scalar/api-reference'] },
-  },
 
   css: ['~/assets/css/tailwind.css'],
 

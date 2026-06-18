@@ -2,16 +2,34 @@
 // Scalar API 参考（仅客户端）。standalone 挂载 + theme:'none'，把 Scalar 的 CSS 变量
 // 映射到站点设计 token（--fg/--bg-*/--border/--accent…），主题色与明暗全部跟随站点。
 // specUrl 指向本站 /_content 代理，Key 不进浏览器。
-import { createApiReference } from '@scalar/api-reference'
-// npm 版 createApiReference 不像 CDN standalone 那样自动注入样式，需手动引入结构样式；
-// theme:'none' 只关掉内置配色预设，下面 customCss 再把配色覆盖成站点 token。
-import '@scalar/api-reference/style.css'
+// 用自托管的 Scalar standalone 浏览器构建（public/vendor/scalar-standalone.js，由 nuxt.config
+// 从 node_modules 拷贝）。以 <script> 方式加载、走 window.Scalar.createApiReference 挂载，让 Scalar
+// 完全脱离 Vite 模块图，规避 dev 下的 504 / Pre-transform 栈溢出等大依赖预处理问题。
+// standalone 会自注入结构样式；theme:'none' 关配色预设，下面 customCss 覆盖成站点 token。
+type ScalarInstance = { destroy?: () => void; app?: { unmount: () => void } }
+type ScalarGlobal = { createApiReference: (el: Element, cfg: Record<string, unknown>) => ScalarInstance }
+
+let scalarPromise: Promise<ScalarGlobal> | null = null
+function loadScalar(): Promise<ScalarGlobal> {
+  const g = window as unknown as { Scalar?: ScalarGlobal }
+  if (g.Scalar?.createApiReference) return Promise.resolve(g.Scalar)
+  if (scalarPromise) return scalarPromise
+  scalarPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = '/vendor/scalar-standalone.js'
+    s.async = true
+    s.onload = () => (g.Scalar?.createApiReference ? resolve(g.Scalar) : reject(new Error('Scalar 全局缺失')))
+    s.onerror = () => reject(new Error('加载 scalar standalone 失败'))
+    document.head.appendChild(s)
+  })
+  return scalarPromise
+}
 
 const props = defineProps<{ specUrl: string }>()
 const colorMode = useColorMode()
 const el = ref<HTMLElement | null>(null)
 const ready = ref(false)
-let instance: { destroy?: () => void; app?: { unmount: () => void } } | null = null
+let instance: ScalarInstance | null = null
 let builtDark: boolean | null = null
 let observer: MutationObserver | null = null
 let readyTimer: ReturnType<typeof setTimeout> | null = null
@@ -122,16 +140,18 @@ function watchReady() {
   }, 8000)
 }
 
-function mount() {
+async function mount() {
   if (!el.value || instance) return
-  el.value.innerHTML = '' // 宿主置空，确保 Scalar 走 createApp 而非 SSR 水合分支
+  el.value.innerHTML = '' // 宿主置空，确保走全新挂载
   ready.value = false
   builtDark = colorMode.value === 'dark'
   try {
-    instance = createApiReference(el.value, configuration())
+    const Scalar = await loadScalar()
+    if (!el.value || instance) return // 等待脚本期间可能已卸载/已挂载
+    instance = Scalar.createApiReference(el.value, configuration())
     watchReady()
   } catch (e) {
-    console.error('[ScalarDoc] createApiReference 失败', e)
+    console.error('[ScalarDoc] 加载/挂载 Scalar 失败', e)
     ready.value = true
   }
 }
