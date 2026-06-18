@@ -61,11 +61,19 @@ const accountStore: Record<number, any> = {
 }
 
 // ---- Trial Policies ----
-let trials = [
-  { id: 1, code: 'new_user_trial', name: '新用户试用', enabled: true, grant_subject: 'instance_seat', grant_quantity: 1, grant_expire_days: 7, per_user_limit: 1, allow_new_user: true, invite_code: '', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
-  { id: 2, code: 'invite_trial', name: '邀请码试用', enabled: true, grant_subject: 'runtime_minute', grant_quantity: 1440, grant_expire_days: 30, per_user_limit: 1, allow_new_user: false, invite_code: 'GLORY2026', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' },
+let trials: any[] = [
+  { id: 1, code: 'new_user_trial', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [
+    { id: 1, policy_id: 1, subject: 'instance_seat', quantity: 1, expire_days: 7 },
+    { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 },
+  ], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: 2, code: 'invite_trial', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: 'GLORY2026', items: [
+    { id: 3, policy_id: 2, subject: 'instance_seat', quantity: 2, expire_days: 30 },
+    { id: 4, policy_id: 2, subject: 'runtime_minute', quantity: 1440, expire_days: 30 },
+    { id: 5, policy_id: 2, subject: 'boot_seat', quantity: 1, expire_days: 30 },
+  ], created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' },
 ]
 let trialNextId = 3
+let trialItemNextId = 6
 
 const trialGrantsStore: Record<number, any[]> = {
   1: [
@@ -275,17 +283,17 @@ export default defineFakeRoute([
     method: 'post',
     response: ({ body }) => {
       const d = body as any
+      const id = trialNextId++
+      const items = (d.items || []).map((it: any) => ({ id: trialItemNextId++, policy_id: id, subject: it.subject, quantity: it.quantity, expire_days: it.expire_days || 0 }))
       const policy = {
-        id: trialNextId++,
+        id,
         code: d.code,
         name: d.name,
         enabled: d.enabled !== false,
-        grant_subject: d.grant_subject,
-        grant_quantity: d.grant_quantity,
-        grant_expire_days: d.grant_expire_days || 7,
         per_user_limit: d.per_user_limit || 1,
         allow_new_user: d.allow_new_user !== false,
         invite_code: d.invite_code || '',
+        items,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -301,8 +309,12 @@ export default defineFakeRoute([
       const idx = trials.findIndex(t => t.id === id)
       if (idx < 0) return { code: 404, message: 'not found', data: null }
       const d = body as any
-      trials[idx] = { ...trials[idx], ...d, updated_at: new Date().toISOString() }
-      return ok(trials[idx])
+      const next = { ...trials[idx], ...d, updated_at: new Date().toISOString() }
+      if (d.items) {
+        next.items = d.items.map((it: any) => ({ id: trialItemNextId++, policy_id: id, subject: it.subject, quantity: it.quantity, expire_days: it.expire_days || 0 }))
+      }
+      trials[idx] = next
+      return ok(next)
     },
   },
   {
@@ -322,15 +334,19 @@ export default defineFakeRoute([
       const d = body as any
       if (!trialGrantsStore[id]) trialGrantsStore[id] = []
       const policy = trials.find(t => t.id === id)
-      const grant = {
-        id: grantNextId++,
-        policy_id: id,
-        user_id: d.user_id,
-        subject: policy?.grant_subject || 'instance_seat',
-        quantity: policy?.grant_quantity || 1,
-        created_at: new Date().toISOString(),
+      const claimId = grantNextId++
+      const items = policy?.items?.length ? policy.items : [{ subject: 'instance_seat', quantity: 1 }]
+      for (const it of items) {
+        trialGrantsStore[id].push({
+          id: grantNextId++,
+          claim_id: claimId,
+          policy_id: id,
+          user_id: d.user_id,
+          subject: it.subject,
+          quantity: it.quantity,
+          created_at: new Date().toISOString(),
+        })
       }
-      trialGrantsStore[id].push(grant)
       return ok(null)
     },
   },

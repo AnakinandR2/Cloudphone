@@ -117,17 +117,22 @@ export interface RuntimeUsageSlice {
 }
 
 // 试用
+export interface TrialPolicyItem {
+  id: number
+  policy_id: number
+  subject: string
+  quantity: number
+  expire_days: number // 0 = 永久
+}
 export interface TrialPolicy {
   id: number
   code: string
   name: string
   enabled: boolean
-  grant_subject: string
-  grant_quantity: number
-  grant_expire_days: number
   per_user_limit: number
   allow_new_user: boolean
   invite_code: string // 前台恒为空(后端抹除)
+  items: TrialPolicyItem[]
 }
 export interface ClaimableItem {
   policy: TrialPolicy

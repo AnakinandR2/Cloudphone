@@ -17,7 +17,9 @@ export interface Account { id: number, user_id: number, balance_cents: number, c
 export interface CapacitySnapshot { instance_seat: number, boot_seat: number, runtime_minute: number }
 export interface AccountView { account: Account, ledger: LedgerEntry[], ledger_total: number, capacities: CapacitySnapshot }
 
-export interface TrialPolicy { id: number, code: string, name: string, enabled: boolean, grant_subject: string, grant_quantity: number, grant_expire_days: number, per_user_limit: number, allow_new_user: boolean, invite_code: string, created_at: string, updated_at: string }
-export interface TrialPolicyCreate { code: string, name: string, grant_subject: string, grant_quantity: number, grant_expire_days?: number, per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
-export interface TrialPolicyUpdate { name?: string, grant_quantity?: number, grant_expire_days?: number, per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
-export interface TrialGrant { id: number, policy_id: number, user_id: number, subject: string, quantity: number, created_at: string }
+export interface TrialPolicyItem { id: number, policy_id: number, subject: string, quantity: number, expire_days: number }
+export interface TrialPolicyItemInput { subject: string, quantity: number, expire_days: number }
+export interface TrialPolicy { id: number, code: string, name: string, enabled: boolean, per_user_limit: number, allow_new_user: boolean, invite_code: string, items: TrialPolicyItem[], created_at: string, updated_at: string }
+export interface TrialPolicyCreate { code: string, name: string, items: TrialPolicyItemInput[], per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
+export interface TrialPolicyUpdate { name?: string, items?: TrialPolicyItemInput[], per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
+export interface TrialGrant { id: number, claim_id: number, policy_id: number, user_id: number, subject: string, quantity: number, created_at: string }
