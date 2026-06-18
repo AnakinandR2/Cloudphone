@@ -110,6 +110,7 @@ const crumbs = computed(() => {
         <!-- 标签（真实 <a>） -->
         <div v-if="tags.length" class="blog-tags">
           <span class="blog-tags__label">{{ t.blog.tags }}:</span>
+          <NuxtLink :to="localePath('/blog')" class="blog-tag" :class="{ active: mode !== 'tag' }">{{ t.blog.all }}</NuxtLink>
           <NuxtLink
             v-for="tg in tags"
             :key="tg.id"
