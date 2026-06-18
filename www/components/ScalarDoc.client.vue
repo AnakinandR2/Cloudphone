@@ -92,10 +92,23 @@ const customCss = `
 .scalar-api-reference a[href*="scalar.com"] {
   display: none !important;
 }
-/* 文档高度自适应内容：去掉 100dvh 强制最小高度，避免内容短时侧栏/正文与 footer 间出现大块空白 */
-.scalar-api-reference .references-layout,
-.scalar-api-reference.references-classic .references-layout {
-  min-height: auto !important;
+/* 文档高度自适应内容：去掉 100dvh 强制最小高度，消除正文与 footer 之间的空白。
+   直接命中类名——references-layout 与 scalar-api-reference 在同一元素上，用后代选择器会落空。 */
+.references-layout,
+.references-classic {
+  min-height: 0 !important;
+}
+/* 内容左对齐：默认 .section margin:auto 把内容在侧栏右侧「居中」，造成整体右移、左侧留大间距；
+   改为左对齐并给内容列留出左右内边距。.section 是站点通用类名，必须限定在 Scalar 内。 */
+.references-rendered {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+.references-rendered .section,
+.references-rendered .section-accordion,
+.references-classic-header {
+  margin-left: 0 !important;
+  margin-right: auto !important;
 }
 `
 
