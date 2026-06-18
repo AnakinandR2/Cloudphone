@@ -11,16 +11,28 @@ import (
 
 const trialUser = 9201
 
+// trialTables 试用相关全部表（清理用）。
+var trialTables = []string{
+	"billing_trial_policies", "billing_trial_policy_items", "billing_trial_claims",
+	"billing_trial_grants", "billing_trial_eligibilities",
+	"billing_orders", "billing_entitlement_batches", "billing_ledger_entries",
+}
+
+// oneItem 便捷构造单发放项策略（测试用）。
+func oneItem(subject string, qty int64, expireDays int) []TrialPolicyItem {
+	return []TrialPolicyItem{{Subject: subject, Quantity: qty, ExpireDays: expireDays}}
+}
+
 func TestTrialPolicyCRUDAndHelpers(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities", "billing_orders")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 	repo := newTrialRepository(framework.DB)
 
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, PerUserLimit: 1, AllowNewUser: true}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(SubjectInstanceSeat, 1, 0)}))
 	p, err := repo.getPolicyByCode("newbie")
 	require.NoError(t, err)
 	assert.Equal(t, "新人礼", p.Name)
+	require.Len(t, p.Items, 1)
+	assert.Equal(t, SubjectInstanceSeat, p.Items[0].Subject)
 
 	n, err := repo.countClaims(int(p.ID), trialUser)
 	require.NoError(t, err)
@@ -46,18 +58,16 @@ func TestTrialPolicyCRUDAndHelpers(t *testing.T) {
 }
 
 func TestClaimTrialNewUserAndDedup(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
-			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 	repo := newTrialRepository(framework.DB)
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, GrantExpireDays: 30, PerUserLimit: 1, AllowNewUser: true}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(SubjectInstanceSeat, 1, 30)}))
 
 	require.NoError(t, TrialService.ClaimTrial(trialUser, "newbie", ""))
 	cap, err := EntitlementService.Capacity(trialUser, SubjectInstanceSeat)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), cap)
 
+	// 限领按 TrialClaim 计：第 2 次被拒，容量不变。
 	err = TrialService.ClaimTrial(trialUser, "newbie", "")
 	assert.Error(t, err)
 	cap, _ = EntitlementService.Capacity(trialUser, SubjectInstanceSeat)
@@ -68,21 +78,60 @@ func TestClaimTrialNewUserAndDedup(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 }
 
+// 一次领取同时发放三类资源：三类容量均到账、写 1 个 TrialClaim + 3 条 TrialGrant；每项独立到期。
+func TestClaimTrialMultiResource(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
+	repo := newTrialRepository(framework.DB)
+	require.NoError(t, repo.createPolicy(&TrialPolicy{
+		Code: "gift", Name: "大礼包", Enabled: true, PerUserLimit: 1, AllowNewUser: true,
+		Items: []TrialPolicyItem{
+			{Subject: SubjectInstanceSeat, Quantity: 2, ExpireDays: 30},
+			{Subject: SubjectRuntimeMinute, Quantity: 600, ExpireDays: 0}, // 永久
+			{Subject: SubjectBootSeat, Quantity: 1, ExpireDays: 30},
+		},
+	}))
+
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "gift", ""))
+
+	inst, _ := EntitlementService.Capacity(trialUser, SubjectInstanceSeat)
+	mins, _ := EntitlementService.Capacity(trialUser, SubjectRuntimeMinute)
+	boot, _ := EntitlementService.Capacity(trialUser, SubjectBootSeat)
+	assert.Equal(t, int64(2), inst)
+	assert.Equal(t, int64(600), mins)
+	assert.Equal(t, int64(1), boot)
+
+	// 1 个领取头 + 3 条发放明细。
+	p, _ := repo.getPolicyByCode("gift")
+	var claims int64
+	framework.DB.Model(&TrialClaim{}).Where("policy_id = ?", p.ID).Count(&claims)
+	assert.Equal(t, int64(1), claims)
+	grants, _ := repo.listGrants(int(p.ID))
+	assert.Len(t, grants, 3)
+
+	// 每项独立到期：runtime_minute 批次永久(nil)，instance_seat 批次有到期。
+	var permMins int64
+	framework.DB.Model(&EntitlementBatch{}).Where("user_id = ? AND subject = ? AND expire_at IS NULL", trialUser, SubjectRuntimeMinute).Count(&permMins)
+	assert.Equal(t, int64(1), permMins)
+	var datedSeat int64
+	framework.DB.Model(&EntitlementBatch{}).Where("user_id = ? AND subject = ? AND expire_at IS NOT NULL", trialUser, SubjectInstanceSeat).Count(&datedSeat)
+	assert.Equal(t, int64(1), datedSeat)
+
+	// 限领 1：再领被拒。
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "gift", ""))
+}
+
 func TestClaimTrialEligibilityPaths(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
-			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 	repo := newTrialRepository(framework.DB)
 
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "VIP2026"}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, PerUserLimit: 1, InviteCode: "VIP2026", Items: oneItem(SubjectRuntimeMinute, 600, 0)}))
 	assert.Error(t, TrialService.ClaimTrial(trialUser, "promo", ""))
 	assert.Error(t, TrialService.ClaimTrial(trialUser, "promo", "WRONG"))
 	require.NoError(t, TrialService.ClaimTrial(trialUser, "promo", "VIP2026"))
 	cap, _ := EntitlementService.Capacity(trialUser, SubjectRuntimeMinute)
 	assert.Equal(t, int64(600), cap)
 
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newonly", Name: "仅新人", Enabled: true, GrantSubject: SubjectBootSeat, GrantQuantity: 2, PerUserLimit: 1, AllowNewUser: true}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newonly", Name: "仅新人", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(SubjectBootSeat, 2, 0)}))
 	require.NoError(t, framework.DB.Create(&Order{OrderNo: "BILY1", UserID: uint(trialUser), Status: OrderPaid, PayMethod: PayBalance, TotalCents: 1}).Error)
 	assert.Error(t, TrialService.ClaimTrial(trialUser, "newonly", ""))
 	pol, _ := repo.getPolicyByCode("newonly")
@@ -93,13 +142,10 @@ func TestClaimTrialEligibilityPaths(t *testing.T) {
 }
 
 func TestListClaimable(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
-			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 	repo := newTrialRepository(framework.DB)
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, PerUserLimit: 1, AllowNewUser: true}))
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "VIP"}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newbie", Name: "新人礼", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(SubjectInstanceSeat, 1, 0)}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, PerUserLimit: 1, InviteCode: "VIP", Items: oneItem(SubjectRuntimeMinute, 600, 0)}))
 
 	items, err := TrialService.ListClaimable(trialUser)
 	require.NoError(t, err)
@@ -109,17 +155,15 @@ func TestListClaimable(t *testing.T) {
 		byCode[it.Policy.Code] = it
 	}
 	assert.True(t, byCode["newbie"].Claimable)
+	require.Len(t, byCode["newbie"].Policy.Items, 1) // 发放项随策略返回
 	assert.False(t, byCode["promo"].Claimable)
 	assert.True(t, byCode["promo"].NeedInvite)
 }
 
 func TestListClaimableHidesInviteCode(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities",
-			"billing_orders", "billing_entitlement_batches", "billing_ledger_entries")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 	repo := newTrialRepository(framework.DB)
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, GrantSubject: SubjectRuntimeMinute, GrantQuantity: 600, PerUserLimit: 1, InviteCode: "SECRET"}))
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "promo", Name: "活动", Enabled: true, PerUserLimit: 1, InviteCode: "SECRET", Items: oneItem(SubjectRuntimeMinute, 600, 0)}))
 
 	items, err := TrialService.ListClaimable(trialUser)
 	require.NoError(t, err)
@@ -129,30 +173,39 @@ func TestListClaimableHidesInviteCode(t *testing.T) {
 }
 
 func TestTrialAdminPolicyService(t *testing.T) {
-	t.Cleanup(func() {
-		framework.CleanTable("billing_trial_policies", "billing_trial_grants", "billing_trial_eligibilities")
-	})
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
 
+	// 无发放项 → 拒绝
+	_, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "empty", Name: "x"})
+	assert.Error(t, err)
 	// 试用只能发资源科目 → balance 被拒
-	_, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "bad", Name: "x", GrantSubject: SubjectBalance, GrantQuantity: 100})
+	_, err = TrialService.CreatePolicy(&TrialPolicyCreate{Code: "bad", Name: "x", Items: []TrialPolicyItemInput{{Subject: SubjectBalance, Quantity: 100}}})
+	assert.Error(t, err)
+	// 科目重复 → 拒绝
+	_, err = TrialService.CreatePolicy(&TrialPolicyCreate{Code: "dupsub", Name: "x", Items: []TrialPolicyItemInput{{Subject: SubjectInstanceSeat, Quantity: 1}, {Subject: SubjectInstanceSeat, Quantity: 2}}})
 	assert.Error(t, err)
 
-	p, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "新人礼", GrantSubject: SubjectInstanceSeat, GrantQuantity: 1, AllowNewUser: true})
+	p, err := TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "新人礼", AllowNewUser: true, Items: []TrialPolicyItemInput{{Subject: SubjectInstanceSeat, Quantity: 1, ExpireDays: 30}}})
 	require.NoError(t, err)
 	assert.Equal(t, 1, p.PerUserLimit) // 默认 1
 	assert.True(t, p.Enabled)          // 默认启用
+	require.Len(t, p.Items, 1)
 
 	// 重复 code → 冲突
-	_, err = TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "dup", GrantSubject: SubjectInstanceSeat, GrantQuantity: 1})
+	_, err = TrialService.CreatePolicy(&TrialPolicyCreate{Code: "newbie", Name: "dup", Items: []TrialPolicyItemInput{{Subject: SubjectInstanceSeat, Quantity: 1}}})
 	assert.Error(t, err)
 
-	// 更新
-	newQty := int64(5)
+	// 更新：替换发放项 + 停用
 	disabled := false
-	upd, err := TrialService.UpdatePolicy(int(p.ID), &TrialPolicyUpdate{GrantQuantity: &newQty, Enabled: &disabled})
+	upd, err := TrialService.UpdatePolicy(int(p.ID), &TrialPolicyUpdate{
+		Items:   &[]TrialPolicyItemInput{{Subject: SubjectRuntimeMinute, Quantity: 500, ExpireDays: 0}},
+		Enabled: &disabled,
+	})
 	require.NoError(t, err)
-	assert.Equal(t, int64(5), upd.GrantQuantity)
 	assert.False(t, upd.Enabled)
+	require.Len(t, upd.Items, 1)
+	assert.Equal(t, SubjectRuntimeMinute, upd.Items[0].Subject)
+	assert.Equal(t, int64(500), upd.Items[0].Quantity)
 
 	// 授予资格 + 列出（无领取记录时为空）
 	require.NoError(t, TrialService.GrantEligibility(int(p.ID), 9301, "staff:1"))

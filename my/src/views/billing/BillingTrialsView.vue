@@ -60,15 +60,19 @@ function subjectUnit(subject: string): string {
   return ''
 }
 
-// ——— 授予内容描述 ———
+// ——— 授予内容描述（多发放项，逐项「数量单位 · 到期」，以「，」连接）———
 function grantDesc(item: ClaimableItem): string {
-  const { grant_quantity, grant_subject, grant_expire_days } = item.policy
-  const unit = subjectUnit(grant_subject)
-  const qty = `${grant_quantity} ${unit}`
-  const expire = grant_expire_days > 0
-    ? t('billing.trialExpireDays', { n: grant_expire_days })
-    : t('billing.trialPermanent')
-  return `${qty} · ${expire}`
+  const items = item.policy.items ?? []
+  if (!items.length) {
+    return '—'
+  }
+  return items.map((it) => {
+    const qty = `${it.quantity} ${subjectUnit(it.subject)}`
+    const expire = it.expire_days > 0
+      ? t('billing.trialExpireDays', { n: it.expire_days })
+      : t('billing.trialPermanent')
+    return `${qty} · ${expire}`
+  }).join('，')
 }
 
 // ——— 领取 ———

@@ -70,6 +70,33 @@ describe('useWebRTC · 状态与控制', () => {
   })
 })
 
+describe('useWebRTC · 屏幕方向自动检测', () => {
+  it('syncOrientation 按实时推流尺寸自动判定横竖屏（设备/应用自动转屏即跟随）', () => {
+    const videoRef = ref({ videoWidth: 720, videoHeight: 1280 } as unknown as HTMLVideoElement)
+    const rtc = setup(videoRef)
+    expect(rtc.landscape.value).toBe(false) // 初始竖屏
+
+    // 应用内自动转横屏 → 推流分辨率交换（宽>高），syncOrientation 自动检测为横屏
+    videoRef.value!.videoWidth = 1280
+    videoRef.value!.videoHeight = 720
+    rtc.syncOrientation()
+    expect(rtc.landscape.value).toBe(true)
+
+    // 转回竖屏
+    videoRef.value!.videoWidth = 720
+    videoRef.value!.videoHeight = 1280
+    rtc.syncOrientation()
+    expect(rtc.landscape.value).toBe(false)
+  })
+
+  it('推流尺寸缺失时 syncOrientation 不改变方向', () => {
+    const videoRef = ref({ videoWidth: 0, videoHeight: 0 } as unknown as HTMLVideoElement)
+    const rtc = setup(videoRef)
+    rtc.syncOrientation()
+    expect(rtc.landscape.value).toBe(false)
+  })
+})
+
 describe('pickRttMs · 从 getStats 报告取 RTT', () => {
   // RTCStatsReport 是 Map 形态（forEach/get），测试直接用 Map 构造。
   function report(entries: any[]): RTCStatsReport {

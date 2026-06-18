@@ -1,8 +1,6 @@
 package billing
 
 import (
-	"time"
-
 	"manager-backend/framework/apperr"
 )
 
@@ -48,12 +46,36 @@ func (s *trialServiceImpl) ListClaimable(userID int) ([]ClaimableItem, error) {
 
 var trialGrantSubjects = resourceSubjects // 试用仅发资源
 
-func (s *trialServiceImpl) CreatePolicy(req *TrialPolicyCreate) (*TrialPolicy, error) {
-	if !trialGrantSubjects[req.GrantSubject] {
-		return nil, apperr.Validation("试用只能发放资源科目")
+// validateItems 校验发放项：≥1 项、科目合法且不重复、数量>0、有效天数≥0。
+func validateItems(in []TrialPolicyItemInput) ([]TrialPolicyItem, error) {
+	if len(in) == 0 {
+		return nil, apperr.Validation("至少配置一项发放")
 	}
-	if req.GrantQuantity <= 0 {
-		return nil, apperr.Validation("发放数量必须大于0")
+	seen := map[string]bool{}
+	out := make([]TrialPolicyItem, 0, len(in))
+	for _, it := range in {
+		if !trialGrantSubjects[it.Subject] {
+			return nil, apperr.Validation("试用只能发放资源科目")
+		}
+		if seen[it.Subject] {
+			return nil, apperr.Validation("发放科目重复")
+		}
+		seen[it.Subject] = true
+		if it.Quantity <= 0 {
+			return nil, apperr.Validation("发放数量必须大于0")
+		}
+		if it.ExpireDays < 0 {
+			return nil, apperr.Validation("有效天数不能为负")
+		}
+		out = append(out, TrialPolicyItem{Subject: it.Subject, Quantity: it.Quantity, ExpireDays: it.ExpireDays})
+	}
+	return out, nil
+}
+
+func (s *trialServiceImpl) CreatePolicy(req *TrialPolicyCreate) (*TrialPolicy, error) {
+	items, err := validateItems(req.Items)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := s.repo.getPolicyByCode(req.Code); err == nil {
 		return nil, apperr.Conflict("策略编码已存在")
@@ -69,14 +91,13 @@ func (s *trialServiceImpl) CreatePolicy(req *TrialPolicyCreate) (*TrialPolicy, e
 		enabled = *req.Enabled
 	}
 	p := TrialPolicy{
-		Code: req.Code, Name: req.Name, Enabled: enabled, GrantSubject: req.GrantSubject,
-		GrantQuantity: req.GrantQuantity, GrantExpireDays: req.GrantExpireDays, PerUserLimit: limit,
-		AllowNewUser: req.AllowNewUser, InviteCode: req.InviteCode,
+		Code: req.Code, Name: req.Name, Enabled: enabled, PerUserLimit: limit,
+		AllowNewUser: req.AllowNewUser, InviteCode: req.InviteCode, Items: items,
 	}
 	if err := s.repo.createPolicy(&p); err != nil {
 		return nil, err
 	}
-	return &p, nil
+	return s.getPolicy(int(p.ID))
 }
 
 func (s *trialServiceImpl) UpdatePolicy(id int, req *TrialPolicyUpdate) (*TrialPolicy, error) {
@@ -86,15 +107,6 @@ func (s *trialServiceImpl) UpdatePolicy(id int, req *TrialPolicyUpdate) (*TrialP
 	fields := map[string]interface{}{}
 	if req.Name != "" {
 		fields["name"] = req.Name
-	}
-	if req.GrantQuantity != nil {
-		if *req.GrantQuantity <= 0 {
-			return nil, apperr.Validation("发放数量必须大于0")
-		}
-		fields["grant_quantity"] = *req.GrantQuantity
-	}
-	if req.GrantExpireDays != nil {
-		fields["grant_expire_days"] = *req.GrantExpireDays
 	}
 	if req.PerUserLimit != nil {
 		if *req.PerUserLimit < 1 {
@@ -113,6 +125,15 @@ func (s *trialServiceImpl) UpdatePolicy(id int, req *TrialPolicyUpdate) (*TrialP
 	}
 	if len(fields) > 0 {
 		if err := s.repo.updatePolicy(id, fields); err != nil {
+			return nil, err
+		}
+	}
+	if req.Items != nil {
+		items, err := validateItems(*req.Items)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.replacePolicyItems(id, items); err != nil {
 			return nil, err
 		}
 	}
@@ -190,10 +211,5 @@ func (s *trialServiceImpl) ClaimTrial(userID int, code, inviteCode string) error
 	if !ok {
 		return apperr.Validation("不符合领取条件")
 	}
-	var expireAt *time.Time
-	if p.GrantExpireDays > 0 {
-		exp := time.Now().AddDate(0, 0, p.GrantExpireDays)
-		expireAt = &exp
-	}
-	return s.repo.claim(p, userID, expireAt)
+	return s.repo.claim(p, userID)
 }

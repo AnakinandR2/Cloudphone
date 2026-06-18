@@ -3,24 +3,44 @@ package billing
 import "time"
 
 type TrialPolicy struct {
-	ID              uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Code            string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_billing_trial_code" json:"code"`
-	Name            string    `gorm:"type:varchar(100);not null" json:"name"`
-	Enabled         bool      `gorm:"not null;default:true" json:"enabled"`
-	GrantSubject    string    `gorm:"type:varchar(20);not null" json:"grant_subject"`
-	GrantQuantity   int64     `gorm:"not null" json:"grant_quantity"`
-	GrantExpireDays int       `gorm:"not null;default:0" json:"grant_expire_days"`
-	PerUserLimit    int       `gorm:"not null;default:1" json:"per_user_limit"`
-	AllowNewUser    bool      `gorm:"not null;default:false" json:"allow_new_user"`
-	InviteCode      string    `gorm:"type:varchar(64)" json:"invite_code"`
-	CreatedAt       time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID           uint              `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code         string            `gorm:"type:varchar(64);not null;uniqueIndex:idx_billing_trial_code" json:"code"`
+	Name         string            `gorm:"type:varchar(100);not null" json:"name"`
+	Enabled      bool              `gorm:"not null;default:true" json:"enabled"`
+	PerUserLimit int               `gorm:"not null;default:1" json:"per_user_limit"`
+	AllowNewUser bool              `gorm:"not null;default:false" json:"allow_new_user"`
+	InviteCode   string            `gorm:"type:varchar(64)" json:"invite_code"`
+	Items        []TrialPolicyItem `gorm:"foreignKey:PolicyID" json:"items"`
+	CreatedAt    time.Time         `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time         `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (TrialPolicy) TableName() string { return "billing_trial_policies" }
 
+// TrialPolicyItem 是一个试用策略的一条发放项（一策略可含多条，每科目至多一条）。
+type TrialPolicyItem struct {
+	ID         uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	PolicyID   uint   `gorm:"not null;uniqueIndex:idx_billing_trialitem_policy_subject" json:"policy_id"`
+	Subject    string `gorm:"type:varchar(20);not null;uniqueIndex:idx_billing_trialitem_policy_subject" json:"subject"`
+	Quantity   int64  `gorm:"not null" json:"quantity"`
+	ExpireDays int    `gorm:"not null;default:0" json:"expire_days"` // 0 = 永久
+}
+
+func (TrialPolicyItem) TableName() string { return "billing_trial_policy_items" }
+
+// TrialClaim 是一次领取（领取头）：一次领取一行，限领次数按本表计。
+type TrialClaim struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	PolicyID  uint      `gorm:"not null;index:idx_billing_trialclaim_policy_user" json:"policy_id"`
+	UserID    uint      `gorm:"not null;index:idx_billing_trialclaim_policy_user" json:"user_id"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (TrialClaim) TableName() string { return "billing_trial_claims" }
+
 type TrialGrant struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ClaimID   uint      `gorm:"not null;index:idx_billing_trialgrant_claim" json:"claim_id"`
 	PolicyID  uint      `gorm:"not null;index:idx_billing_trialgrant_policy_user" json:"policy_id"`
 	UserID    uint      `gorm:"not null;index:idx_billing_trialgrant_policy_user" json:"user_id"`
 	Subject   string    `gorm:"type:varchar(20);not null" json:"subject"`
@@ -40,26 +60,30 @@ type TrialEligibility struct {
 
 func (TrialEligibility) TableName() string { return "billing_trial_eligibilities" }
 
+// TrialPolicyItemInput 是创建/更新策略时的发放项入参。
+type TrialPolicyItemInput struct {
+	Subject    string `json:"subject" binding:"required"`
+	Quantity   int64  `json:"quantity" binding:"required"`
+	ExpireDays int    `json:"expire_days"`
+}
+
 type TrialPolicyCreate struct {
-	Code            string `json:"code" binding:"required"`
-	Name            string `json:"name" binding:"required"`
-	GrantSubject    string `json:"grant_subject" binding:"required"`
-	GrantQuantity   int64  `json:"grant_quantity" binding:"required"`
-	GrantExpireDays int    `json:"grant_expire_days"`
-	PerUserLimit    int    `json:"per_user_limit"`
-	AllowNewUser    bool   `json:"allow_new_user"`
-	InviteCode      string `json:"invite_code"`
-	Enabled         *bool  `json:"enabled"`
+	Code         string                 `json:"code" binding:"required"`
+	Name         string                 `json:"name" binding:"required"`
+	Items        []TrialPolicyItemInput `json:"items" binding:"required"`
+	PerUserLimit int                    `json:"per_user_limit"`
+	AllowNewUser bool                   `json:"allow_new_user"`
+	InviteCode   string                 `json:"invite_code"`
+	Enabled      *bool                  `json:"enabled"`
 }
 
 type TrialPolicyUpdate struct {
-	Name            string  `json:"name"`
-	GrantQuantity   *int64  `json:"grant_quantity"`
-	GrantExpireDays *int    `json:"grant_expire_days"`
-	PerUserLimit    *int    `json:"per_user_limit"`
-	AllowNewUser    *bool   `json:"allow_new_user"`
-	InviteCode      *string `json:"invite_code"`
-	Enabled         *bool   `json:"enabled"`
+	Name         string                  `json:"name"`
+	Items        *[]TrialPolicyItemInput `json:"items"` // nil=不改；非 nil=整体替换
+	PerUserLimit *int                    `json:"per_user_limit"`
+	AllowNewUser *bool                   `json:"allow_new_user"`
+	InviteCode   *string                 `json:"invite_code"`
+	Enabled      *bool                   `json:"enabled"`
 }
 
 type ClaimRequest struct {

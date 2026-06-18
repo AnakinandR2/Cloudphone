@@ -33,14 +33,33 @@ type repository interface {
 	createTask(t *CpTask) error
 	dueTasks() ([]CpTask, error)
 	updateTask(id uint, status, lastErr string) error
+	// ownedCpIDs 返回某用户名下已开通（cpId 非空）的全部 cpId（automation 跨模块归属校验用）。
+	ownedCpIDs(userID int) ([]string, error)
 	// 运行会话（计费同步/结算/护栏）
 	ownersByCpIDs(cpIDs []string) (map[string]uint, error)
 	upsertRunSession(rs *RunSession) (isNew bool, err error)
 	runningSessions() ([]RunSession, error)
+	runningSessionCountByUser(userID int) (int64, error)
 	sessionsOverlapping(since time.Time) ([]RunSession, error)
 }
 
 type gormRepository struct{ db *gorm.DB }
+
+// ownedCpIDs 返回某用户名下已开通（cpId 非空）的全部 cpId。
+func (r *gormRepository) ownedCpIDs(userID int) ([]string, error) {
+	var rows []CloudPhone
+	if err := r.db.Select("cp_id").
+		Where("user_id = ? AND cp_id <> ''", userID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, p := range rows {
+		if p.CpID != "" {
+			out = append(out, p.CpID)
+		}
+	}
+	return out, nil
+}
 
 // ownersByCpIDs 批量解析 cpId → 属主 userId（只含我方在册实例）。
 func (r *gormRepository) ownersByCpIDs(cpIDs []string) (map[string]uint, error) {
@@ -88,6 +107,14 @@ func (r *gormRepository) runningSessions() ([]RunSession, error) {
 	var out []RunSession
 	err := r.db.Where("power_off_at IS NULL").Order("user_id, power_on_at").Find(&out).Error
 	return out, err
+}
+
+// runningSessionCountByUser 返回某用户当前运行中（未关机）的会话数——开机门禁判并发席位余量用，
+// 与护栏 runningSessions() 同源（power_off_at IS NULL）。
+func (r *gormRepository) runningSessionCountByUser(userID int) (int64, error) {
+	var n int64
+	err := r.db.Model(&RunSession{}).Where("power_off_at IS NULL AND user_id = ?", userID).Count(&n).Error
+	return n, err
 }
 
 // sessionsOverlapping 返回与 [since, now] 有交集的会话（结算窗口用）：

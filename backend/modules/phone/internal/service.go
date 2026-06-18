@@ -471,6 +471,23 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}
+		// 时长费已启用（单价>0）时，开机需有可用开机席位或剩余时长包（余额按分钟付费不计入开机门禁）。
+		// 与护栏 runRuntimeGuard 同源判并发：开机后并发台数若超出席位且无时长包则拒绝，避免开机即被护栏关停。
+		cov, err := billing.GetRuntimeCoverage(userID)
+		if err != nil {
+			return err
+		}
+		if cov.UnitPriceCents > 0 {
+			running, err := s.repo.runningSessionCountByUser(userID)
+			if err != nil {
+				return err
+			}
+			hasSeat := running < cov.AvailableBootSeats // 开机后仍在并发席位内
+			hasPack := cov.RemainingPackMinutes > 0
+			if !hasSeat && !hasPack {
+				return apperr.Forbidden("没有可用的开机席位或时长包，无法开机，请购买包月开机包或时长包")
+			}
+		}
 		if err := s.ops.StartOrShutdown(ctx, p.CpID, "开机"); err != nil {
 			return err
 		}
@@ -820,6 +837,44 @@ func (s *serviceImpl) AdbEnable(userID, id int) (*AdbConnInfo, error) {
 	return out, nil
 }
 
+// RuntimeInfo 远控真实开机时长（spec 2026-06-17）：服务端按中台运行日志算开机秒数，前端只读累加。
+type RuntimeInfo struct {
+	Running       bool   `json:"running"`
+	PowerOnAt     string `json:"power_on_at,omitempty"` // RFC3339，仅 running 时给
+	UptimeSeconds int64  `json:"uptime_seconds"`        // 服务端算 now-powerOnAt，clamp ≥0
+}
+
+// Runtime 取某台云手机当前运行会话的真实开机时长：实时查中台运行日志最新一条，
+// 运行中则由服务端算 now-powerOnAt（规避客户端时区/时钟偏差）；无日志/最新已关机/解析失败 → running=false。
+func (s *serviceImpl) Runtime(userID, id int) (*RuntimeInfo, error) {
+	p, err := s.resolveCp(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	page, err := s.ops.RunLogs(ctx, p.CpID, 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	if page == nil || len(page.Data) == 0 {
+		return &RuntimeInfo{Running: false}, nil
+	}
+	e := page.Data[0]
+	on, ok := parseRunLogTime(e.PowerOnTime)
+	if !ok {
+		return &RuntimeInfo{Running: false}, nil
+	}
+	if _, ended := parseRunLogTime(e.PowerOffTime); ended {
+		return &RuntimeInfo{Running: false}, nil // 最新会话已关机
+	}
+	up := int64(time.Since(on).Seconds())
+	if up < 0 {
+		up = 0
+	}
+	return &RuntimeInfo{Running: true, PowerOnAt: on.Format(time.RFC3339), UptimeSeconds: up}, nil
+}
+
 // RunLogs 分页查询某台云手机的运行会话日志（spec §2.9）。size 限定 1..100。
 func (s *serviceImpl) RunLogs(userID, id, page, size int) (*midplat.RunLogPage, error) {
 	p, err := s.resolveCp(userID, id)
@@ -846,6 +901,28 @@ func (s *serviceImpl) AdbDisable(userID, id int) error {
 	ctx, cancel := opCtx()
 	defer cancel()
 	return s.ops.AdbDisableToken(ctx, p.CpID)
+}
+
+// OwnedCpIDs 返回某用户名下已开通的全部 cpId（跨模块归属校验门面用）。
+func (s *serviceImpl) OwnedCpIDs(userID int) ([]string, error) {
+	return s.repo.ownedCpIDs(userID)
+}
+
+// OwnsCpID 校验某 cpId 是否属于该用户且已开通。
+func (s *serviceImpl) OwnsCpID(userID int, cpID string) (bool, error) {
+	if cpID == "" {
+		return false, nil
+	}
+	ids, err := s.repo.ownedCpIDs(userID)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		if id == cpID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Root 开启 / 关闭云手机 root 权限（§3.4.1 update-root）。

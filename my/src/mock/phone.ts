@@ -45,6 +45,9 @@ let seq = 3000
 // Root 演示态：phone id → 是否已 root
 const rootState: Record<number, boolean> = {}
 
+// 脚本任务演示态：轮询次数计数（达到阈值后返回完成）
+let scriptPolls = 0
+
 // ADB 演示态：phone id → { enabled, 白名单 IP }
 const adbState: Record<number, { enabled: boolean, whiteIp: string[] }> = {}
 function adbInfo(id: number) {
@@ -87,6 +90,18 @@ export default defineFakeRoute([
     response: ({ params }) => {
       const p = phones.find(x => x.id === Number(params.id))
       return p ? ok(p) : fail('云手机不存在')
+    },
+  },
+  {
+    // 远控真实开机时长：mock 返回一个已运行约 2 小时的运行中会话。
+    url: '/v1/phone/:id/runtime',
+    method: 'get',
+    response: ({ params }) => {
+      const p = phones.find(x => x.id === Number(params.id))
+      if (!p) return fail('云手机不存在')
+      const uptime = 7235 // ~2h
+      const onAt = new Date(Date.now() - uptime * 1000).toISOString()
+      return ok({ running: true, power_on_at: onAt, uptime_seconds: uptime })
     },
   },
   {
@@ -271,6 +286,36 @@ export default defineFakeRoute([
     response: ({ params, body }) => {
       rootState[Number(params.id)] = body?.enable === true
       return ok(null)
+    },
+  },
+
+  // ---- 自动化脚本最小闭环（演示：下发即返回 taskId；查询第二次起返回完成）----
+  {
+    url: '/v1/phone/:id/script/hello',
+    method: 'post',
+    response: () => {
+      scriptPolls = 0
+      return ok({ task_id: 9001, task_no: 'T-9001' })
+    },
+  },
+  {
+    url: '/v1/phone/:id/script/task/:taskId',
+    method: 'get',
+    response: ({ params }) => {
+      scriptPolls++
+      const done = scriptPolls >= 2 // 第一次执行中，之后完成
+      return ok({
+        task_id: Number(params.taskId),
+        task_no: 'T-9001',
+        status: done ? 'COMPLETED' : 'EXECUTING',
+        status_desc: done ? '任务完成' : '正在执行',
+        exec_result: done ? 1 : null,
+        terminal: done,
+        run_duration_ms: done ? 1234 : 0,
+        run_log: done ? '[INFO] hello world from glory cloud phone\n#RESULT#{"msg":"hello world from glory","ok":true}#RESULT#' : '',
+        result: done ? '{"msg":"hello world from glory","ok":true}' : '',
+        screenshot_url: '',
+      })
     },
   },
 

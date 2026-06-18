@@ -95,6 +95,13 @@ var PermissionGroups = []PermissionGroup{
 			{Key: "billing:manage", Label: "管理计费（调整余额/资源、配置定价与试用）"},
 		},
 	},
+	{
+		Module: "自动化脚本", ModuleKey: "script",
+		Permissions: []Permission{
+			{Key: "script:view", Label: "查看脚本商店/用户脚本"},
+			{Key: "script:manage", Label: "管理商店脚本/下架用户脚本"},
+		},
+	},
 	// scaffold:permission-groups
 }
 

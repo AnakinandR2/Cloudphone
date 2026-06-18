@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"manager-backend/framework"
 	"manager-backend/framework/midplat"
@@ -24,6 +25,12 @@ type fakePort struct {
 	adbToken *midplat.ADBTokenContainer // 非空则覆盖 AdbEnableToken 返回
 	adbInfo  *midplat.CloudPhoneAdbInfo // 非空则覆盖 AdbInfo 返回（测过期补全 / DATA_NOT_EXIST 降级）
 	rooted   map[string]bool            // 供 RootEnabledMap 返回的 cpId→isRooted 桩数据
+
+	scriptID       int64                 // ScriptTemplateID 返回（0=未上传，触发 upload）
+	scriptUploaded bool                  // 标记 UploadScriptTemplate 是否被调用
+	scriptTask     *midplat.ScriptTaskVO // 非空则覆盖 ScriptTaskStatus 返回
+
+	runLogPage *midplat.RunLogPage // 非空则覆盖 RunLogs 返回（远控真实开机时长用）
 }
 
 func (f *fakePort) Create(_ context.Context, args CreateArgs) (*CreateResult, error) {
@@ -117,11 +124,70 @@ func (f *fakePort) Root(_ context.Context, _, cpID string, enable bool) error {
 func (f *fakePort) RootEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
 	return f.rooted, nil
 }
+func (f *fakePort) ScriptTemplateID(_ context.Context, _ string) (int64, error) {
+	if f.scriptID == 0 && f.scriptUploaded {
+		return 42, nil // 上传后模板已存在
+	}
+	return f.scriptID, nil
+}
+func (f *fakePort) UploadScriptTemplate(_ context.Context, _, _, _, _ string, _ []byte) error {
+	f.scriptUploaded = true
+	return f.note("", "uploadScriptTemplate")
+}
+func (f *fakePort) CreateScriptTask(_ context.Context, _ int64, _, cpID, _ string) (int64, string, error) {
+	if err := f.note(cpID, "createScriptTask"); err != nil {
+		return 0, "", err
+	}
+	return 9001, "T-9001", nil
+}
+func (f *fakePort) ScriptTaskStatus(_ context.Context, _ int64) (*midplat.ScriptTaskVO, error) {
+	if f.scriptTask != nil {
+		return f.scriptTask, nil
+	}
+	return &midplat.ScriptTaskVO{ID: 9001, TaskID: "T-9001", TaskStatus: "COMPLETED"}, nil
+}
+func (f *fakePort) ScriptTaskReport(_ context.Context, _ int64) (*midplat.ScriptTaskReport, error) {
+	return &midplat.ScriptTaskReport{TaskID: "T-9001", RunLog: "log\n#RESULT#{\"ok\":true}#RESULT#"}, nil
+}
 func (f *fakePort) RunLogs(_ context.Context, cpID string, _, _ int) (*midplat.RunLogPage, error) {
 	if err := f.note(cpID, "runLogs"); err != nil {
 		return nil, err
 	}
+	if f.runLogPage != nil {
+		return f.runLogPage, nil
+	}
 	return &midplat.RunLogPage{PageNum: 1, PageSize: 20, TotalSize: 1, Data: []midplat.RunLogEntry{{LogNo: "LOG1", CpID: cpID, SessionStatus: "已关机"}}}, nil
+}
+
+// 远控真实开机时长：运行中日志(开机在过去、未关机) → running=true 且 uptime>0；已关机/无日志 → running=false。
+func TestRuntimeRealUptime(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	on := time.Now().Add(-90 * time.Minute).Format("2006-01-02 15:04:05")
+	f := &fakePort{
+		statuses:   map[string]string{"cp-rt": "NORMAL"},
+		runLogPage: &midplat.RunLogPage{PageNum: 1, PageSize: 1, TotalSize: 1, Data: []midplat.RunLogEntry{{LogNo: "L1", CpID: "cp-rt", PowerOnTime: on, PowerOffTime: "运行中", SessionStatus: "运行中"}}},
+	}
+	withFakeOps(t, f)
+	p := insertPhone(t, userA, StatusRunning, "cp-rt")
+
+	info, err := PhoneService.Runtime(userA, int(p.ID))
+	require.NoError(t, err)
+	assert.True(t, info.Running)
+	assert.Greater(t, info.UptimeSeconds, int64(5300)) // ~90min=5400s
+	assert.NotEmpty(t, info.PowerOnAt)
+
+	// 最新日志已关机 → 不运行
+	f.runLogPage = &midplat.RunLogPage{TotalSize: 1, Data: []midplat.RunLogEntry{{LogNo: "L2", CpID: "cp-rt", PowerOnTime: on, PowerOffTime: "2026-06-17 10:00:00", SessionStatus: "已关机"}}}
+	info, err = PhoneService.Runtime(userA, int(p.ID))
+	require.NoError(t, err)
+	assert.False(t, info.Running)
+	assert.Equal(t, int64(0), info.UptimeSeconds)
+
+	// 无日志 → 不运行
+	f.runLogPage = &midplat.RunLogPage{TotalSize: 0}
+	info, err = PhoneService.Runtime(userA, int(p.ID))
+	require.NoError(t, err)
+	assert.False(t, info.Running)
 }
 func (f *fakePort) AdbInfo(_ context.Context, cpID string) (*midplat.CloudPhoneAdbInfo, error) {
 	if err := f.note(cpID, "adbInfo"); err != nil {
@@ -200,6 +266,38 @@ func TestOpPassesCpIDAndChecksOwnership(t *testing.T) {
 	require.NotNil(t, info)
 	assert.Equal(t, "cp-aaa", info.CpID)
 	assert.NotEmpty(t, info.SignalURL)
+}
+
+// 自动化脚本最小闭环：模板缺失→自助上传→建任务，且仅运行中可发；终态合并报告抽取结果。
+func TestRunHelloScriptUploadsAndCreates(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	f := &fakePort{statuses: map[string]string{"cp-s": MidplatReady}, scriptID: 0} // 模板不存在
+	withFakeOps(t, f)
+	id := provisionedPhone(t, userA, "cp-s")
+
+	res, err := PhoneService.RunHelloScript(userA, id)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, f.scriptUploaded, "模板缺失时应自助上传")
+	assert.Equal(t, int64(9001), res.TaskID)
+	assert.Equal(t, "createScriptTask", f.lastOp)
+	assert.Equal(t, "cp-s", f.lastCpID)
+
+	// 查状态：终态合并报告，抽出 report_result 内容。
+	detail, err := PhoneService.ScriptTaskStatus(userA, id, res.TaskID)
+	require.NoError(t, err)
+	assert.Equal(t, "COMPLETED", detail.Status)
+	assert.True(t, detail.Terminal)
+	assert.Equal(t, `{"ok":true}`, detail.Result)
+}
+
+// 非运行态不能发脚本。
+func TestRunHelloScriptRejectsWhenNotRunning(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
+	withFakeOps(t, &fakePort{statuses: map[string]string{"cp-off": MidplatStopped}})
+	id := provisionedPhone(t, userA, "cp-off")
+	_, err := PhoneService.RunHelloScript(userA, id)
+	require.Error(t, err)
 }
 
 // 列表用中台实时状态覆盖展示态（状态始终和中台一致）：中台 NORMAL → 业务 RUNNING。

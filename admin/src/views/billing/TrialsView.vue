@@ -26,13 +26,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { formatDateTime } from '@/utils/date'
 
@@ -50,7 +43,8 @@ const granting = reactive<Record<number, boolean>>({})
 const grants = reactive<Record<number, TrialGrant[]>>({})
 const grantsLoading = reactive<Record<number, boolean>>({})
 
-const SUBJECTS = ['instance_seat', 'boot_seat', 'runtime_minute'] as const
+// 三类资源科目（表单固定三行；数量 0 = 不发该项）。
+const ITEM_SUBJECTS = ['instance_seat', 'runtime_minute', 'boot_seat'] as const
 
 function subjectLabel(s: string): string {
   return t(`billing.subject_${s}`)
@@ -61,16 +55,14 @@ function subjectUnit(s: string): string {
 }
 
 function grantDesc(p: TrialPolicy): string {
-  const subj = subjectLabel(p.grant_subject)
-  const unit = subjectUnit(p.grant_subject)
-  let s = `${subj} × ${p.grant_quantity} ${unit}`
-  if (p.grant_expire_days > 0) {
-    s += `（${t('trial.nDaysValid', { n: p.grant_expire_days })}）`
+  if (!p.items?.length) {
+    return '—'
   }
-  else {
-    s += `（${t('trial.permanent')}）`
-  }
-  return s
+  return p.items.map((it) => {
+    const base = `${subjectLabel(it.subject)} × ${it.quantity} ${subjectUnit(it.subject)}`
+    const exp = it.expire_days > 0 ? t('trial.nDaysValid', { n: it.expire_days }) : t('trial.permanent')
+    return `${base}（${exp}）`
+  }).join('　')
 }
 
 const columns = computed<ColumnDef<TrialPolicy>[]>(() => [
@@ -106,65 +98,79 @@ const dialogOpen = ref(false)
 const editingId = ref<number | null>(null)
 const saving = ref(false)
 
+interface ItemRow { quantity: number, expire_days: number }
 interface FormState {
   code: string
   name: string
-  grant_subject: string
-  grant_quantity: number
-  grant_expire_days: number
+  items: Record<string, ItemRow>
   per_user_limit: number
   allow_new_user: boolean
   invite_code: string
   enabled: boolean
 }
 
+function emptyItems(): Record<string, ItemRow> {
+  return {
+    instance_seat: { quantity: 0, expire_days: 0 },
+    runtime_minute: { quantity: 0, expire_days: 0 },
+    boot_seat: { quantity: 0, expire_days: 0 },
+  }
+}
+
 const form = reactive<FormState>({
   code: '',
   name: '',
-  grant_subject: 'instance_seat',
-  grant_quantity: 1,
-  grant_expire_days: 0,
+  items: emptyItems(),
   per_user_limit: 1,
   allow_new_user: false,
   invite_code: '',
   enabled: true,
 })
 
+function resetMeta() {
+  form.per_user_limit = 1
+  form.allow_new_user = false
+  form.invite_code = ''
+  form.enabled = true
+}
+
 function openCreate() {
   editingId.value = null
-  Object.assign(form, {
-    code: '',
-    name: '',
-    grant_subject: 'instance_seat',
-    grant_quantity: 1,
-    grant_expire_days: 0,
-    per_user_limit: 1,
-    allow_new_user: false,
-    invite_code: '',
-    enabled: true,
-  })
+  form.code = ''
+  form.name = ''
+  form.items = emptyItems()
+  resetMeta()
   dialogOpen.value = true
 }
 
 function openEdit(p: TrialPolicy) {
   editingId.value = p.id
-  Object.assign(form, {
-    code: p.code,
-    name: p.name,
-    grant_subject: p.grant_subject,
-    grant_quantity: p.grant_quantity,
-    grant_expire_days: p.grant_expire_days,
-    per_user_limit: p.per_user_limit,
-    allow_new_user: p.allow_new_user,
-    invite_code: p.invite_code ?? '',
-    enabled: p.enabled,
-  })
+  form.code = p.code
+  form.name = p.name
+  form.items = emptyItems()
+  for (const it of p.items ?? []) {
+    if (form.items[it.subject]) {
+      form.items[it.subject] = { quantity: it.quantity, expire_days: it.expire_days }
+    }
+  }
+  form.per_user_limit = p.per_user_limit
+  form.allow_new_user = p.allow_new_user
+  form.invite_code = p.invite_code ?? ''
+  form.enabled = p.enabled
   dialogOpen.value = true
 }
 
+// 收集数量>0 的发放项。
+function buildItems() {
+  return ITEM_SUBJECTS
+    .filter(s => form.items[s].quantity > 0)
+    .map(s => ({ subject: s, quantity: form.items[s].quantity, expire_days: form.items[s].expire_days }))
+}
+
 async function save() {
-  if (form.grant_quantity < 1) {
-    toast.error(t('trial.errGrantQty'))
+  const items = buildItems()
+  if (!items.length) {
+    toast.error(t('trial.errNoItem'))
     return
   }
   if (form.per_user_limit < 1) {
@@ -177,9 +183,7 @@ async function save() {
       await billingApi.createTrial({
         code: form.code,
         name: form.name,
-        grant_subject: form.grant_subject,
-        grant_quantity: form.grant_quantity,
-        grant_expire_days: form.grant_expire_days,
+        items,
         per_user_limit: form.per_user_limit,
         allow_new_user: form.allow_new_user,
         invite_code: form.invite_code || undefined,
@@ -190,8 +194,7 @@ async function save() {
     else {
       await billingApi.updateTrial(editingId.value, {
         name: form.name,
-        grant_quantity: form.grant_quantity,
-        grant_expire_days: form.grant_expire_days,
+        items,
         per_user_limit: form.per_user_limit,
         allow_new_user: form.allow_new_user,
         invite_code: form.invite_code || undefined,
@@ -403,38 +406,28 @@ async function doGrantEligibility(p: TrialPolicy) {
             <Label>{{ t('trial.fName') }}<span class="text-destructive ml-1">*</span></Label>
             <Input v-model="form.name" :placeholder="t('trial.fNamePlaceholder')" />
           </div>
-          <!-- 授予科目 + 授予数量 -->
-          <div class="grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <Label>{{ t('trial.fGrantSubject') }}</Label>
-              <Select
-                :model-value="form.grant_subject"
-                @update:model-value="(v) => { form.grant_subject = String(v) }"
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="s in SUBJECTS" :key="s" :value="s">
-                    {{ subjectLabel(s) }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+          <!-- 发放项（三类资源，数量 0 = 不发该项；有效天数 0 = 永久） -->
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('trial.fGrantItems') }}</Label>
+            <div class="divide-y rounded-md border">
+              <div v-for="s in ITEM_SUBJECTS" :key="s" class="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2">
+                <span class="text-sm">{{ subjectLabel(s) }}</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-muted-foreground text-xs">{{ t('trial.fGrantQty') }}</span>
+                  <Input v-model.number="form.items[s].quantity" type="number" min="0" step="1" class="h-8 w-20" />
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-muted-foreground text-xs">{{ t('trial.fGrantExpireDays') }}</span>
+                  <Input v-model.number="form.items[s].expire_days" type="number" min="0" step="1" class="h-8 w-20" />
+                </div>
+              </div>
             </div>
-            <div class="flex flex-col gap-1.5">
-              <Label>{{ t('trial.fGrantQty') }}</Label>
-              <Input v-model.number="form.grant_quantity" type="number" min="1" step="1" />
-            </div>
+            <p class="text-muted-foreground text-xs">{{ t('trial.fGrantItemsHint') }}</p>
           </div>
-          <!-- 有效天数 + 每用户限量 -->
-          <div class="grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <Label>{{ t('trial.fGrantExpireDays') }}</Label>
-              <Input v-model.number="form.grant_expire_days" type="number" min="0" step="1" :placeholder="t('trial.fGrantExpireDaysHint')" />
-              <p class="text-muted-foreground text-xs">{{ t('trial.fGrantExpireDaysHint') }}</p>
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <Label>{{ t('trial.fPerUserLimit') }}</Label>
-              <Input v-model.number="form.per_user_limit" type="number" min="1" step="1" />
-            </div>
+          <!-- 每用户限量 -->
+          <div class="flex flex-col gap-1.5">
+            <Label>{{ t('trial.fPerUserLimit') }}</Label>
+            <Input v-model.number="form.per_user_limit" type="number" min="1" step="1" />
           </div>
           <!-- 邀请码 -->
           <div class="flex flex-col gap-1.5">

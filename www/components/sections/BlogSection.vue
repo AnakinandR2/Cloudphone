@@ -1,7 +1,11 @@
 <script setup lang="ts">
+// 首页博客模块：取中台最新 3 篇。中台不可用 / 无内容时仅渲染区块标题，不崩溃。
 const { t } = useGp()
+const { locale } = useI18n()
 const localePath = useLocalePath()
-const posts = computed(() => t.value.blog.posts.slice(0, 3))
+const { list } = useBlogPosts({ size: 3, sort: 'published_desc' })
+const posts = computed(() => list.value.slice(0, 3))
+const fmt = (iso: string) => formatBlogDate(iso, locale.value)
 </script>
 
 <template>
@@ -15,18 +19,18 @@ const posts = computed(() => t.value.blog.posts.slice(0, 3))
         </div>
         <NuxtLink :to="localePath('/blog')" class="btn btn-ghost btn-sm">{{ t.blog.all }} <GpIcon name="arrow" /></NuxtLink>
       </header>
-      <div class="blog-grid">
-        <NuxtLink v-for="p in posts" :key="p.id" :to="localePath('/blog') + '#' + p.id" class="blog-card">
+      <div v-if="posts.length" class="blog-grid">
+        <NuxtLink v-for="p in posts" :key="p.id" :to="localePath('/blog/' + p.slug)" class="blog-card">
           <div class="blog-card__cover">
-            <img :src="`https://picsum.photos/seed/gp-${p.cover}/720/440`" alt="" loading="lazy" />
-            <span class="blog-card__cat">{{ p.cat }}</span>
+            <img :src="p.cover_url" :alt="p.cover_alt" loading="lazy" />
+            <span v-if="p.category" class="blog-card__cat">{{ p.category.name }}</span>
           </div>
           <div class="blog-card__body">
             <div class="blog-card__meta">
-              <span>{{ p.date }}</span><span>·</span><span>{{ p.read }} {{ t.blog.min }}</span>
+              <span>{{ fmt(p.published_at) }}</span>
             </div>
             <h3 class="blog-card__title">{{ p.title }}</h3>
-            <p class="blog-card__excerpt">{{ p.excerpt }}</p>
+            <p class="blog-card__excerpt">{{ p.summary }}</p>
             <span class="blog-card__more">{{ t.blog.readMore }} <GpIcon name="arrow" /></span>
           </div>
         </NuxtLink>

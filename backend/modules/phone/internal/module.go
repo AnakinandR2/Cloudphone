@@ -59,11 +59,14 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 		g.POST("/:id/apps/start", StartAppCloudPhone)
 		g.POST("/:id/apps/stop", StopAppCloudPhone)
 		g.POST("/:id/apps/kill-all", KillAllAppsCloudPhone)
-		g.GET("/:id/run-logs", RunLogsCloudPhone)        // 运行日志（分页，§2.9）
-		g.GET("/:id/adb", AdbInfoCloudPhone)             // ADB：连接信息
-		g.POST("/:id/adb/enable", EnableAdbCloudPhone)   // ADB：开启 / 续期
-		g.POST("/:id/adb/disable", DisableAdbCloudPhone) // ADB：关闭
-		g.POST("/:id/root", RootCloudPhone)              // Root：开启 / 关闭（§3.4.1）
+		g.GET("/:id/run-logs", RunLogsCloudPhone)                     // 运行日志（分页，§2.9）
+		g.GET("/:id/runtime", RuntimeCloudPhone)                      // 远程控制：真实开机时长
+		g.GET("/:id/adb", AdbInfoCloudPhone)                          // ADB：连接信息
+		g.POST("/:id/adb/enable", EnableAdbCloudPhone)                // ADB：开启 / 续期
+		g.POST("/:id/adb/disable", DisableAdbCloudPhone)              // ADB：关闭
+		g.POST("/:id/root", RootCloudPhone)                           // Root：开启 / 关闭（§3.4.1）
+		g.POST("/:id/script/hello", RunHelloScriptCloudPhone)         // 自动化：下发示例脚本（§7）
+		g.GET("/:id/script/task/:taskId", ScriptTaskStatusCloudPhone) // 自动化：查任务状态/报告
 	}
 
 	// 管理侧：实例全量查看/删除（staff 登录 + 权限）。

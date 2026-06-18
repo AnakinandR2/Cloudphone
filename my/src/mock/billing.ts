@@ -53,14 +53,21 @@ const entitlementBatches = [
 // 试用策略
 const trialPolicies = [
   {
-    policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, grant_subject: 'instance_seat', grant_quantity: 1, grant_expire_days: 7, per_user_limit: 1, allow_new_user: true, invite_code: '' },
+    policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [
+      { id: 1, policy_id: 1, subject: 'instance_seat', quantity: 1, expire_days: 7 },
+      { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 },
+    ] },
     claimable: true,
     need_invite: false,
     claimed_count: 0,
     reason: '',
   },
   {
-    policy: { id: 2, code: 'promo', name: '邀请码专属', enabled: true, grant_subject: 'runtime_minute', grant_quantity: 1000, grant_expire_days: 30, per_user_limit: 1, allow_new_user: false, invite_code: '' },
+    policy: { id: 2, code: 'promo', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: '', items: [
+      { id: 3, policy_id: 2, subject: 'instance_seat', quantity: 2, expire_days: 30 },
+      { id: 4, policy_id: 2, subject: 'runtime_minute', quantity: 1440, expire_days: 30 },
+      { id: 5, policy_id: 2, subject: 'boot_seat', quantity: 1, expire_days: 30 },
+    ] },
     claimable: false,
     need_invite: true,
     claimed_count: 0,

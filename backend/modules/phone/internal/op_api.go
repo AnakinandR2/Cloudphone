@@ -471,6 +471,26 @@ func RunLogsCloudPhone(c *gin.Context) {
 	framework.OKWithPage(c, res.Data, res.TotalSize)
 }
 
+// RuntimeCloudPhone 远程控制：真实开机时长（按中台运行日志，服务端算秒数）
+// @Summary 真实开机时长
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Param id path int true "ID"
+// @Router /phone/{id}/runtime [get]
+func RuntimeCloudPhone(c *gin.Context) {
+	uid, id, ok := opCloudPhone(c)
+	if !ok {
+		return
+	}
+	res, err := PhoneService.Runtime(uid, id)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, res)
+}
+
 // DisableAdbCloudPhone 关闭 ADB
 // @Summary 关闭 ADB
 // @Tags 我的云手机
@@ -516,6 +536,52 @@ func RootCloudPhone(c *gin.Context) {
 		return
 	}
 	framework.OK(c)
+}
+
+// RunHelloScriptCloudPhone 给云手机下发一个 hello-world 脚本任务（自动化最小闭环，§7）
+// @Summary 运行示例脚本
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Param id path int true "ID"
+// @Router /phone/{id}/script/hello [post]
+func RunHelloScriptCloudPhone(c *gin.Context) {
+	uid, id, ok := opCloudPhone(c)
+	if !ok {
+		return
+	}
+	res, err := PhoneService.RunHelloScript(uid, id)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, res)
+}
+
+// ScriptTaskStatusCloudPhone 查脚本任务状态/报告（轮询用，§7.6.2/§7.6.8）
+// @Summary 脚本任务状态
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Param id path int true "ID"
+// @Param taskId path int true "任务主键"
+// @Router /phone/{id}/script/task/{taskId} [get]
+func ScriptTaskStatusCloudPhone(c *gin.Context) {
+	uid, id, ok := opCloudPhone(c)
+	if !ok {
+		return
+	}
+	taskID, err := strconv.ParseInt(c.Param("taskId"), 10, 64)
+	if err != nil || taskID <= 0 {
+		framework.Fail(c, http.StatusBadRequest, "任务 ID 非法")
+		return
+	}
+	res, err := PhoneService.ScriptTaskStatus(uid, id, taskID)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, res)
 }
 
 // FileListCloudPhone 列出云手机指定目录下的文件 / 子目录

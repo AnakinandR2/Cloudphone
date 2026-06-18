@@ -1,0 +1,927 @@
+body,
+html {
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  border: 0px;
+  overflow-x: auto; /* 允许水平滚动 */
+  overflow-y: auto; /* 允许垂直滚动 */
+  font-family: sans-serif;
+  display: block;
+  text-align: center;
+}
+
+body {
+  background: #112233;
+  min-height: 100vh;
+}
+
+/* 页面头部样式 */
+.page_header {
+  background: linear-gradient(45deg, #1a237e, #3f51b5);
+  color: white;
+  padding: 15px 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 2000;
+}
+
+.page_header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.global_controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.global_btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.global_btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* 窗口数量控制器样式 */
+.window_count_controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-left: 10px;
+}
+
+.window_count_controls label {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.window_count_controls input[type="number"] {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.window_count_controls input[type="number"]:focus {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+}
+
+.window_count_controls input[type="number"]::-webkit-outer-spin-button,
+.window_count_controls input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.window_count_controls input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* 多窗口容器 */
+.multi_window_container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 40px 20px 20px 20px; /* 增加顶部边距从20px到40px */
+  justify-content: center;
+  min-height: calc(100vh - 120px); /* 相应调整最小高度 */
+}
+
+/* 当只有一个设备窗口时的特殊样式 */
+.multi_window_container:has(.device_window:only-child) .device_window,
+.multi_window_container .device_window:only-child {
+  min-width: 600px;
+  max-width: 1000px;
+  flex: none;
+  width: 80%;
+}
+
+.multi_window_container:has(.device_window:only-child) .image_screen,
+.multi_window_container .device_window:only-child .image_screen {
+  max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+}
+
+/* 设备窗口样式 */
+.device_window {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+  flex: 1;
+  min-width: 450px;
+  max-width: 600px;
+  min-height: 500px; /* 设置最小高度确保视频区域足够大 */
+  height: auto; /* 让高度自适应内容 */
+}
+
+.device_window:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+}
+
+/* 设备头部 */
+.device_header {
+  background: linear-gradient(45deg, #2c3e50, #34495e);
+  color: white;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device_header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.device_controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.device_btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.device_btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 静音按钮特殊样式 */
+.mute_btn {
+  background: rgba(76, 175, 80, 0.2) !important;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  transition: all 0.3s ease;
+}
+
+.mute_btn:hover {
+  background: rgba(76, 175, 80, 0.3) !important;
+  transform: scale(1.05);
+}
+
+.mute_btn.muted {
+  background: rgba(244, 67, 54, 0.2) !important;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  color: #ff6b6b !important;
+}
+
+.mute_btn.muted:hover {
+  background: rgba(244, 67, 54, 0.3) !important;
+}
+
+/* 全局静音按钮样式 */
+.mute_all_btn {
+  background: rgba(76, 175, 80, 0.2) !important;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  transition: all 0.3s ease;
+}
+
+.mute_all_btn:hover {
+  background: rgba(76, 175, 80, 0.3) !important;
+  transform: scale(1.05);
+}
+
+.mute_all_btn.muted {
+  background: rgba(244, 67, 54, 0.2) !important;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  color: #ff6b6b !important;
+}
+
+.mute_all_btn.muted:hover {
+  background: rgba(244, 67, 54, 0.3) !important;
+}
+
+.room_select {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.room_select option {
+  background: #2c3e50;
+  color: white;
+}
+
+.resolution_select {
+  background: rgba(76, 175, 80, 0.2);
+  color: white;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resolution_select:hover {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.resolution_select option {
+  background: #2c3e50;
+  color: white;
+}
+
+.fps_select {
+  background: rgba(255, 152, 0, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fps_select:hover {
+  background: rgba(255, 152, 0, 0.3);
+}
+
+.fps_select option {
+  background: #2c3e50;
+  color: white;
+}
+
+.scale_select {
+  background: rgba(76, 175, 80, 0.2);
+  color: white;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scale_select:hover {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.scale_select option {
+  background: #2c3e50;
+  color: white;
+}
+
+.image_screen {
+  /* 移除自动宽高，由JavaScript动态设置 */
+  display: block;
+  padding: 0px;
+  border: 0px;
+  margin-left: auto;
+  margin-right: auto;
+  object-fit: contain; /* 确保视频内容保持比例 */
+}
+
+.image_div {
+  height: 380px; /* 设置固定高度，避免多窗口模式下的布局问题 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0px;
+  margin: 0px;
+  border: 0px;
+  position: relative;
+  background: #000;
+  overflow: visible; /* 允许旋转后的内容显示 */
+  min-height: 300px; /* 最小高度保证 */
+}
+
+/* 帧率显示样式 */
+.fps_display {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: white;
+  font-size: 11px;
+  z-index: 1100; /* 提高z-index，确保在虚拟按键之上 */
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 80px;
+  text-align: right;
+}
+
+.fps_counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.fps_label {
+  font-size: 10px;
+  color: #ccc;
+}
+
+.fps_value {
+  font-size: 12px;
+  font-weight: bold;
+  color: #4caf50;
+  min-width: 20px;
+}
+
+.fps_stats {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.video_resolution {
+  font-size: 9px;
+  color: #999;
+}
+
+/* 视频质量统计样式 */
+.video_quality_stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 3px;
+}
+
+.quality_item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.quality_label {
+  font-size: 9px;
+  color: #bbb;
+}
+
+.quality_value {
+  font-size: 9px;
+  font-family: monospace;
+  color: #4caf50;
+  min-width: 35px;
+  text-align: right;
+}
+
+/* DataChannel状态指示器样式 */
+.datachannel_status {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: white;
+  font-size: 10px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 60px;
+}
+
+.status_indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status_icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.status_text {
+  font-size: 10px;
+  color: #ccc;
+}
+
+/* Android虚拟按键样式 */
+.virtual_buttons {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 4px;
+  padding: 4px;
+  backdrop-filter: blur(3px);
+  width: 45px;
+  margin-top: 40px; /* 向下偏移40px，避免遮盖FPS监控 */
+}
+
+.nav_buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+
+.system_buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.nav_btn,
+.system_btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 9px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav_btn:hover,
+.system_btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
+}
+
+.nav_btn:active,
+.system_btn:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.btn_icon {
+  width: 12px;
+  height: 12px;
+  filter: brightness(0) invert(1);
+}
+
+.power_btn {
+  background: rgba(244, 67, 54, 0.15) !important;
+  border-color: rgba(244, 67, 54, 0.3) !important;
+  color: #ff8a80;
+}
+
+.power_btn:hover {
+  background: rgba(244, 67, 54, 0.25) !important;
+  border-color: rgba(244, 67, 54, 0.5) !important;
+}
+
+.volume_controls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  width: 100%;
+}
+
+.volume_btn {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 3px;
+  padding: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.volume_btn:hover {
+  background: rgba(76, 175, 80, 0.25);
+  border-color: rgba(76, 175, 80, 0.5);
+  transform: scale(1.05);
+}
+
+.volume_btn:active {
+  transform: scale(0.95);
+  background: rgba(76, 175, 80, 0.35);
+}
+
+/* 响应式设计 */
+/* 超宽屏 - 4个设备一行显示 */
+@media (min-width: 1900px) {
+  .device_window {
+    min-width: 400px;
+    max-width: 500px;
+  }
+
+  .image_screen {
+    max-height: 400px;
+  }
+
+  /* 超宽屏单窗口优化 */
+  .multi_window_container .device_window:only-child {
+    max-width: 1400px;
+  }
+
+  .multi_window_container .device_window:only-child .image_screen,
+  .single_window_container .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+}
+
+/* 宽屏 - 2x2网格显示 */
+@media (max-width: 1899px) and (min-width: 1200px) {
+  .multi_window_container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 20px;
+    padding: 35px 20px 20px 20px; /* 增加顶部边距 */
+  }
+
+  .device_window {
+    min-width: 450px;
+    max-width: 600px;
+  }
+
+  .image_div {
+    height: 350px; /* 宽屏模式下的高度 */
+  }
+
+  .image_screen {
+    max-height: 450px;
+  }
+
+  /* 宽屏单窗口优化 */
+  .multi_window_container .device_window:only-child {
+    grid-column: 1 / -1;
+    grid-row: 1 / -1;
+    max-width: 1200px;
+    justify-self: center;
+  }
+
+  .multi_window_container .device_window:only-child .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+}
+
+/* 中等屏幕 - 垂直堆叠，每行2个 */
+@media (max-width: 1199px) and (min-width: 900px) {
+  .multi_window_container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    padding: 30px 15px 15px 15px; /* 增加顶部边距 */
+  }
+
+  .device_window {
+    min-width: 350px;
+    max-width: 500px;
+  }
+
+  .image_div {
+    height: 320px; /* 中等屏幕模式下的高度 */
+  }
+
+  .image_screen {
+    max-height: 400px;
+  }
+
+  /* 中等屏幕单窗口优化 */
+  .multi_window_container .device_window:only-child {
+    grid-column: 1 / -1;
+    max-width: 800px;
+    justify-self: center;
+  }
+
+  .multi_window_container .device_window:only-child .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+}
+
+/* 小屏幕 - 单列显示 */
+@media (max-width: 899px) {
+  .multi_window_container {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    padding: 25px 15px 15px 15px; /* 增加顶部边距 */
+  }
+
+  .device_window {
+    min-width: 300px;
+    max-width: 450px;
+    width: 100%;
+  }
+
+  .image_div {
+    height: 280px; /* 小屏幕模式下的高度 */
+  }
+
+  .image_screen {
+    max-height: 350px;
+  }
+
+  /* 小屏幕单窗口优化 */
+  .multi_window_container .device_window:only-child {
+    max-width: 600px;
+    width: 95%;
+  }
+
+  .multi_window_container .device_window:only-child .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+
+  .page_header {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .page_header h1 {
+    font-size: 20px;
+  }
+
+  .window_count_controls {
+    margin-left: 0;
+    margin-top: 5px;
+    justify-content: center;
+  }
+
+  .window_count_controls label {
+    font-size: 12px;
+  }
+
+  .window_count_controls input[type="number"] {
+    font-size: 12px;
+    padding: 3px 6px;
+  }
+
+  .device_header {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+}
+
+/* 移动端 - 紧凑显示 */
+@media (max-width: 480px) {
+  .device_window {
+    min-width: 280px;
+    max-width: 350px;
+  }
+
+  .image_div {
+    height: 240px; /* 移动端模式下的高度 */
+  }
+
+  .image_screen {
+    max-height: 300px;
+  }
+
+  /* 移动端单窗口优化 */
+  .multi_window_container .device_window:only-child {
+    max-width: 95vw;
+    width: 95%;
+  }
+
+  .multi_window_container .device_window:only-child .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+
+  .device_controls {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .device_controls .resolution_select,
+  .device_controls .room_select {
+    width: 100%;
+  }
+
+  .global_controls {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  /* 移动端虚拟按键优化 */
+  .virtual_buttons {
+    bottom: 40px;
+    padding: 6px;
+    gap: 6px;
+    margin-top: 50px; /* 在移动端增加更多向下偏移 */
+  }
+
+  .nav_btn,
+  .system_btn {
+    padding: 4px 6px;
+    font-size: 10px;
+    min-width: 28px;
+    height: 28px;
+  }
+
+  .btn_icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .volume_btn {
+    padding: 3px 4px;
+    font-size: 9px;
+    min-width: 24px;
+    height: 24px;
+  }
+}
+
+/* ===== 文件末尾添加单窗口版本样式 ===== */
+
+/* 单窗口容器 */
+.single_window_container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 30px 15px 15px 15px; /* 增加顶部边距 */
+  min-height: calc(100vh - 115px); /* 相应调整最小高度 */
+}
+
+.single_window_container .device_window {
+  width: 100%;
+  max-width: 1200px; /* 大幅增加最大宽度 */
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.single_window_container .image_div {
+  position: relative;
+  background: #000;
+  border-radius: 0 0 10px 10px;
+}
+
+.single_window_container .image_screen {
+  max-width: 100%;
+  max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  display: block;
+  padding: 0px;
+  border: 0px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 控制按钮 */
+.control_buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 0 0 15px 15px;
+}
+
+.control_btn {
+  padding: 10px 15px;
+  background: linear-gradient(45deg, #007bff, #0056b3);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.control_btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.control_btn:active {
+  transform: translateY(0);
+}
+
+/* 错误消息 */
+.error_message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(45deg, #f44336, #d32f2f);
+  color: white;
+  padding: 30px;
+  border-radius: 15px;
+  text-align: center;
+  z-index: 1001;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.error_message h4 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.error_message p {
+  margin: 0 0 20px 0;
+  font-size: 14px;
+}
+
+.error_message button {
+  padding: 10px 20px;
+  background: white;
+  color: #f44336;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.error_message button:hover {
+  background: #f0f0f0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .single_window_container {
+    padding: 25px 10px 10px 10px; /* 增加顶部边距 */
+    min-height: calc(100vh - 95px); /* 相应调整最小高度 */
+  }
+
+  .single_window_container .device_window {
+    max-width: 100%;
+    width: 95vw;
+  }
+
+  .single_window_container .image_screen {
+    max-height: 100%; /* 移除固定的vh限制，让JavaScript动态控制 */
+  }
+
+  .control_buttons {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .control_btn {
+    flex: 1;
+    min-width: 80px;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+}

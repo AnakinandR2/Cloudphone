@@ -1,9 +1,8 @@
 <script setup lang="ts">
+// 首页 FAQ 板块：从内容中台 faq 空间取前 6 条问答。出错/空 → 仅渲染标题。
 const { t } = useGp()
-const open = ref(0)
-function toggle(i: number) {
-  open.value = open.value === i ? -1 : i
-}
+const { flat } = useFaq()
+const items = computed(() => flat.value.slice(0, 6))
 </script>
 
 <template>
@@ -13,15 +12,7 @@ function toggle(i: number) {
         <span class="eyebrow">{{ t.faq.eyebrow }}</span>
         <h2 class="section-title">{{ t.faq.title }}</h2>
       </header>
-      <div class="faq-list">
-        <div v-for="([q, a], i) in t.faq.items" :key="i" class="faq-item" :class="{ open: open === i }">
-          <button class="faq-q" @click="toggle(i)">
-            <span>{{ q }}</span>
-            <span class="chev"><GpIcon name="plus" style="width: 14px; height: 14px" /></span>
-          </button>
-          <div class="faq-a"><p style="max-width: 760px">{{ a }}</p></div>
-        </div>
-      </div>
+      <FaqAccordion v-if="items.length" :items="items" />
     </div>
   </section>
 </template>
