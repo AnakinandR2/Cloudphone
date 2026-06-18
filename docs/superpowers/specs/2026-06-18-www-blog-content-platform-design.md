@@ -48,10 +48,10 @@
 
 ## 4. 架构：Nuxt 服务端代理
 
-密钥不得进入浏览器。采用 **Nuxt server-route 代理**：新增 `server/api/blog/*` 路由，密钥存于服务端 `runtimeConfig`，由这些路由调用中台；页面只调用本站 `/api/blog/*`。首屏 SSR 与客户端路由切换（点击卡片进详情）均经由本站服务端，无 CORS、浏览器无需直达内网主机，密钥不外泄。
+密钥不得进入浏览器。采用 **Nuxt server-route 代理**：新增 `server/routes/_content/blog/*` 路由，密钥存于服务端 `runtimeConfig`，由这些路由调用中台；页面只调用本站 `/_content/blog/*`。首屏 SSR 与客户端路由切换（点击卡片进详情）均经由本站服务端，无 CORS、浏览器无需直达内网主机，密钥不外泄。
 
 ```
-浏览器 ──/api/blog/*──▶ Nuxt server 路由 ──X-API-Key──▶ 内容中台 Pub API
+浏览器 ──/_content/blog/*──▶ Nuxt server 路由 ──X-API-Key──▶ 内容中台 Pub API
                          (持有密钥)
 ```
 
@@ -80,15 +80,15 @@ Nuxt 的环境覆盖规则使 `pubBaseUrl`↔`NUXT_PUB_BASE_URL`、`contentApiKe
 - `contentFetch(path, query)`：拼 `pubBaseUrl + path`，带 `X-API-Key` 头，`$fetch` 调中台；解封 `{code,message,data}`：`code!==0` 抛 `createError`（携带中台 message 与对应 HTTP 码），返回 `data`。
 
 **路由**（均读 query 中的 `lang`，由页面传入；默认 `published_desc` 排序）：
-- `server/api/blog/posts.get.ts` → `contentFetch('/articles', {space:'blog', lang, page, size, category_id, tag_id, sort})` → 返回 `{ list, total }`。
-- `server/api/blog/[slug].get.ts` → `contentFetch('/articles/'+slug, {space:'blog', lang})` → 返回详情对象；中台 404 透传为 404。
-- `server/api/blog/taxonomy.get.ts` → 并行 `contentFetch('/article-categories',…)` 与 `contentFetch('/article-tags',…)` → 返回 `{ categories, tags }`。
+- `server/routes/_content/blog/posts.get.ts` → `contentFetch('/articles', {space:'blog', lang, page, size, category_id, tag_id, sort})` → 返回 `{ list, total }`。
+- `server/routes/_content/blog/[slug].get.ts` → `contentFetch('/articles/'+slug, {space:'blog', lang})` → 返回详情对象；中台 404 透传为 404。
+- `server/routes/_content/blog/taxonomy.get.ts` → 并行 `contentFetch('/article-categories',…)` 与 `contentFetch('/article-tags',…)` → 返回 `{ categories, tags }`。
 
 上游失败时路由返回 502（携带原始 message），由页面渲染错误态。
 
 ### 5.3 客户端组合式（`www/composables/useBlog.ts`）
 
-封装对 `/api/blog/*` 的 `useFetch`，**以 i18n locale 作为 key**，切语言自动重取；query 变化时 `watch` 重取：
+封装对 `/_content/blog/*` 的 `useFetch`，**以 i18n locale 作为 key**，切语言自动重取；query 变化时 `watch` 重取：
 
 - `useBlogPosts(opts)`：`opts` = `{ page, size, categoryId, tagId, sort }`（响应式），返回 `{ list, total, pending, error, refresh }`。
 - `useBlogPost(slug)`：返回 `{ post, pending, error }`；可在 setup 同步判断 404。
@@ -144,5 +144,5 @@ Nuxt 的环境覆盖规则使 `pubBaseUrl`↔`NUXT_PUB_BASE_URL`、`contentApiKe
 2. 列表支持分类筛选、标签筛选（可点击）与分页；URL 可分享并还原筛选态。
 3. 详情页正确渲染 `body_html`、分类、日期、阅读时长、可点击标签与推荐。
 4. 切换 zh/en 时正确映射 `zh-CN`/`en` 并重新取数。
-5. 密钥不出现在任何客户端产物/网络请求中（浏览器只访问本站 `/api/blog/*`）。
+5. 密钥不出现在任何客户端产物/网络请求中（浏览器只访问本站 `/_content/blog/*`）。
 6. 中台不可用时页面以友好空/错误态呈现且可重试，SSR 不崩溃。

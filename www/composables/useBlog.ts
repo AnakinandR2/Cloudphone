@@ -23,7 +23,7 @@ export function useBlogPosts(query: MaybeRefOrGetter<BlogQuery> = {}) {
     tag_id: q.value.tagId,
     sort: q.value.sort,
   }))
-  const { data, pending, error, refresh } = useFetch<PubList>('/api/blog/posts', {
+  const { data, pending, error, refresh } = useFetch<PubList>('/_content/blog/posts', {
     query: params,
     default: () => ({ list: [], total: 0 }),
   })
@@ -38,7 +38,7 @@ export function useBlogPosts(query: MaybeRefOrGetter<BlogQuery> = {}) {
  */
 export function useBlogPost(slug: MaybeRefOrGetter<string>) {
   const { locale } = useI18n()
-  return useFetch<PubArticleDetail>(() => `/api/blog/${toValue(slug)}`, {
+  return useFetch<PubArticleDetail>(() => `/_content/blog/${toValue(slug)}`, {
     query: computed(() => ({ lang: locale.value })),
   })
 }
@@ -49,7 +49,7 @@ export function useBlogPost(slug: MaybeRefOrGetter<string>) {
  */
 export function useBlogTaxonomy() {
   const { locale } = useI18n()
-  return useFetch<PubTaxonomy>('/api/blog/taxonomy', {
+  return useFetch<PubTaxonomy>('/_content/blog/taxonomy', {
     query: computed(() => ({ lang: locale.value })),
     default: () => ({ categories: [], tags: [] }),
   })

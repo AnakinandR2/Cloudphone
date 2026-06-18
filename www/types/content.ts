@@ -46,3 +46,33 @@ export interface PubTaxonomy {
   categories: PubTaxon[]
   tags: PubTaxon[]
 }
+
+/** 目录树节点：分组（含子节点）或文章（叶子，带 url）。 */
+export interface PubDirectoryNode {
+  kind: 'group' | 'article'
+  title: string
+  slug: string
+  collapsed: boolean
+  url?: string
+  children?: PubDirectoryNode[]
+}
+
+/** FAQ 一条问答（答案为 body_html）。 */
+export interface FaqItem {
+  slug: string
+  question: string
+  answerHtml: string
+}
+
+/** FAQ 按分类分组。 */
+export interface FaqGroup {
+  category: string
+  items: FaqItem[]
+}
+
+/** 文档正文 TOC 一项。 */
+export interface TocItem {
+  id: string
+  text: string
+  level: number
+}

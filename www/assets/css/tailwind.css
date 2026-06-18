@@ -2719,3 +2719,97 @@ html:not(.dark) .hero-scene__dotmap {
 .breadcrumb__link:hover { color: var(--accent-color); }
 .breadcrumb__current { color: rgb(var(--fg)); font-weight: 600; }
 .breadcrumb__sep { width: 14px; height: 14px; color: rgb(var(--fg-subtle)); flex-shrink: 0; }
+
+/* ============================================================
+   帮助中心导航下拉
+   ============================================================ */
+.nav-dropdown { position: relative; display: inline-flex; }
+.nav-dropdown__trigger { display: inline-flex; align-items: center; gap: 5px; }
+.nav-dropdown__trigger::after {
+  content: ""; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor; opacity: 0.6; transition: transform 0.2s ease;
+}
+.nav-dropdown:hover .nav-dropdown__trigger::after { transform: rotate(180deg); }
+.nav-dropdown__menu {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%) translateY(6px);
+  min-width: 148px; padding: 6px;
+  background: rgb(var(--bg)); border: 1px solid rgb(var(--border)); border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.18);
+  display: flex; flex-direction: column; gap: 2px;
+  opacity: 0; visibility: hidden; transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 60;
+}
+.nav-dropdown:hover .nav-dropdown__menu { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(2px); }
+.nav-dropdown__item {
+  padding: 8px 12px; border-radius: 8px; font-size: 14px; font-weight: 500;
+  color: rgb(var(--fg-muted)); white-space: nowrap; transition: all 0.14s ease;
+}
+.nav-dropdown__item:hover { background: rgb(var(--bg-sunken)); color: rgb(var(--fg)); }
+.mobile-menu__sub { padding-left: 28px !important; font-size: 15px !important; opacity: 0.85; }
+
+/* ============================================================
+   帮助文档：三栏布局（左目录树 · 正文 · 右 TOC）
+   ============================================================ */
+.docs-layout {
+  display: grid; grid-template-columns: 250px minmax(0, 1fr) 200px; gap: 40px;
+  padding-top: 32px; padding-bottom: 80px; align-items: start;
+}
+.docs-aside, .docs-toc-wrap { position: sticky; top: 88px; align-self: start; max-height: calc(100vh - 110px); overflow-y: auto; }
+.docs-nav-toggle { display: none; }
+
+/* 左侧目录树 */
+.docs-nav { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.docs-nav__group + .docs-nav__group { margin-top: 18px; }
+.docs-nav__group-title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: rgb(var(--fg-subtle)); padding: 4px 10px; margin-bottom: 2px;
+}
+.docs-nav__link {
+  display: block; padding: 6px 10px; border-radius: 8px;
+  color: rgb(var(--fg-muted)); line-height: 1.4; border-left: 2px solid transparent;
+  transition: all 0.14s ease;
+}
+.docs-nav__link:hover { color: rgb(var(--fg)); background: rgb(var(--bg-sunken)); }
+.docs-nav__link.active {
+  color: var(--accent-color); font-weight: 600;
+  background: rgb(var(--accent) / 0.08); border-left-color: var(--accent-color);
+}
+
+/* 正文（复用 .article-body 排版，仅调整文档列内边距） */
+.docs-main .article-body { padding: 0 0 40px; }
+.docs-main .article-body .container { max-width: none; padding: 0; }
+.docs-article > h1 { margin-top: 0; }
+.article-body :is(h2, h3) { scroll-margin-top: 90px; }
+
+/* 右侧 TOC */
+.docs-toc { display: flex; flex-direction: column; gap: 2px; font-size: 13px; border-left: 1px solid rgb(var(--border)); padding-left: 16px; }
+.docs-toc__title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgb(var(--fg-subtle)); margin-bottom: 8px; }
+.docs-toc__link { color: rgb(var(--fg-muted)); padding: 3px 0; line-height: 1.4; transition: color 0.14s ease; }
+.docs-toc__link.sub { padding-left: 12px; font-size: 12.5px; }
+.docs-toc__link:hover { color: rgb(var(--fg)); }
+.docs-toc__link.active { color: var(--accent-color); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .docs-layout { grid-template-columns: 230px minmax(0, 1fr); }
+  .docs-toc-wrap { display: none; }
+}
+@media (max-width: 768px) {
+  .docs-layout { display: block; padding-top: 16px; }
+  .docs-nav-toggle {
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    padding: 8px 14px; border-radius: 10px; border: 1px solid rgb(var(--border));
+    background: rgb(var(--bg-sunken)); font-size: 14px; font-weight: 600; color: rgb(var(--fg));
+  }
+  .docs-aside { position: static; max-height: none; overflow: visible; display: none; margin-bottom: 24px; }
+  .docs-aside.open { display: block; }
+}
+
+/* FAQ 答案（body_html）排版 + 折叠适配 */
+.faq-a > .article-html { overflow: hidden; margin: 0; }
+.faq-a .article-html > :first-child { margin-top: 0; }
+.faq-a .article-html p { max-width: 760px; line-height: 1.7; margin: 0; }
+.faq-a .article-html p + p { margin-top: 10px; }
+.faq-a .article-html a { color: var(--accent-color); text-decoration: underline; }
+.faq-a .article-html ul, .faq-a .article-html ol { margin: 8px 0 0 20px; }
+.faq-a .article-html code { font-family: var(--font-mono); font-size: 0.88em; background: rgb(var(--bg-sunken)); border-radius: 5px; padding: 1px 5px; }

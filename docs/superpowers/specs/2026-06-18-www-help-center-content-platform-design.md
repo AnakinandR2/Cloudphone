@@ -36,10 +36,10 @@
 
 ## 4. 架构
 
-沿用 **Nuxt 服务端代理**：新增 `/api/help/*`、`/api/faq` 路由，密钥仅服务端持有；页面只调用本站接口。`/help` 与 `/faq` 首屏 SSR 与客户端导航均经本站服务端，无 CORS、密钥不外泄。
+沿用 **Nuxt 服务端代理**：新增 `/_content/help/*`、`/_content/faq` 路由，密钥仅服务端持有；页面只调用本站接口。`/help` 与 `/faq` 首屏 SSR 与客户端导航均经本站服务端，无 CORS、密钥不外泄。
 
 ```
-浏览器 ──/api/help/*、/api/faq──▶ Nuxt server 路由 ──X-API-Key──▶ 内容中台 Pub API
+浏览器 ──/_content/help/*、/_content/faq──▶ Nuxt server 路由 ──X-API-Key──▶ 内容中台 Pub API
 ```
 
 ## 5. 详细设计
@@ -54,9 +54,9 @@
 
 ### 5.2 服务端代理（新增，复用 `contentFetch`）
 
-- `server/api/help/directory.get.ts` → `contentFetch('/directory', { space:'help', lang })` → 目录树。
-- `server/api/help/[slug].get.ts` → `contentFetch('/articles/'+slug, { space:'help', lang })` → 详情；中台 404 透传 404。
-- `server/api/faq.get.ts` → 服务端聚合：
+- `server/routes/_content/help/directory.get.ts` → `contentFetch('/directory', { space:'help', lang })` → 目录树。
+- `server/routes/_content/help/[slug].get.ts` → `contentFetch('/articles/'+slug, { space:'help', lang })` → 详情；中台 404 透传 404。
+- `server/routes/_content/faq.get.ts` → 服务端聚合：
   1. `contentFetch('/articles', { space:'faq', lang })` 取列表（含 `category`、`slug`、`title`）；
   2. `Promise.all` 并行取各篇 `contentFetch('/articles/'+slug, { space:'faq', lang })` 拿 `body_html`；
   3. 按 `category` 分组，返回 `[{ category, items:[{ slug, question, answerHtml }] }]`。
@@ -65,11 +65,11 @@
 ### 5.3 组合式
 
 - `composables/useHelp.ts`：
-  - `useHelpDirectory()` → useFetch `/api/help/directory`（默认 `[]`）。
+  - `useHelpDirectory()` → useFetch `/_content/help/directory`（默认 `[]`）。
   - `useHelpArticle(slug)` → 返回可 `await` 的 useFetch（详情页用以同步处理 404）。
   - 纯函数 `buildToc(bodyHtml)`：解析正文，给 `h2/h3` 注入 slug 化锚点 id（去重），返回 `{ html, toc:[{ id, text, level }] }`；SSR 期执行，TOC 进首屏。
 - `composables/useFaq.ts`：
-  - `useFaq()` → useFetch `/api/faq`（默认 `[]`），返回按分类分组的 Q&A。
+  - `useFaq()` → useFetch `/_content/faq`（默认 `[]`），返回按分类分组的 Q&A。
 
 ### 5.4 文档模块（/help）
 
@@ -94,12 +94,12 @@
 - 详情页（文档）真实 404 → fatal 404；列表/目录/FAQ 出错 → 非致命错误态（不崩 SSR），可重试。
 - `/help` 重定向：目录为空或上游失败时不重定向，显示错误/空态。
 - `lang` 全程按 i18n locale 计算并作为 query 传入；服务端路由无状态。
-- 密钥不进浏览器；浏览器只访问本站 `/api/help/*`、`/api/faq`。
+- 密钥不进浏览器；浏览器只访问本站 `/_content/help/*`、`/_content/faq`。
 
 ## 6. 测试策略
 
 - 纯函数单测（`node --test`）：`buildToc`（锚点注入/去重、toc 结构）、FAQ 分组聚合、`langToApi`。
-- 服务端路由：mock `$fetch` 测 `/api/faq` 聚合与错误路径。
+- 服务端路由：mock `$fetch` 测 `/_content/faq` 聚合与错误路径。
 - 端到端人工/Playwright（对接活动实例）：导航下拉、`/help` 重定向、文档三栏与 TOC 锚点跳转、目录当前篇高亮、`/faq` 分类分组、首页 FAQ 板块、无效 slug 404、断网错误态、zh/en 切换。
 
 ## 7. 验收标准

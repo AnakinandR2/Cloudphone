@@ -23,13 +23,28 @@ function toggleDark() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
 }
 
-const links = computed(() => [
+interface NavLink {
+  id: string
+  href: string
+  label: string
+  children?: { id: string; href: string; label: string }[]
+}
+
+const links = computed<NavLink[]>(() => [
   { id: 'features', href: localePath('/') + '#features', label: t.value.nav.features },
   { id: 'scenarios', href: localePath('/') + '#scenarios', label: t.value.nav.scenarios },
   { id: 'pricing', href: localePath('/') + '#pricing', label: t.value.nav.pricing },
   { id: 'download', href: localePath('/') + '#download', label: t.value.nav.download },
   { id: 'blog', href: localePath('/blog'), label: t.value.nav.blog },
-  { id: 'help', href: localePath('/') + '#help', label: t.value.nav.help },
+  {
+    id: 'help',
+    href: localePath('/help'),
+    label: t.value.nav.help,
+    children: [
+      { id: 'docs', href: localePath('/help'), label: t.value.nav.docs },
+      { id: 'faq', href: localePath('/faq'), label: t.value.nav.faq },
+    ],
+  },
 ])
 
 const availableLocales = computed(() =>
@@ -58,7 +73,15 @@ watch(() => route.fullPath, () => (mobile.value = false))
       </NuxtLink>
 
       <nav class="nav-links">
-        <NuxtLink v-for="l in links" :key="l.id" :to="l.href" class="nav-link">{{ l.label }}</NuxtLink>
+        <template v-for="l in links" :key="l.id">
+          <div v-if="l.children" class="nav-dropdown">
+            <NuxtLink :to="l.href" class="nav-link nav-dropdown__trigger">{{ l.label }}</NuxtLink>
+            <div class="nav-dropdown__menu">
+              <NuxtLink v-for="c in l.children" :key="c.id" :to="c.href" class="nav-dropdown__item">{{ c.label }}</NuxtLink>
+            </div>
+          </div>
+          <NuxtLink v-else :to="l.href" class="nav-link">{{ l.label }}</NuxtLink>
+        </template>
       </nav>
 
       <div class="nav-tools">
@@ -95,7 +118,18 @@ watch(() => route.fullPath, () => (mobile.value = false))
     <ClientOnly>
       <Teleport to="body">
         <div class="mobile-menu" :class="{ open: mobile }">
-          <NuxtLink v-for="l in links" :key="l.id" :to="l.href" @click="mobile = false">{{ l.label }}</NuxtLink>
+          <template v-for="l in links" :key="l.id">
+            <NuxtLink :to="l.href" @click="mobile = false">{{ l.label }}</NuxtLink>
+            <NuxtLink
+              v-for="c in l.children || []"
+              :key="c.id"
+              :to="c.href"
+              class="mobile-menu__sub"
+              @click="mobile = false"
+            >
+              {{ c.label }}
+            </NuxtLink>
+          </template>
           <div class="mobile-menu__tools">
             <button class="icon-btn" :aria-label="t.theme.dark" @click="toggleDark">
               <GpIcon :name="isDark ? 'sun' : 'moon'" />

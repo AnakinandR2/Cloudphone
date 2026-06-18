@@ -16,7 +16,7 @@ export const GP_CONTENT = {
     nav: {
       home: '首页', product: '产品', features: '功能特性', scenarios: '应用场景',
       pricing: '价格套餐', specs: '性能规格', customers: '客户案例',
-      download: '下载', blog: '博客', help: '帮助中心', news: '新闻动态',
+      download: '下载', blog: '博客', help: '帮助中心', docs: '文档', faq: '常见问题', news: '新闻动态',
       login: '登录', signup: '免费注册', trial: '免费试用',
       console: '控制台', logout: '退出登录', account: '账户',
     },
@@ -142,14 +142,7 @@ export const GP_CONTENT = {
     },
     faq: {
       eyebrow: '常见问题', title: '你可能想问',
-      items: [
-        ['云手机和模拟器有什么区别？', '云手机是运行在云端 ARM 服务器上的真实 Android 系统，拥有真实的硬件指纹和独立网络环境；模拟器是 PC 上的虚拟运行环境，平台风控很容易识别。'],
-        ['IP 是干净的吗？会不会被标记？', '我们提供原生住宅级出口 IP，每一个都来自真实家庭宽带运营商，IP 池每日动态补充并做风控筛查。'],
-        ['可以绑定我自己的 IP 或代理吗？', '可以。在控制台为云手机配置自定义 SOCKS5 / HTTP 代理，或通过 API 批量绑定，支持账号-IP-设备永久 1:1。'],
-        ['数据安全如何保证？', '所有传输 TLS 1.3 加密，云端存储 AES-256；企业版可使用专属物理节点，数据不与其他用户共享。'],
-        ['可以退款吗？', '标准版与团队版支持 7 天无理由退款；按月购买不满意可随时停用，按实际使用时长计费。'],
-        ['有 API 吗？支持自动化？', '提供完整的 RESTful API 与 Webhook，支持设备开机/关机、IP 切换、应用安装、ADB 直连、文件上传等所有操作。'],
-      ],
+      empty: '暂无常见问题', error: '内容加载失败，请稍后重试', retry: '重试', all: '全部',
     },
     cta: {
       title: '1 小时免费试用，看看云手机能为你做什么',
@@ -220,7 +213,7 @@ export const GP_CONTENT = {
     nav: {
       home: 'Home', product: 'Product', features: 'Features', scenarios: 'Use cases',
       pricing: 'Pricing', specs: 'Performance', customers: 'Customers',
-      download: 'Download', blog: 'Blog', help: 'Help', news: 'News',
+      download: 'Download', blog: 'Blog', help: 'Help', docs: 'Docs', faq: 'FAQ', news: 'News',
       login: 'Sign in', signup: 'Sign up free', trial: 'Free trial',
       console: 'Console', logout: 'Sign out', account: 'Account',
     },
@@ -346,14 +339,7 @@ export const GP_CONTENT = {
     },
     faq: {
       eyebrow: 'FAQ', title: 'Things you might want to ask',
-      items: [
-        ["What's the difference between a cloud phone and an emulator?", 'A cloud phone is a real Android instance on an ARM server in the cloud — with real hardware fingerprint and a dedicated network. An emulator is a virtual environment on your PC and is trivially detectable by platform risk controls.'],
-        ['Are the IPs clean? Will they get flagged?', 'Yes. We provide native residential exit IPs from real consumer ISPs. The pool is refreshed daily and risk-scored before allocation.'],
-        ['Can I bring my own IP or proxy?', 'You can. Configure a custom SOCKS5 / HTTP proxy per device in the console, or batch-bind via API. Account-IP-device 1:1 can be made permanent.'],
-        ['How is my data secured?', 'Everything in flight is TLS 1.3, everything at rest is AES-256. Enterprise plans get a dedicated bare-metal node — your data never shares a host with anyone else.'],
-        ['Refund policy?', 'Standard and Team plans get a 7-day no-questions-asked refund. Monthly subscribers can stop any time — we bill by actual usage.'],
-        ['Is there an API for automation?', 'Yes — full REST + webhooks. Boot, shut down, switch IP, install app, ADB tunnel, file upload, screenshot — all scriptable.'],
-      ],
+      empty: 'No FAQs yet', error: "Couldn't load FAQs, please try again", retry: 'Retry', all: 'All',
     },
     cta: {
       title: 'Try it free for an hour. See what cloud phones can do for you.',
