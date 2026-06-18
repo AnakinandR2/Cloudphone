@@ -23,7 +23,7 @@ function priceVal(price: number | string) {
       </div>
 
       <div class="pricing-grid" style="text-align: left">
-        <div v-for="(p, i) in t.pricing.plans" :key="i" class="price-card" :class="{ featured: p.featured }">
+        <div v-for="(p, i) in t.pricing.plans" :key="i" :class="['price-card', { featured: p.featured }]">
           <span v-if="p.tag" class="tag">{{ p.tag }}</span>
           <h4>{{ p.name }}</h4>
           <p class="desc">{{ p.desc }}</p>

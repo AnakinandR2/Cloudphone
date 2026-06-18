@@ -55,6 +55,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     nextTick(() => requestAnimationFrame(bind))
   }
 
-  nuxtApp.hook('app:mounted', rebind)
+  // 初次绑定等到初始 Suspense 解析（即水合完成）之后，避免在水合过程中改动
+  // DOM class 触发 hydration mismatch；后续客户端导航用 page:finish 重新绑定。
+  nuxtApp.hook('app:suspense:resolve', rebind)
   nuxtApp.hook('page:finish', rebind)
 })
