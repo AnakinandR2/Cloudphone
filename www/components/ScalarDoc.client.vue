@@ -192,8 +192,9 @@ onBeforeUnmount(unmount)
     <div ref="el" class="scalar-doc__host" />
     <Transition name="scalar-fade">
       <div v-if="!ready" class="scalar-skeleton" aria-hidden="true">
-        <div class="scalar-skeleton__nav">
-          <div class="sk-bar sk-search" />
+        <div class="scalar-skeleton__inner">
+          <div class="scalar-skeleton__nav">
+            <div class="sk-bar sk-search" />
           <div v-for="n in 9" :key="n" class="sk-bar" :style="{ width: `${55 + ((n * 13) % 40)}%` }" />
         </div>
         <div class="scalar-skeleton__main">
@@ -204,6 +205,7 @@ onBeforeUnmount(unmount)
           <div class="sk-block" />
           <div class="sk-bar" style="width: 90%" />
           <div class="sk-bar" style="width: 64%" />
+        </div>
         </div>
       </div>
     </Transition>
@@ -218,10 +220,16 @@ onBeforeUnmount(unmount)
 .scalar-skeleton {
   position: absolute;
   inset: 0;
-  display: flex;
-  gap: 32px;
   background: rgb(var(--bg));
   overflow: hidden;
+}
+/* 与真实 Scalar 布局一致：整体居中、限到同样的宽度（站点内容区略宽） */
+.scalar-skeleton__inner {
+  display: flex;
+  gap: 32px;
+  height: 100%;
+  max-width: calc(var(--container, 1240px) + 160px);
+  margin: 0 auto;
 }
 .scalar-skeleton__nav {
   width: 268px;
@@ -235,7 +243,7 @@ onBeforeUnmount(unmount)
 }
 .scalar-skeleton__main {
   flex: 1;
-  max-width: var(--container, 1240px);
+  min-width: 0;
   padding: 28px 32px;
   display: flex;
   flex-direction: column;
