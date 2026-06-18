@@ -362,8 +362,12 @@ func (c *Client) CheckAppNameExists(ctx context.Context, appName string) (bool, 
 // ============================================================
 
 // CreateFromUploadedFileRequest 是 §1.8 的请求体。
+//
+// 秒传命中时 uploadId 为 null（拿不到上传会话），但中台 createFromUploadedFile 报错
+// 「上传记录不存在【或文件路径为空】」表明它有「文件路径」兜底入口；秒传 appInfo 提供了
+// downloadUrl / appGenerateId，故一并下发，让秒传命中也能落库。
 type CreateFromUploadedFileRequest struct {
-	UploadID        int64  `json:"uploadId"`
+	UploadID        int64  `json:"uploadId,omitempty"` // 秒传命中时为 0（省略），改走 downloadUrl
 	AppName         string `json:"appName"`
 	PackageName     string `json:"packageName,omitempty"`
 	Version         string `json:"version,omitempty"`
@@ -375,6 +379,11 @@ type CreateFromUploadedFileRequest struct {
 	AppDesc         string `json:"appDesc,omitempty"`
 	CreateBy        string `json:"createBy,omitempty"`
 	OpenToSubTenant int    `json:"openToSubTenant,omitempty"` // 0 否 / 1 是
+	// 秒传命中时下发，作为「文件路径」兜底（uploadId 缺失时让中台凭已存在文件落库）。
+	// 字段名是按错误文案「文件路径为空」+ appInfo 字段推测，待真机确认具体哪个生效。
+	DownloadURL   string `json:"downloadUrl,omitempty"`
+	FilePath      string `json:"filePath,omitempty"`
+	AppGenerateID string `json:"appGenerateId,omitempty"`
 }
 
 // CreatedApp 是 §1.8 / §1.3 秒传创建后的应用元信息。
@@ -537,6 +546,12 @@ func (c *Client) UploadAppFromFile(ctx context.Context, path string, opts Upload
 		create.Version = init.AppInfo.Version
 		create.FileSize = init.AppInfo.FileSize
 		create.IconPath = init.AppInfo.IconPath
+		create.OriginIconPath = init.AppInfo.IconPath
+		create.OriginAppName = init.AppInfo.AppName
+		// 秒传无 uploadId：用 appInfo 的 downloadUrl / appGenerateId 作为文件路径兜底。
+		create.DownloadURL = init.AppInfo.DownloadURL
+		create.FilePath = init.AppInfo.DownloadURL
+		create.AppGenerateID = init.AppInfo.AppGenerateID
 		if create.AppName == "" {
 			create.AppName = init.AppInfo.AppName // 优先用应用真名
 		}

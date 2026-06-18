@@ -49,3 +49,6 @@ tmp/
 
 # scaffold 生成器误编译产物
 /scaffold
+
+# 开放 API 独立 Swagger（生成产物）
+docs/openapi/

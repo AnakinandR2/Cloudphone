@@ -47,6 +47,10 @@ type Config struct {
 	// 此时前后台仅靠令牌 Scope 隔离。生产建议显式配置一个不同的值。
 	UserJWTSecret string
 
+	// APIKeyEncKey 用于加密「可重复查看」的 API 密钥明文（AES-256，hex/base64 的 32 字节）。
+	// 为空时由 JWTSecret 派生；生产务必显式配置，否则改 JWTSecret 会导致旧密文不可解。
+	APIKeyEncKey string
+
 	// 前台 JWT Cookie 名（独立于后台 JWTCookieName，避免互相覆盖）；
 	// 非空时前台登录/注册会 Set-Cookie，鉴权中间件也会从该 Cookie 读令牌。Secure 标志复用 JWTCookieSecure。
 	UserJWTCookieName string
@@ -135,6 +139,7 @@ func LoadConfig() *Config {
 		JWTCookieSecure: getEnvAsBool("JWT_COOKIE_SECURE", false),
 
 		UserJWTSecret:     getEnv("USER_JWT_SECRET", ""),
+		APIKeyEncKey:      getEnv("APIKEY_ENC_KEY", ""),
 		UserJWTCookieName: getEnv("USER_JWT_COOKIE_NAME", "user_token"),
 
 		WeChatWebhookURL: getEnv("WECHAT_WEBHOOK_URL", ""),

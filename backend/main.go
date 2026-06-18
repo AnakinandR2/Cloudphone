@@ -14,13 +14,17 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "manager-backend/docs"
+	_ "manager-backend/docs/openapi"
 	"manager-backend/framework"
 	_ "manager-backend/modules/accesslog"
 	_ "manager-backend/modules/app"
+	_ "manager-backend/modules/automation"
 	_ "manager-backend/modules/billing"
 	_ "manager-backend/modules/cloudphone"
 	_ "manager-backend/modules/example"
+	_ "manager-backend/modules/mcp"
 	_ "manager-backend/modules/note"
+	_ "manager-backend/modules/openapi"
 	_ "manager-backend/modules/phone"
 	_ "manager-backend/modules/proxy"
 	_ "manager-backend/modules/staff"
@@ -77,6 +81,8 @@ func main() {
 
 	framework.SetupRouter(r)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// 开放 API 独立文档（仅 /api/v1/open/v1/*，instanceName=openapi）。
+	r.GET("/swagger-open/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.InstanceName("openapi")))
 
 	for _, module := range framework.GlobalModule.GetAll() {
 		if err := module.OnStart(); err != nil {
@@ -90,6 +96,7 @@ func main() {
 	go func() {
 		log.Printf("服务启动在端口 %s", framework.AppConfig.ServerPort)
 		log.Printf("Swagger 文档: http://localhost:%s/swagger/index.html", framework.AppConfig.ServerPort)
+		log.Printf("开放 API 文档: http://localhost:%s/swagger-open/index.html", framework.AppConfig.ServerPort)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("服务启动失败: %v", err)
 		}

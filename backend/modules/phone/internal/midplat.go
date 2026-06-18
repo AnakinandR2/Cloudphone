@@ -80,6 +80,18 @@ type midplatPort interface {
 
 	// RunLogs 分页查询某台云手机的运行会话日志（spec §2.9）。
 	RunLogs(ctx context.Context, cpID string, page, size int) (*midplat.RunLogPage, error)
+
+	// --- 自动化脚本任务（手册 §7）---
+	// ScriptTemplateID 按名称查脚本模板 ID（scriptId）；不存在返回 0。
+	ScriptTemplateID(ctx context.Context, name string) (int64, error)
+	// UploadScriptTemplate 上传一个 Lua 脚本模板（multipart）。
+	UploadScriptTemplate(ctx context.Context, fileName, name, version, desc string, lua []byte) error
+	// CreateScriptTask 向单台 cp 下发一次性脚本任务，返回任务主键 id 与任务编号 taskNo。
+	CreateScriptTask(ctx context.Context, scriptID int64, taskName, cpID, publishTime string) (int64, string, error)
+	// ScriptTaskStatus 按任务主键查实时状态（query-by-ids 取单条）。
+	ScriptTaskStatus(ctx context.Context, taskID int64) (*midplat.ScriptTaskVO, error)
+	// ScriptTaskReport 按任务主键查报告（日志/截图/结果）。
+	ScriptTaskReport(ctx context.Context, taskID int64) (*midplat.ScriptTaskReport, error)
 }
 
 // sdkAdapter 用真实 midplat.Client 实现 midplatPort（把单台调用包成 SDK 的批量入参）。
@@ -367,6 +379,58 @@ func (a *sdkAdapter) RootEnabledMap(ctx context.Context, cpIDs []string) (map[st
 
 func (a *sdkAdapter) RunLogs(ctx context.Context, cpID string, page, size int) (*midplat.RunLogPage, error) {
 	return a.c.QueryRunLogs(ctx, midplat.RunLogQueryRequest{Page: page, PageSize: size, CpID: cpID})
+}
+
+func (a *sdkAdapter) ScriptTemplateID(ctx context.Context, name string) (int64, error) {
+	list, err := a.c.ListScriptTemplatesByName(ctx, name)
+	if err != nil {
+		return 0, err
+	}
+	for _, t := range list {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+func (a *sdkAdapter) UploadScriptTemplate(ctx context.Context, fileName, name, version, desc string, lua []byte) error {
+	return a.c.UploadLuaTemplate(ctx, fileName, name, version, desc, lua)
+}
+
+func (a *sdkAdapter) CreateScriptTask(ctx context.Context, scriptID int64, taskName, cpID, publishTime string) (int64, string, error) {
+	created, err := a.c.CreateScriptTasks(ctx, midplat.CreateScriptTaskRequest{
+		ScriptID: scriptID,
+		TaskName: taskName,
+		TaskList: []midplat.CreateScriptTaskItem{{CpID: cpID, PublishTime: publishTime}},
+	})
+	if err != nil {
+		return 0, "", err
+	}
+	if len(created) == 0 {
+		return 0, "", fmt.Errorf("中台未返回任务 ID")
+	}
+	return created[0].ID, created[0].TaskID, nil
+}
+
+func (a *sdkAdapter) ScriptTaskStatus(ctx context.Context, taskID int64) (*midplat.ScriptTaskVO, error) {
+	list, err := a.c.QueryScriptTasksByIDs(ctx, []int64{taskID})
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].ID == taskID {
+			return &list[i], nil
+		}
+	}
+	if len(list) > 0 {
+		return &list[0], nil
+	}
+	return nil, nil
+}
+
+func (a *sdkAdapter) ScriptTaskReport(ctx context.Context, taskID int64) (*midplat.ScriptTaskReport, error) {
+	return a.c.GetScriptTaskReport(ctx, taskID)
 }
 
 func (a *sdkAdapter) AdbInfo(ctx context.Context, cpID string) (*midplat.CloudPhoneAdbInfo, error) {

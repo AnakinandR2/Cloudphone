@@ -22,8 +22,13 @@ go run ./tools/scaffold -name <x> -kind user      # 前台按属主隔离的 per
 
 # Swagger（docs/ 是生成产物且已 gitignore）——改了接口注释后重生成：
 go install github.com/swaggo/swag/cmd/swag@v1.16.2
-swag init -g main.go --parseInternal --parseDependency -o docs
+swag init -g main.go --parseInternal --parseDependency -o docs            # 全量后台文档 → /swagger
+# 开放 API 独立文档（仅 /api/open/v1/*，instanceName=openapi）→ /swagger-open
+swag init -g internal/swagger_doc.go --dir ./modules/openapi --instanceName openapi --parseInternal --parseDependency -o docs/openapi
 ```
+
+> 两套文档靠 swag 的 `--instanceName` 隔离：开放 API 只扫 `modules/openapi`（不含内部 `/phone/*` 等路由），
+> 在 `main.go` 用 `ginSwagger.InstanceName("openapi")` 挂到 `/swagger-open`。新增/改开放接口后重跑上面第二条命令。
 
 可用 `DB_TYPE=mysql`（或 postgres）+ `DB_*` 切换数据库；测试也读这些环境变量，默认 sqlite。
 

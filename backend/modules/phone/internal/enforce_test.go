@@ -75,6 +75,19 @@ func (f *fakeOps) Root(_ context.Context, _, _ string, _ bool) error { return ni
 func (f *fakeOps) RootEnabledMap(_ context.Context, _ []string) (map[string]bool, error) {
 	return nil, nil
 }
+func (f *fakeOps) ScriptTemplateID(_ context.Context, _ string) (int64, error) { return 1, nil }
+func (f *fakeOps) UploadScriptTemplate(_ context.Context, _, _, _, _ string, _ []byte) error {
+	return nil
+}
+func (f *fakeOps) CreateScriptTask(_ context.Context, _ int64, _, _, _ string) (int64, string, error) {
+	return 1, "T1", nil
+}
+func (f *fakeOps) ScriptTaskStatus(_ context.Context, _ int64) (*midplat.ScriptTaskVO, error) {
+	return &midplat.ScriptTaskVO{}, nil
+}
+func (f *fakeOps) ScriptTaskReport(_ context.Context, _ int64) (*midplat.ScriptTaskReport, error) {
+	return &midplat.ScriptTaskReport{}, nil
+}
 func (f *fakeOps) RunLogs(_ context.Context, _ string, _, _ int) (*midplat.RunLogPage, error) {
 	return &midplat.RunLogPage{}, nil
 }
