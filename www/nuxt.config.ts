@@ -35,6 +35,13 @@ export default defineNuxtConfig({
     '@nuxtjs/i18n',
   ],
 
+  // Scalar 只在 ScalarDoc.client.vue（仅客户端）里 import，Vite 首次扫描发现不到，
+  // 会在运行时按需 optimize 并触发「504 Outdated Optimize Dep」。预先 include，
+  // 让 dev 启动即预打包，避免按需重优化导致的 504。仅影响 dev，不影响生产构建。
+  vite: {
+    optimizeDeps: { include: ['@scalar/api-reference'] },
+  },
+
   css: ['~/assets/css/tailwind.css'],
 
   // Register auto-imported components by filename (ignore nested folder prefix),
