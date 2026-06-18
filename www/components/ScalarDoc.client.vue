@@ -72,9 +72,6 @@ const customCss = `
   --scalar-sidebar-indent-border: transparent;
   --scalar-sidebar-indent-border-hover: rgb(var(--border));
   --scalar-sidebar-indent-border-active: var(--accent-color);
-
-  /* 内容区宽度与站点 .container 一致（侧栏仍贴左，靠 grid 的 auto 列） */
-  --scalar-content-max-width: var(--container, 1240px);
 }
 /* 兜底：个别版本搜索框变量名不一致，直接套 token，避免黑底 */
 .scalar-api-reference .sidebar-search,
@@ -92,22 +89,15 @@ const customCss = `
 .scalar-api-reference a[href*="scalar.com"] {
   display: none !important;
 }
-/* 文档高度自适应内容：去掉 100dvh 强制最小高度，消除正文与 footer 之间的空白。
-   直接命中类名——references-layout 与 scalar-api-reference 在同一元素上，用后代选择器会落空。 */
+/* 整体（侧栏 + 正文）限宽并居中：略宽于站点 main 内容区（var(--container)=1240）。
+   同时去掉 100dvh 强制最小高度，消除正文与 footer 之间的空白。
+   直接命中类名——references-layout 与 scalar-api-reference 在同一元素上，后代选择器会落空。 */
 .references-layout,
 .references-classic {
   min-height: 0 !important;
-}
-/* 内容左对齐：默认 .section margin:auto 把内容在侧栏右侧「居中」，造成整体右移、左侧留大间距；
-   改为左对齐并给内容列留出左右内边距。.section 是站点通用类名，必须限定在 Scalar 内。 */
-.references-rendered {
-  padding-left: 24px !important;
-  padding-right: 24px !important;
-}
-.references-rendered .section,
-.references-rendered .section-accordion,
-.references-classic-header {
-  margin-left: 0 !important;
+  min-width: 0 !important;
+  max-width: calc(var(--container, 1240px) + 160px) !important;
+  margin-left: auto !important;
   margin-right: auto !important;
 }
 `

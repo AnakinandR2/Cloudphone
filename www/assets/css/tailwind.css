@@ -1542,6 +1542,8 @@ html:not(.dark) .hero-scene__dotmap {
   padding: 64px 0 32px;
   margin-top: 40px;
 }
+/* API 文档页：footer 紧贴 Scalar 正文，去掉 40px 顶部留白（仅本页生效） */
+body.page-api-docs .footer { margin-top: 0; }
 .footer-grid {
   display: grid;
   grid-template-columns: 1.6fr repeat(5, 1fr);

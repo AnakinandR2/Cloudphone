@@ -10,6 +10,8 @@ const specUrl = computed(() => (first.value ? `/_content/api-docs/${first.value.
 useSeoMeta({
   title: () => `${first.value?.spec_title || first.value?.name || t.value.nav.apiDocs} — Gloryphone`,
 })
+// 文档页让 footer 紧贴正文（去掉全站 footer 的 40px 顶部留白），仅本页生效。
+useHead({ bodyAttrs: { class: 'page-api-docs' } })
 </script>
 
 <template>
