@@ -72,6 +72,43 @@ export function formatBlogDate(iso: string, locale: string): string {
 }
 
 /**
+ * 构造博客列表的伪静态路径（不含 locale 前缀，组件用 localePath 包裹）。
+ *  - all      → /blog            、/blog/page/2
+ *  - category → /blog-categories/<slug>、/blog-categories/<slug>/page/2
+ *  - tag      → /blog-tags/<slug> 、/blog-tags/<slug>/page/2
+ */
+export function blogListPath(
+  mode: 'all' | 'category' | 'tag',
+  slug?: string,
+  page = 1,
+): string {
+  const base =
+    mode === 'category' ? `/blog-categories/${slug}` : mode === 'tag' ? `/blog-tags/${slug}` : '/blog'
+  return page > 1 ? `${base}/page/${page}` : base
+}
+
+/**
+ * 计算分页器要展示的页码窗口：始终含首尾页 + 当前页 ±span，跨度处用 '...' 占位。
+ * 例：pageWindow(5, 10) → [1, '...', 4, 5, 6, '...', 10]
+ */
+export function pageWindow(current: number, total: number, span = 1): (number | '...')[] {
+  if (total < 1) return []
+  const keep = new Set<number>([1, total])
+  for (let p = current - span; p <= current + span; p++) {
+    if (p >= 1 && p <= total) keep.add(p)
+  }
+  const sorted = [...keep].sort((a, b) => a - b)
+  const out: (number | '...')[] = []
+  let prev = 0
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push('...')
+    out.push(p)
+    prev = p
+  }
+  return out
+}
+
+/**
  * 从 body_html 估算阅读时长（分钟，至少 1）。
  * 中文按约 400 字/分钟，英文按约 200 词/分钟，取主导者。
  */

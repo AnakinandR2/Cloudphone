@@ -68,7 +68,7 @@ useSeoMeta({
           <NuxtLink
             v-for="tg in post.tags"
             :key="tg.id"
-            :to="localePath('/blog') + '?tag=' + tg.slug"
+            :to="localePath('/blog-tags/' + tg.slug)"
             class="article-tag"
           >
             #{{ tg.name }}

@@ -2,8 +2,27 @@
 // 运行：node --test tests/
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatBlogDate, readingMinutes } from '../composables/useBlog.ts'
+import { blogListPath, formatBlogDate, pageWindow, readingMinutes } from '../composables/useBlog.ts'
 import { langToApi } from '../server/utils/content.ts'
+
+test('blogListPath 构造伪静态路径', () => {
+  assert.equal(blogListPath('all'), '/blog')
+  assert.equal(blogListPath('all', undefined, 1), '/blog')
+  assert.equal(blogListPath('all', undefined, 3), '/blog/page/3')
+  assert.equal(blogListPath('category', 'frontend'), '/blog-categories/frontend')
+  assert.equal(blogListPath('category', 'frontend', 2), '/blog-categories/frontend/page/2')
+  assert.equal(blogListPath('tag', 'vue'), '/blog-tags/vue')
+  assert.equal(blogListPath('tag', 'vue', 5), '/blog-tags/vue/page/5')
+})
+
+test('pageWindow 计算页码窗口（含首尾 + 当前页邻域）', () => {
+  assert.deepEqual(pageWindow(1, 1), [1])
+  assert.deepEqual(pageWindow(1, 3), [1, 2, 3])
+  assert.deepEqual(pageWindow(1, 5), [1, 2, '...', 5])
+  assert.deepEqual(pageWindow(5, 10), [1, '...', 4, 5, 6, '...', 10])
+  assert.deepEqual(pageWindow(10, 10), [1, '...', 9, 10])
+  assert.deepEqual(pageWindow(2, 4), [1, 2, 3, 4]) // 相邻不插省略号
+})
 
 test('langToApi 映射站点 locale → 中台语言码', () => {
   assert.equal(langToApi('zh'), 'zh-CN')
