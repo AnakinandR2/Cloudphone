@@ -28,6 +28,17 @@ func (m *appModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ...g
 		g.GET("/market", GetMarket)
 		g.POST("/upload", UploadApp)
 		g.POST("/batch-delete", BatchDeleteApps)
+
+		// 浏览器驱动的分片上传流水线（参考 mcn）：浏览器切片逐片上传，进度更细、支持秒传。
+		up := g.Group("/upload")
+		{
+			up.POST("/initiate", InitiateUpload)
+			up.POST("/part", UploadPart)
+			up.POST("/complete", CompleteUpload)
+			up.POST("/parse", ParseApp)
+			up.POST("/create", CreateAppFromUpload)
+			up.GET("/status", UploadStatus)
+		}
 	}
 
 	// 运营侧：查看/删除全部用户上传的应用（staff 登录 + 权限）。

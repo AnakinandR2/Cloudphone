@@ -1,9 +1,22 @@
 package app
 
 import (
+	"io"
+	"strings"
+
 	"manager-backend/framework/apperr"
 	"manager-backend/framework/midplat"
 )
+
+// firstNonEmpty 返回第一个非空白字符串。
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
 
 // AppService 模块内服务实例，由 module.Init 注入后装配。
 var AppService *serviceImpl
@@ -163,6 +176,91 @@ func (s *serviceImpl) Upload(userID int, path string, opts midplat.UploadAppOpti
 		Version:     created.Version,
 		FileSize:    created.FileSize,
 		IconPath:    created.IconPath,
+		Status:      StatusCreating,
+	}
+	if err := s.repo.create(rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
+}
+
+// ── 浏览器驱动的分片上传流水线（前台 my 用） ─────────────────────────────────
+// 这些方法是中台分片接口的薄代理；唯一带本地副作用的是 CreateFromUpload（落本地绑定）。
+
+// InitiateUpload §1.3 协商分片参数（命中秒传时直接返回 appInfo）。
+func (s *serviceImpl) InitiateUpload(req midplat.InitiateUploadRequest) (*midplat.InitiateUploadResponse, error) {
+	if s.ops == nil {
+		return nil, apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtxUpload()
+	defer cancel()
+	return s.ops.InitiateAppUpload(ctx, req)
+}
+
+// UploadPart §1.4 透传单个分片。
+func (s *serviceImpl) UploadPart(uploadID int64, partNumber int, contentMD5 string, part io.Reader, fileName string) (*midplat.UploadPartResponse, error) {
+	if s.ops == nil {
+		return nil, apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtxUpload()
+	defer cancel()
+	return s.ops.UploadPart(ctx, uploadID, partNumber, contentMD5, part, fileName)
+}
+
+// CompleteUpload §1.5 触发分片合并，返回下载 URL。
+func (s *serviceImpl) CompleteUpload(uploadID int64) (string, error) {
+	if s.ops == nil {
+		return "", apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtxUpload()
+	defer cancel()
+	return s.ops.CompleteAppUpload(ctx, uploadID)
+}
+
+// ParseUpload §1.6 解析已上传 APK 的元信息。
+func (s *serviceImpl) ParseUpload(uploadID int64) (*midplat.ParsedAppInfo, error) {
+	if s.ops == nil {
+		return nil, apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtxUpload()
+	defer cancel()
+	return s.ops.GetAppInfoFromFile(ctx, uploadID)
+}
+
+// QueryUploadStatus §1.9 查询上传任务状态（OSS_UPLOADING / OSS_SUCCESS / OSS_FAILED）。
+func (s *serviceImpl) QueryUploadStatus(uploadID int64) (string, error) {
+	if s.ops == nil {
+		return "", apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	return s.ops.QueryUploadStatus(ctx, uploadID)
+}
+
+// CreateFromUpload §1.8 由已上传文件创建中台应用，并落一条「我的应用」本地绑定（初始「创建中」）。
+// 本地展示字段优先用中台返回值，缺失时回退到前端确认面板传来的元信息（解析/秒传得到的）。
+func (s *serviceImpl) CreateFromUpload(userID int, req midplat.CreateFromUploadedFileRequest) (*CustomerApp, error) {
+	if s.ops == nil {
+		return nil, apperr.Internal("云手机中台未配置")
+	}
+	ctx, cancel := opCtxUpload()
+	defer cancel()
+	created, err := s.ops.CreateAppFromUploadedFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if created == nil {
+		created = &midplat.CreatedApp{}
+	}
+	rec := &CustomerApp{
+		UserID:      uint(userID),
+		CpAppID:     created.ID,
+		AppMD5:      firstNonEmpty(created.MD5, req.MD5),
+		AppName:     firstNonEmpty(created.AppName, req.AppName),
+		PackageName: firstNonEmpty(created.PackageName, req.PackageName),
+		Version:     firstNonEmpty(created.Version, req.Version),
+		FileSize:    firstNonEmpty(created.FileSize, req.FileSize),
+		IconPath:    firstNonEmpty(created.IconPath, req.IconPath),
 		Status:      StatusCreating,
 	}
 	if err := s.repo.create(rec); err != nil {

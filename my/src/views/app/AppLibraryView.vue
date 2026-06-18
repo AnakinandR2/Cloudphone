@@ -19,14 +19,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { formatDateTime } from '@/utils/date'
+import UploadAppDialog from './UploadAppDialog.vue'
 
 const { t } = useI18n()
 const data = ref<AppItem[]>([])
 const loading = ref(false)
-const uploading = ref(false)
-const uploadProgress = ref(0)
+const uploadOpen = ref(false)
 const search = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
 const selectedIds = ref<Set<number>>(new Set())
 
 // 存在「创建中」时静默轮询，等中台异步就绪后状态收敛到「正常」。
@@ -91,30 +90,6 @@ const columns = computed<ColumnDef<AppItem>[]>(() => [
   { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
 ])
 
-function pickFile() {
-  fileInput.value?.click()
-}
-async function onPicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file)
-    return
-  uploading.value = true
-  uploadProgress.value = 0
-  try {
-    await appApi.upload(file, undefined, undefined, p => (uploadProgress.value = p))
-    toast.success(t('app.uploadOk'), { description: file.name })
-    await load()
-  }
-  catch {
-    toast.error(t('app.uploadFail'))
-  }
-  finally {
-    uploading.value = false
-  }
-}
-
 async function removeOne(row: AppItem) {
   await appApi.batchDelete([row.id])
   toast.success(t('app.deleteOk'))
@@ -150,23 +125,9 @@ onUnmounted(() => {
               <Trash class="size-4" /> {{ t('app.batchDelete') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
             </Button>
           </Popconfirm>
-          <Button size="sm" :disabled="uploading" @click="pickFile">
-            <template v-if="uploading">
-              <svg viewBox="0 0 36 36" class="size-4 -rotate-90">
-                <circle cx="18" cy="18" r="16" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-width="4" />
-                <circle
-                  cx="18" cy="18" r="16" fill="none" stroke="currentColor" stroke-width="4"
-                  stroke-linecap="round" pathLength="100" stroke-dasharray="100"
-                  :stroke-dashoffset="100 - uploadProgress" class="transition-all duration-200"
-                />
-              </svg>
-              {{ t('app.uploading', { n: uploadProgress }) }}
-            </template>
-            <template v-else>
-              <Upload class="size-4" /> {{ t('app.upload') }}
-            </template>
+          <Button size="sm" @click="uploadOpen = true">
+            <Upload class="size-4" /> {{ t('app.upload') }}
           </Button>
-          <input ref="fileInput" type="file" accept=".apk,.xapk" class="hidden" @change="onPicked">
         </div>
       </div>
     </CardHeader>
@@ -225,5 +186,6 @@ onUnmounted(() => {
         </template>
       </DataTable>
     </CardContent>
+    <UploadAppDialog v-model:open="uploadOpen" @success="load" />
   </Card>
 </template>

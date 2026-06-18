@@ -367,7 +367,9 @@ func (c *Client) CheckAppNameExists(ctx context.Context, appName string) (bool, 
 // 「上传记录不存在【或文件路径为空】」表明它有「文件路径」兜底入口；秒传 appInfo 提供了
 // downloadUrl / appGenerateId，故一并下发，让秒传命中也能落库。
 type CreateFromUploadedFileRequest struct {
-	UploadID        int64  `json:"uploadId,omitempty"` // 秒传命中时为 0（省略），改走 downloadUrl
+	// 秒传命中时 uploadId 为 0：必须 omitempty 省略它，让中台按 MD5 定位已存在文件。
+	// 若发成 "uploadId":0，中台会去找编号 0 的上传记录 → 报「上传记录不存在或文件路径为空」。
+	UploadID        int64  `json:"uploadId,omitempty"`
 	AppName         string `json:"appName"`
 	PackageName     string `json:"packageName,omitempty"`
 	Version         string `json:"version,omitempty"`
