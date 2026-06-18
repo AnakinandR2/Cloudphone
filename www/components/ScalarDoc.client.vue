@@ -3,6 +3,9 @@
 // 映射到站点设计 token（--fg/--bg-*/--border/--accent…），主题色与明暗全部跟随站点。
 // specUrl 指向本站 /_content 代理，Key 不进浏览器。
 import { createApiReference } from '@scalar/api-reference'
+// npm 版 createApiReference 不像 CDN standalone 那样自动注入样式，需手动引入结构样式；
+// theme:'none' 只关掉内置配色预设，下面 customCss 再把配色覆盖成站点 token。
+import '@scalar/api-reference/style.css'
 
 const props = defineProps<{ specUrl: string }>()
 const colorMode = useColorMode()
