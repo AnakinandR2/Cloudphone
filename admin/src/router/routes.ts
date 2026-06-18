@@ -87,6 +87,12 @@ export const asyncRoutes: AppMainRoute[] = [
         component: () => import('@/views/ops/AppsView.vue'),
         meta: { title: 'menu.opsApps', icon: 'AppWindow', auth: 'app:view' },
       },
+      {
+        path: '/ops/user-scripts',
+        name: 'opsUserScripts',
+        component: () => import('@/views/ops/UserScriptsView.vue'),
+        meta: { title: 'menu.opsUserScripts', icon: 'FileCode', auth: 'script:view' },
+      },
     ],
   },
   {
@@ -121,6 +127,12 @@ export const asyncRoutes: AppMainRoute[] = [
         name: 'cpApps',
         component: () => import('@/views/cloudphone/AppsView.vue'),
         meta: { title: 'menu.cpApps', icon: 'AppWindow', auth: 'app:view' },
+      },
+      {
+        path: '/cloudphone/script-store',
+        name: 'cpScriptStore',
+        component: () => import('@/views/cloudphone/ScriptStoreView.vue'),
+        meta: { title: 'menu.cpScriptStore', icon: 'FileCode', auth: 'script:view' },
       },
       {
         // 素材管理（占位，功能开发中）
@@ -164,30 +176,6 @@ export const asyncRoutes: AppMainRoute[] = [
         name: 'billingTrials',
         component: () => import('@/views/billing/TrialsView.vue'),
         meta: { title: 'menu.billingTrials', icon: 'Gift', auth: 'billing:view' },
-      },
-    ],
-  },
-  {
-    // 自动化（占位分组，子项均为开发中占位页）
-    meta: { title: 'menu.automation', icon: 'Bot' },
-    children: [
-      {
-        path: '/automation/script-templates',
-        name: 'autoScriptTemplates',
-        component: () => import('@/views/demo/nested/BlankView.vue'),
-        meta: { title: 'menu.autoScriptTemplates', icon: 'FileCode' },
-      },
-      {
-        path: '/automation/tasks',
-        name: 'autoTasks',
-        component: () => import('@/views/demo/nested/BlankView.vue'),
-        meta: { title: 'menu.autoTasks', icon: 'ListChecks' },
-      },
-      {
-        path: '/automation/api-mcp',
-        name: 'autoApiMcp',
-        component: () => import('@/views/demo/nested/BlankView.vue'),
-        meta: { title: 'menu.autoApiMcp', icon: 'Plug' },
       },
     ],
   },
