@@ -10,7 +10,11 @@ import '@scalar/api-reference/style.css'
 const props = defineProps<{ specUrl: string }>()
 const colorMode = useColorMode()
 const el = ref<HTMLElement | null>(null)
+const ready = ref(false)
 let instance: { destroy?: () => void; app?: { unmount: () => void } } | null = null
+let builtDark: boolean | null = null
+let observer: MutationObserver | null = null
+let readyTimer: ReturnType<typeof setTimeout> | null = null
 
 // 把 Scalar 变量映射到站点 token。token 随主题色 + .dark 变化，故一套映射即可联动明暗。
 const customCss = `
@@ -50,6 +54,9 @@ const customCss = `
   --scalar-sidebar-indent-border: transparent;
   --scalar-sidebar-indent-border-hover: rgb(var(--border));
   --scalar-sidebar-indent-border-active: var(--accent-color);
+
+  /* 内容区宽度与站点 .container 一致（侧栏仍贴左，靠 grid 的 auto 列） */
+  --scalar-content-max-width: var(--container, 1240px);
 }
 /* 兜底：个别版本搜索框变量名不一致，直接套 token，避免黑底 */
 .scalar-api-reference .sidebar-search,
@@ -67,6 +74,11 @@ const customCss = `
 .scalar-api-reference a[href*="scalar.com"] {
   display: none !important;
 }
+/* 文档高度自适应内容：去掉 100dvh 强制最小高度，避免内容短时侧栏/正文与 footer 间出现大块空白 */
+.scalar-api-reference .references-layout,
+.scalar-api-reference.references-classic .references-layout {
+  min-height: auto !important;
+}
 `
 
 function configuration() {
@@ -82,19 +94,49 @@ function configuration() {
   }
 }
 
-let builtDark: boolean | null = null
+function clearReadyWatch() {
+  observer?.disconnect()
+  observer = null
+  if (readyTimer) {
+    clearTimeout(readyTimer)
+    readyTimer = null
+  }
+}
+// Scalar 布局出现即视为「就绪」，撤掉骨架屏；带 8s 兜底。
+function watchReady() {
+  clearReadyWatch()
+  const done = () => {
+    if (el.value?.querySelector('.scalar-api-reference, .references-layout')) {
+      ready.value = true
+      clearReadyWatch()
+      return true
+    }
+    return false
+  }
+  if (done()) return
+  observer = new MutationObserver(done)
+  if (el.value) observer.observe(el.value, { childList: true, subtree: true })
+  readyTimer = setTimeout(() => {
+    ready.value = true
+    clearReadyWatch()
+  }, 8000)
+}
 
 function mount() {
   if (!el.value || instance) return
   el.value.innerHTML = '' // 宿主置空，确保 Scalar 走 createApp 而非 SSR 水合分支
+  ready.value = false
   builtDark = colorMode.value === 'dark'
   try {
     instance = createApiReference(el.value, configuration())
+    watchReady()
   } catch (e) {
     console.error('[ScalarDoc] createApiReference 失败', e)
+    ready.value = true
   }
 }
 function unmount() {
+  clearReadyWatch()
   try {
     if (instance?.destroy) instance.destroy()
     else instance?.app?.unmount?.()
@@ -123,9 +165,92 @@ onBeforeUnmount(unmount)
 </script>
 
 <template>
-  <div ref="el" class="scalar-doc-host" />
+  <div class="scalar-doc" :class="{ 'is-loading': !ready }">
+    <div ref="el" class="scalar-doc__host" />
+    <Transition name="scalar-fade">
+      <div v-if="!ready" class="scalar-skeleton" aria-hidden="true">
+        <div class="scalar-skeleton__nav">
+          <div class="sk-bar sk-search" />
+          <div v-for="n in 9" :key="n" class="sk-bar" :style="{ width: `${55 + ((n * 13) % 40)}%` }" />
+        </div>
+        <div class="scalar-skeleton__main">
+          <div class="sk-bar sk-title" />
+          <div class="sk-bar" style="width: 88%" />
+          <div class="sk-bar" style="width: 94%" />
+          <div class="sk-bar" style="width: 72%" />
+          <div class="sk-block" />
+          <div class="sk-bar" style="width: 90%" />
+          <div class="sk-bar" style="width: 64%" />
+        </div>
+      </div>
+    </Transition>
+  </div>
 </template>
 
 <style scoped>
-.scalar-doc-host { min-height: 70vh; }
+.scalar-doc { position: relative; }
+/* 仅加载期撑起高度给骨架屏；就绪后高度交给 Scalar 自身，避免底部与 footer 间留空白 */
+.scalar-doc.is-loading { min-height: 70vh; }
+
+.scalar-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 32px;
+  background: rgb(var(--bg));
+  overflow: hidden;
+}
+.scalar-skeleton__nav {
+  width: 268px;
+  flex-shrink: 0;
+  padding: 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-right: 1px solid rgb(var(--border));
+  background: rgb(var(--bg-sunken));
+}
+.scalar-skeleton__main {
+  flex: 1;
+  max-width: var(--container, 1240px);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sk-bar {
+  height: 13px;
+  border-radius: 6px;
+  background: rgb(var(--bg-inset));
+  position: relative;
+  overflow: hidden;
+}
+.sk-search { height: 34px; border-radius: 8px; margin-bottom: 8px; }
+.sk-title { height: 30px; width: 42%; margin-bottom: 12px; }
+.sk-block {
+  height: 200px;
+  border-radius: 12px;
+  background: rgb(var(--bg-inset));
+  position: relative;
+  overflow: hidden;
+  margin: 10px 0;
+}
+.sk-bar::after,
+.sk-block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--bg-elev) / 0.65), transparent);
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sk-shimmer {
+  100% { transform: translateX(100%); }
+}
+@media (max-width: 768px) {
+  .scalar-skeleton__nav { display: none; }
+}
+
+.scalar-fade-leave-active { transition: opacity 0.3s ease; }
+.scalar-fade-leave-to { opacity: 0; }
 </style>
