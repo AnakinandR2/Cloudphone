@@ -111,3 +111,25 @@
 5. zh/en 正确映射 `zh-CN`/`en` 并重新取数。
 6. 密钥不出现在任何客户端产物/请求中。
 7. 中台不可用时：文档/FAQ 以友好空/错误态呈现且 SSR 不崩；文档详情无效 slug 返回 404。
+
+## 8. 扩展：SEO 配置 / web-files / AI 文档（已实现）
+
+延续同一接入，补齐中台的 SEO 配置与「文本/文件」能力（端点不带 `space`，按 Key 工作空间）。
+
+### 8.1 SEO 配置（全站按路径注入 TDK）
+- 端点：`GET /seo/resolve?path=<归一化路径>` → `{ matched, config_id, metas:[{key,value,attr?}] }`；`__title__` 表示 `<title>`，其余为 `<meta>`（`attr` 缺省 `name`，如 `og:*` 用 `property`）。
+- 代理：`server/routes/_content/seo.get.ts`（复用 `contentFetch`）。
+- 注入：`composables/useSeoConfig.ts`（纯函数 `seoMetasToHead` + `useFetch`），在 [app.vue](../../../www/app.vue) 全站调用；SSR 解析，`useHead(..., { tagPriority: 1 })` 高优先级覆盖页面同名 tag。
+- **非破坏式**：仅注入配置显式定义的 key；未命中或某 key 未配 → 保留页面自身 SEO（已验证 `/blog` 标题被覆盖、`/pricing`、`/help/<slug>` 保留自身标题）。
+- 注意：`seo/resolve` 不带语言维度，metas 为后台按路径配置的原文；多语言 SEO 由后台按需配置。
+
+### 8.2 web-files（robots.txt / sitemap.xml / llm.txt / faq.md）
+- 端点：`GET /web-files/by-path?path=&lang=` 直接返回**原始字节**（非信封），带 `Content-Type`/`ETag`；语言回退链：请求 lang → 全局（空语言）→ `zh-CN` → 404。
+- 服务端工具 `proxyWebFile(event, urlPath, lang?)`（`server/utils/content.ts`）：`$fetch.raw` 回源、透传 `Content-Type`/`ETag`、404/502 处理。
+- 根路径路由（命中 nginx `location /` → www）：`server/routes/{robots.txt,sitemap.xml,llm.txt,faq.md}.get.ts`。
+  - `robots.txt`、`sitemap.xml`：全局文件，不带 lang。
+  - `llm.txt`、`faq.md`：读 `?lang=`（`langToApi` 映射），缺省走中台回退。
+
+### 8.3 Footer「AI 文档」列（多语言）
+- [AppFooter.vue](../../../www/components/AppFooter.vue) 新增一列「AI 文档 / AI Docs」（i18n `footer.aiDocs`），含两条真实链接：`/llm.txt?lang=<locale>`、`/faq.md?lang=<locale>`（`target=_blank`）；`locale` 跟随站点语言，服务端据此按语言取中台文件。
+- `.footer-grid` 列数由 `1.6fr repeat(4,1fr)` 调整为 `1.6fr repeat(5,1fr)`。

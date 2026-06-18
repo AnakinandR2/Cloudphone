@@ -76,3 +76,17 @@ export interface TocItem {
   text: string
   level: number
 }
+
+/** SEO 配置的一条 meta：特殊 key `__title__` 表示 <title>；attr 缺省按 name。 */
+export interface SeoMeta {
+  key: string
+  value: string
+  attr?: string
+}
+
+/** seo/resolve 返回：是否命中 + 命中配置 id + meta 列表。 */
+export interface SeoResolveResult {
+  matched: boolean
+  config_id?: number
+  metas: SeoMeta[]
+}

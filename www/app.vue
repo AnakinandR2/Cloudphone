@@ -7,6 +7,9 @@ useHead({
     'data-accent': accent,
   },
 })
+
+// 全站 SEO 配置（中台按 URL 路径统一注入 TDK / 任意 meta）。
+useSeoConfig()
 </script>
 
 <template>

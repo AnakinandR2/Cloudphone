@@ -1,5 +1,6 @@
 // 内容中台 Pub API 的服务端调用封装。
-// 密钥只在服务端（runtimeConfig）读取，浏览器永不接触；页面只调用本站 /api/blog/*。
+// 密钥只在服务端（runtimeConfig）读取，浏览器永不接触；页面只调用本站 /_content/*。
+import type { H3Event } from 'h3'
 
 /**
  * 站点 i18n locale → 中台语言码。
@@ -64,4 +65,34 @@ export async function contentFetch<T>(
     })
   }
   return res.data
+}
+
+/**
+ * 回源内容中台的「文本/文件」（web-files）并原样返回字节。
+ * by-path 直接返回原始字节（非信封），保留上游 Content-Type / ETag。
+ * lang 留空时走中台的语言回退链（→ 全局 → zh-CN）。
+ */
+export async function proxyWebFile(event: H3Event, urlPath: string, lang?: string): Promise<string> {
+  const cfg = useRuntimeConfig()
+  const base = (cfg.pubBaseUrl as string) || ''
+  const key = (cfg.contentApiKey as string) || ''
+  if (!base || !key) {
+    throw createError({ statusCode: 500, statusMessage: '内容中台未配置（缺少 NUXT_PUB_BASE_URL / NUXT_CONTENT_API_KEY）' })
+  }
+  const query: Record<string, string> = { path: urlPath }
+  if (lang) query.lang = lang
+  try {
+    const res = await $fetch.raw<string>(base + '/web-files/by-path', {
+      query,
+      headers: { 'X-API-Key': key },
+    })
+    const ct = res.headers.get('content-type')
+    if (ct) setResponseHeader(event, 'content-type', ct)
+    const etag = res.headers.get('etag')
+    if (etag) setResponseHeader(event, 'etag', etag)
+    return (res._data as string) ?? ''
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number } }
+    throw createError({ statusCode: err?.response?.status === 404 ? 404 : 502, statusMessage: '文件不存在' })
+  }
 }
