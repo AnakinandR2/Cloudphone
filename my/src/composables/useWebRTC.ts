@@ -154,18 +154,26 @@ export function useWebRTC(opts: UseWebRTCOptions) {
   // 控制通道（DataChannel）是否就绪——摄像头注入依赖它发 camera_control + binary_pcm。
   const controlReady = ref(false)
 
-  // 屏幕方向：竖屏(false)/横屏(true)。rotateDevice 经 DataChannel 发 rotate_device 切换，
-  // 设备旋转后推流分辨率交换，由 videoRef 的 @resize 触发重排。
+  // 屏幕方向：竖屏(false)/横屏(true)。以实时推流尺寸为唯一真相——设备或应用「自动转屏」时
+  // 推流分辨率交换，syncOrientation 经 video 的 resize/loadedmetadata 自动更新本值（无需手点旋转）。
   const landscape = ref(false)
+
+  // 按实时推流尺寸自动判定屏幕方向（宽>高=横屏）。在 pc.ontrack 里挂到 video 的
+  // resize/loadedmetadata 事件，设备内应用转横屏导致分辨率交换时即自动跟随。
+  function syncOrientation() {
+    const v = videoRef.value
+    if (v && v.videoWidth && v.videoHeight)
+      landscape.value = v.videoWidth > v.videoHeight
+  }
+
   function rotateDevice(): boolean {
     if (!dc || dc.readyState !== 'open')
       return false
-    const v = videoRef.value
-    const isLandscape = v && v.videoWidth && v.videoHeight ? v.videoWidth > v.videoHeight : landscape.value
-    const angle = isLandscape ? 0 : -90 // -90=横屏，0=竖屏（与 SDK rotate_device 一致）
+    // 目标方向取当前实时方向的反向。-90=横屏，0=竖屏（与 SDK rotate_device 一致）。
+    // 旋转后推流分辨率交换，landscape 由 syncOrientation 自动校正，故此处不再乐观翻转。
+    const angle = landscape.value ? 0 : -90
     try {
       dc.send(JSON.stringify({ type: 'rotate_device', angle }))
-      landscape.value = !isLandscape
       return true
     }
     catch {
@@ -276,6 +284,9 @@ export function useWebRTC(opts: UseWebRTCOptions) {
             videoRef.value.srcObject = e.streams[0]
             videoRef.value.muted = true
             isMuted.value = true
+            // 自动转屏检测：推流分辨率变化（如应用切横屏）即重新判定方向。
+            videoRef.value.addEventListener('resize', syncOrientation)
+            videoRef.value.addEventListener('loadedmetadata', syncOrientation)
             videoRef.value.play().catch(() => {})
           }
         }
@@ -372,8 +383,11 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     try { ws?.close() }
     catch { /* ignore */ }
     ws = null
-    if (videoRef.value)
+    if (videoRef.value) {
+      videoRef.value.removeEventListener('resize', syncOrientation)
+      videoRef.value.removeEventListener('loadedmetadata', syncOrientation)
       videoRef.value.srcObject = null
+    }
     hasAutoUnmuted = false
   }
 
@@ -395,6 +409,7 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     controlReady,
     landscape,
     rotateDevice,
+    syncOrientation,
     rttMs,
     latencyLevel,
     // 摄像头/麦克风注入（上行，相互独立）

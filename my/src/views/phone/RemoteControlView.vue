@@ -66,6 +66,7 @@ import { useWebRTC } from '@/composables/useWebRTC'
 import RemoteAppPanel from './RemoteAppPanel.vue'
 import RemoteFilePanel from './RemoteFilePanel.vue'
 import RemoteUploadPanel from './RemoteUploadPanel.vue'
+import { computeRemoteWindowSize } from './remoteWindowFit'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -259,22 +260,34 @@ function panelWidth(p: Panel): number {
   }
 }
 
-// 把窗口宽度设为：画面宽（由高度决定，与窗口宽无关）+ 侧栏 (+ 目标面板宽)。
-function setWindowWidth(panel: Panel) {
-  const vw = videoRef.value?.getBoundingClientRect().width ?? 0
-  if (!vw || typeof window.resizeTo !== 'function')
+// 设备长边映射到屏上的目标长度（与 PhoneView.openRemoteControl 的初始高一致）。
+const VIDEO_LONG = (() => {
+  const avail = window.screen?.availHeight ?? 960
+  return Math.min(960, Math.max(560, Math.round(avail * 0.88)))
+})()
+
+// 按实时推流比例把弹窗 resize 成对应形态：竖屏=窄高、横屏=宽扁 → 实现「窗体旋转」。
+// 设备/应用自动转横屏时推流分辨率交换，由 onVideoReady(@resize) 触发本函数重排窗体。
+function fitWindowToOrientation(panel: Panel) {
+  if (typeof window.resizeTo !== 'function')
     return
-  const chrome = Math.max(0, window.outerWidth - window.innerWidth)
-  let inner = Math.round(vw + SIDEBAR_W + panelWidth(panel))
-  // 横屏画面很宽，限制窗口不超过屏幕可用宽度，避免「撑得巨大」。
-  const maxInner = (window.screen?.availWidth ?? inner) - chrome
-  inner = Math.min(inner, maxInner)
-  window.resizeTo(inner + chrome, window.outerHeight)
+  const { outerW, outerH } = computeRemoteWindowSize({
+    streamW: streamW.value,
+    streamH: streamH.value,
+    panelW: panelWidth(panel),
+    sidebarW: SIDEBAR_W,
+    longEdge: VIDEO_LONG,
+    availW: window.screen?.availWidth ?? 99999,
+    availH: window.screen?.availHeight ?? 99999,
+    chromeW: Math.max(0, window.outerWidth - window.innerWidth),
+    chromeH: Math.max(0, window.outerHeight - window.innerHeight),
+  })
+  window.resizeTo(outerW, outerH)
 }
 
-// 画面就绪时按当前展开的面板贴合窗口。
+// 画面就绪 / 方向变化时按当前展开的面板贴合窗体。
 function fitWindow() {
-  setWindowWidth(activePanel.value)
+  fitWindowToOrientation(activePanel.value)
 }
 
 // 开关面板：
@@ -283,11 +296,11 @@ function fitWindow() {
 function togglePanel(name: Exclude<Panel, null>) {
   if (activePanel.value === name) {
     activePanel.value = null
-    setWindowWidth(null)
+    fitWindowToOrientation(null)
     return
   }
   activePanel.value = null
-  setWindowWidth(name)
+  fitWindowToOrientation(name)
   activePanel.value = name
 }
 
