@@ -35,8 +35,9 @@ useSeoMeta({
 
 <template>
   <DocsLayout v-if="article" :tree="tree ?? []" :current-slug="slug" :toc="built.toc">
+    <!-- 面包屑放在 .article-body 之外，避免被正文列表样式（绿点/竖排）污染 -->
+    <Breadcrumb :items="crumbs" class="docs-breadcrumb" />
     <article class="article-body docs-article">
-      <Breadcrumb :items="crumbs" style="margin-bottom: 18px" />
       <h1>{{ article.title }}</h1>
       <ArticleBody :html="built.html" />
       <ArticleFeedback space="help" :slug="slug" vote feedback />

@@ -2777,6 +2777,12 @@ body.page-api-docs .footer { margin-top: 0; }
   padding: 6px 10px; border-radius: 8px; color: rgb(var(--fg-muted)); transition: all 0.14s ease;
 }
 .docs-nav__group-toggle:hover { color: rgb(var(--fg)); background: rgb(var(--bg-sunken)); }
+/* 顶层分组：保留区块小标题外观（大写、subtle），但可点击折叠 */
+.docs-nav__group-toggle--top {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: rgb(var(--fg-subtle));
+}
+.docs-nav__group-toggle--top:hover { color: rgb(var(--fg-muted)); }
 .docs-nav__chev { flex-shrink: 0; color: rgb(var(--fg-subtle)); transition: transform 0.15s ease; }
 .docs-nav__chev.open { transform: rotate(90deg); }
 .docs-nav__group--sub > .docs-nav__children {
@@ -2793,6 +2799,8 @@ body.page-api-docs .footer { margin-top: 0; }
   background: rgb(var(--accent) / 0.08); border-left-color: var(--accent-color);
 }
 
+/* 面包屑（位于正文之外，独立间距） */
+.docs-breadcrumb { margin-bottom: 16px; }
 /* 正文（复用 .article-body 排版，仅调整文档列内边距） */
 .docs-main .article-body { padding: 0 0 40px; }
 .docs-main .article-body .container { max-width: none; padding: 0; }
