@@ -144,6 +144,18 @@ export const GP_CONTENT = {
       eyebrow: '常见问题', title: '你可能想问',
       empty: '暂无常见问题', error: '内容加载失败，请稍后重试', retry: '重试', all: '全部',
     },
+    feedback: {
+      title: '这篇文档有帮助吗？',
+      helpful: '有帮助', notHelpful: '没帮助',
+      thanksVote: '感谢你的反馈！',
+      reportTitle: '发现问题或有建议？',
+      reportToggle: '留言反馈',
+      placeholder: '描述你遇到的问题或建议……',
+      contact: '联系方式（选填，方便我们回复你）',
+      submit: '提交反馈', submitting: '提交中…',
+      thanksFeedback: '已收到，感谢你的反馈！',
+      emptyError: '请先填写反馈内容', error: '提交失败，请稍后重试',
+    },
     cta: {
       title: '1 小时免费试用，看看云手机能为你做什么',
       sub: '无需信用卡，注册即用。',
@@ -341,6 +353,18 @@ export const GP_CONTENT = {
     faq: {
       eyebrow: 'FAQ', title: 'Things you might want to ask',
       empty: 'No FAQs yet', error: "Couldn't load FAQs, please try again", retry: 'Retry', all: 'All',
+    },
+    feedback: {
+      title: 'Was this article helpful?',
+      helpful: 'Yes', notHelpful: 'No',
+      thanksVote: 'Thanks for your feedback!',
+      reportTitle: 'Found an issue or have a suggestion?',
+      reportToggle: 'Leave feedback',
+      placeholder: 'Describe the problem or your suggestion…',
+      contact: 'Contact (optional, so we can follow up)',
+      submit: 'Submit', submitting: 'Submitting…',
+      thanksFeedback: 'Received — thank you for your feedback!',
+      emptyError: 'Please enter your feedback first', error: 'Failed to submit, please try again',
     },
     cta: {
       title: 'Try it free for an hour. See what cloud phones can do for you.',

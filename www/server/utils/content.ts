@@ -25,6 +25,7 @@ interface Envelope<T> {
 export async function contentFetch<T>(
   path: string,
   query: Record<string, unknown>,
+  event?: H3Event,
 ): Promise<T> {
   const cfg = useRuntimeConfig()
   const base = (cfg.pubBaseUrl as string) || ''
@@ -46,7 +47,7 @@ export async function contentFetch<T>(
   try {
     res = await $fetch<Envelope<T>>(base + path, {
       query: cleaned,
-      headers: { 'X-API-Key': key },
+      headers: { 'X-API-Key': key, ...(event ? clientForwardHeaders(event) : {}) },
       timeout: 10_000,
     })
   } catch (e: unknown) {
@@ -63,6 +64,69 @@ export async function contentFetch<T>(
       statusCode: res?.code === 404 ? 404 : 502,
       statusMessage: res?.message || '内容中台返回错误',
     })
+  }
+  return res.data
+}
+
+/**
+ * 提取真实客户端 IP / User-Agent，产出转发给中台的请求头。
+ * www 处于 nginx 之后：`x-forwarded-for` 首段即真实访客，回退 `x-real-ip` / 连接地址。
+ * 让中台后台明细记录到真实访客，而非 www 服务器自身。
+ */
+export function clientForwardHeaders(event: H3Event): Record<string, string> {
+  const xff = getHeader(event, 'x-forwarded-for') || ''
+  const clientIp =
+    xff.split(',')[0]?.trim() ||
+    getHeader(event, 'x-real-ip') ||
+    getRequestIP(event, { xForwardedFor: true }) ||
+    ''
+  const ua = getHeader(event, 'user-agent') || ''
+  const headers: Record<string, string> = {}
+  if (clientIp) {
+    headers['X-Forwarded-For'] = clientIp
+    headers['X-Real-IP'] = clientIp
+  }
+  if (ua) headers['User-Agent'] = ua
+  return headers
+}
+
+/**
+ * POST 回源内容中台并解封信封（reaction / feedback 写接口）。
+ * 注入 `X-API-Key` 与真实客户端 IP/UA 转发头；上游 4xx 透传（403 scope 不足 / 422 校验），其余 502。
+ */
+export async function contentPost<T>(
+  event: H3Event,
+  path: string,
+  query: Record<string, unknown>,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const cfg = useRuntimeConfig()
+  const base = (cfg.pubBaseUrl as string) || ''
+  const key = (cfg.contentApiKey as string) || ''
+  if (!base || !key) {
+    throw createError({ statusCode: 500, statusMessage: '内容中台未配置（缺少 NUXT_PUB_BASE_URL / NUXT_CONTENT_API_KEY）' })
+  }
+
+  let res: Envelope<T>
+  try {
+    res = await $fetch<Envelope<T>>(base + path, {
+      method: 'POST',
+      query,
+      headers: { 'X-API-Key': key, ...clientForwardHeaders(event) },
+      body,
+      timeout: 10_000,
+    })
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number }; data?: { message?: string }; message?: string }
+    const upstream = err?.response?.status
+    throw createError({
+      statusCode: upstream && upstream >= 400 && upstream < 500 ? upstream : 502,
+      statusMessage: err?.data?.message || err?.message || '内容中台请求失败',
+    })
+  }
+
+  if (!res || res.code !== 0) {
+    throw createError({ statusCode: 502, statusMessage: res?.message || '内容中台返回错误' })
   }
   return res.data
 }

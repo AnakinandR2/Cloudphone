@@ -119,3 +119,23 @@ export interface ApiDocSummary {
   spec_title: string
   spec_version: string
 }
+
+/** 当前访客对本文的反馈快照（summary 带 visitor_id 时返回）。 */
+export interface MyReaction {
+  /** 0=未评分；1–5=星级 */
+  rating: number
+  /** -1=踩 / 0=无 / 1=赞 */
+  vote: number
+}
+
+/** 文章反馈聚合（feedback-summary 返回；写接口响应也回带此结构）。 */
+export interface FeedbackSummary {
+  rating_avg: number
+  rating_count: number
+  /** 1–5 星各自计数 */
+  rating_dist: number[]
+  up_count: number
+  down_count: number
+  feedback_count: number
+  my_reaction?: MyReaction
+}

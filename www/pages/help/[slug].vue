@@ -28,6 +28,7 @@ useSeoMeta({
     <article class="article-body docs-article">
       <h1>{{ article.title }}</h1>
       <ArticleBody :html="built.html" />
+      <ArticleFeedback space="help" :slug="slug" vote feedback />
     </article>
   </DocsLayout>
 </template>
