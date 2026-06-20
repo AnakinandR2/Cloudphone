@@ -19,7 +19,7 @@ if (error.value || !post.value) {
 
 // 同分类推荐，排除当前篇。
 const { list: relatedRaw } = useBlogPosts(
-  computed(() => ({ size: 4, categoryId: post.value?.category?.id, sort: 'published_desc' as const })),
+  computed(() => ({ size: 4, group: post.value?.group?.slug, sort: 'published_desc' as const })),
 )
 const related = computed(() => relatedRaw.value.filter((p) => p.slug !== slug.value).slice(0, 3))
 
@@ -49,7 +49,7 @@ useSeoMeta({
       <div class="container">
         <Breadcrumb :items="crumbs" />
         <div class="blog-feature__meta" style="margin-top: 18px">
-          <span v-if="post.category" class="blog-feature__cat">{{ post.category.name }}</span>
+          <span v-if="post.group" class="blog-feature__cat">{{ post.group.name }}</span>
           <span>{{ fmt(post.published_at) }}</span><span>·</span><span>{{ minutes }} {{ t.blog.min }}</span>
         </div>
         <div class="article-cover">
@@ -84,7 +84,7 @@ useSeoMeta({
           <NuxtLink v-for="rp in related" :key="rp.id" :to="localePath('/blog/' + rp.slug)" class="blog-card">
             <div class="blog-card__cover">
               <img :src="rp.cover_url" :alt="rp.cover_alt" loading="lazy" />
-              <span v-if="rp.category" class="blog-card__cat">{{ rp.category.name }}</span>
+              <span v-if="rp.group" class="blog-card__cat">{{ rp.group.name }}</span>
             </div>
             <div class="blog-card__body">
               <div class="blog-card__meta">

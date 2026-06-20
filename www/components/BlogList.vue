@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 博客列表（共享）：全部 / 分类 / 标签三种模式，伪静态路由驱动。
 // 分类、标签 chips 与分页均为真实 <a> 链接。
-import type { PubTaxon } from '~/types/content'
+import type { PubCategory, PubTaxon } from '~/types/content'
 
 const props = defineProps<{
   mode: 'all' | 'category' | 'tag'
@@ -15,12 +15,13 @@ const localePath = useLocalePath()
 
 const PAGE_SIZE = 12
 
-// 先 await taxonomy：渲染 chips，并把 slug 解析成 id 供文章查询（避免 SSR 时序漏过滤）。
+// 先 await taxonomy：渲染 chips 并校验 slug。分类已改为按 slug 过滤（无需 id），
+// 标签仍只认 tag_id，故 await 后用列表把标签 slug 解析成 id（避免 SSR 时序漏过滤）。
 const { data: taxo } = await useBlogTaxonomy()
 const categories = computed(() => taxo.value?.categories ?? [])
 const tags = computed(() => taxo.value?.tags ?? [])
 
-const activeCategory = computed<PubTaxon | undefined>(() =>
+const activeCategory = computed<PubCategory | undefined>(() =>
   props.mode === 'category' ? categories.value.find((c) => c.slug === props.slug) : undefined,
 )
 const activeTag = computed<PubTaxon | undefined>(() =>
@@ -36,7 +37,7 @@ const { list, total, pending, error, refresh } = useBlogPosts(
   computed(() => ({
     page: props.page,
     size: PAGE_SIZE,
-    categoryId: activeCategory.value?.id,
+    group: activeCategory.value?.slug,
     tagId: activeTag.value?.id,
     sort: 'published_desc' as const,
   })),
@@ -98,7 +99,7 @@ const crumbs = computed(() => {
           <NuxtLink :to="localePath('/blog')" class="blog-page-tab" :class="{ active: mode === 'all' }">{{ t.blog.all }}</NuxtLink>
           <NuxtLink
             v-for="c in categories"
-            :key="c.id"
+            :key="c.slug"
             :to="localePath('/blog-categories/' + c.slug)"
             class="blog-page-tab"
             :class="{ active: isCatActive(c.slug) }"
@@ -142,7 +143,7 @@ const crumbs = computed(() => {
             </div>
             <div>
               <div class="blog-feature__meta">
-                <span v-if="featured.category" class="blog-feature__cat">{{ featured.category.name }}</span>
+                <span v-if="featured.group" class="blog-feature__cat">{{ featured.group.name }}</span>
                 <span>{{ fmt(featured.published_at) }}</span>
               </div>
               <h2>{{ featured.title }}</h2>
@@ -155,7 +156,7 @@ const crumbs = computed(() => {
             <NuxtLink v-for="p in rest" :key="p.id" :to="localePath('/blog/' + p.slug)" class="blog-card">
               <div class="blog-card__cover">
                 <img :src="p.cover_url" :alt="p.cover_alt" loading="lazy" />
-                <span v-if="p.category" class="blog-card__cat">{{ p.category.name }}</span>
+                <span v-if="p.group" class="blog-card__cat">{{ p.group.name }}</span>
               </div>
               <div class="blog-card__body">
                 <div class="blog-card__meta">

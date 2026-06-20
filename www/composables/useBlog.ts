@@ -6,7 +6,8 @@ import type { PubArticleDetail, PubList, PubTaxonomy } from '~/types/content'
 export interface BlogQuery {
   page?: number
   size?: number
-  categoryId?: number
+  /** 分类 = 目录分组 slug（递归含子分组）。 */
+  group?: string
   tagId?: number
   sort?: 'directory' | 'published_desc'
 }
@@ -19,7 +20,7 @@ export function useBlogPosts(query: MaybeRefOrGetter<BlogQuery> = {}) {
     lang: locale.value,
     page: q.value.page,
     size: q.value.size,
-    category_id: q.value.categoryId,
+    group: q.value.group,
     tag_id: q.value.tagId,
     sort: q.value.sort,
   }))

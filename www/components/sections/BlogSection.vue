@@ -23,7 +23,7 @@ const fmt = (iso: string) => formatBlogDate(iso, locale.value)
         <NuxtLink v-for="p in posts" :key="p.id" :to="localePath('/blog/' + p.slug)" class="blog-card">
           <div class="blog-card__cover">
             <img :src="p.cover_url" :alt="p.cover_alt" loading="lazy" />
-            <span v-if="p.category" class="blog-card__cat">{{ p.category.name }}</span>
+            <span v-if="p.group" class="blog-card__cat">{{ p.group.name }}</span>
           </div>
           <div class="blog-card__body">
             <div class="blog-card__meta">

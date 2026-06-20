@@ -1,9 +1,28 @@
 // 内容中台 Pub API 的数据类型，服务端代理与客户端组合式共用。
 // 仅类型，无运行时代码 —— 编译后会被擦除，不会在两端间引入耦合。
 
-/** 分类 / 标签的精简表示。 */
+/** 标签的精简表示。 */
 export interface PubTaxon {
   id: number
+  slug: string
+  name: string
+}
+
+/**
+ * 文章所属目录分组（即「分类」）。中台已合并目录与分类：
+ * 一篇文章的分类就是它在目录树中的父分组，一文一位。
+ */
+export interface PubGroupRef {
+  id: number
+  slug: string
+  name: string
+  full_url: string
+}
+
+/**
+ * 分类筛选项：由 /directory 的 group 节点摊平而来（无独立 id，按 slug 递归过滤）。
+ */
+export interface PubCategory {
   slug: string
   name: string
 }
@@ -22,7 +41,7 @@ export interface PubArticleSummary {
   seo_title: string
   seo_description: string
   seo_keywords: string
-  category: PubTaxon | null
+  group: PubGroupRef | null
   tags: PubTaxon[]
   published_at: string
   created_at: string
@@ -41,9 +60,9 @@ export interface PubList {
   total: number
 }
 
-/** 分类 + 标签聚合（taxonomy 端点）。 */
+/** 分类 + 标签聚合（taxonomy 端点）。分类源自目录分组，标签源自 /article-tags。 */
 export interface PubTaxonomy {
-  categories: PubTaxon[]
+  categories: PubCategory[]
   tags: PubTaxon[]
 }
 

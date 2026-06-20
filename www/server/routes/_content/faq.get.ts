@@ -1,5 +1,5 @@
-// GET /api/faq —— FAQ 聚合代理。
-// 先取列表（含分类），再并行取各篇 body_html（答案），按分类分组返回。
+// GET /_content/faq —— FAQ 聚合代理。
+// 先取列表，再并行取各篇 body_html（答案），按目录分组（group，即分类）分组返回。
 // query: lang
 import type { FaqGroup, PubArticleDetail, PubList } from '~/types/content'
 
@@ -15,11 +15,11 @@ export default defineEventHandler(async (event): Promise<FaqGroup[]> => {
     ),
   )
 
-  // 按分类分组，分组与组内顺序均沿用列表顺序。
+  // 按目录分组（group）分组，分组与组内顺序均沿用列表顺序。
   const groups: FaqGroup[] = []
   const byCat = new Map<string, FaqGroup>()
   for (const d of details) {
-    const category = d.category?.name || ''
+    const category = d.group?.name || ''
     let g = byCat.get(category)
     if (!g) {
       g = { category, items: [] }
