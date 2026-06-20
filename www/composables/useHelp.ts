@@ -66,6 +66,25 @@ export function buildToc(html: string): { html: string; toc: TocItem[] } {
   return { html: out, toc }
 }
 
+/**
+ * 返回目录树中通往某文章的祖先分组标题链（用于面包屑）。
+ * 例：对外读取 API > API 文档（Scalar）→ ['对外读取 API', 'API 文档（Scalar）']。未找到返回 []。
+ */
+export function docTrail(tree: PubDirectoryNode[], slug: string): string[] {
+  function dfs(nodes: PubDirectoryNode[], path: string[]): string[] | null {
+    for (const n of nodes) {
+      if (n.kind === 'article') {
+        if (n.slug === slug) return path
+      } else {
+        const found = dfs(n.children || [], [...path, n.title])
+        if (found) return found
+      }
+    }
+    return null
+  }
+  return dfs(tree, []) || []
+}
+
 /** 深度优先取目录树中第一篇文章的 url（用于 /help 重定向）。 */
 export function firstArticleUrl(tree: PubDirectoryNode[]): string | undefined {
   for (const node of tree) {

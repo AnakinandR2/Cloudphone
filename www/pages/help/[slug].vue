@@ -1,5 +1,7 @@
 <script setup lang="ts">
 // /help/<slug> —— 文档三栏：左目录树 + 正文(注入锚点) + 右 TOC。
+const { t } = useGp()
+const localePath = useLocalePath()
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
 
@@ -16,6 +18,14 @@ if (error.value || !article.value) {
 
 const built = computed(() => buildToc(article.value?.body_html ?? ''))
 
+// 面包屑：首页 > 帮助文档 > 所属分组路径… > 当前文章。分组无落地页，渲染为纯文本。
+const crumbs = computed(() => [
+  { label: t.value.nav.home, to: localePath('/') },
+  { label: t.value.nav.docs, to: localePath('/help') },
+  ...docTrail(tree.value ?? [], slug.value).map((title) => ({ label: title })),
+  { label: article.value!.title },
+])
+
 useSeoMeta({
   title: () => (article.value ? `${article.value.seo_title || article.value.title} — Gloryphone` : 'Gloryphone'),
   description: () => article.value?.seo_description || article.value?.summary || '',
@@ -26,6 +36,7 @@ useSeoMeta({
 <template>
   <DocsLayout v-if="article" :tree="tree ?? []" :current-slug="slug" :toc="built.toc">
     <article class="article-body docs-article">
+      <Breadcrumb :items="crumbs" style="margin-bottom: 18px" />
       <h1>{{ article.title }}</h1>
       <ArticleBody :html="built.html" />
       <ArticleFeedback space="help" :slug="slug" vote feedback />

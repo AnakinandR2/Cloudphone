@@ -1,14 +1,21 @@
 <script setup lang="ts">
 // /faq —— 常见问题，按分类分组（数据来自内容中台 faq 空间）。
 const { t } = useGp()
+const localePath = useLocalePath()
 const { groups, pending, error, refresh } = useFaq()
 useHead({ title: () => `${t.value.nav.faq} — Gloryphone` })
+
+const crumbs = computed(() => [
+  { label: t.value.nav.home, to: localePath('/') },
+  { label: t.value.nav.faq },
+])
 </script>
 
 <template>
   <div style="padding-top: 24px">
     <section class="section">
       <div class="container">
+        <Breadcrumb :items="crumbs" style="margin-bottom: 20px" />
         <header style="text-align: center">
           <span class="eyebrow">{{ t.faq.eyebrow }}</span>
           <h2 class="section-title">{{ t.faq.title }}</h2>

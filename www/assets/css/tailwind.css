@@ -2762,10 +2762,25 @@ body.page-api-docs .footer { margin-top: 0; }
 
 /* 左侧目录树 */
 .docs-nav { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
-.docs-nav__group + .docs-nav__group { margin-top: 18px; }
+/* 仅顶层分组之间留大间距；嵌套子组用小间距 */
+.docs-nav > .docs-nav__group + .docs-nav__group { margin-top: 18px; }
 .docs-nav__group-title {
   font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   color: rgb(var(--fg-subtle)); padding: 4px 10px; margin-bottom: 2px;
+}
+.docs-nav__children { display: flex; flex-direction: column; gap: 2px; }
+/* 子组：可点击折叠的标题（带 chevron），子项缩进并带左侧引导线 */
+.docs-nav__group--sub { margin-top: 2px; }
+.docs-nav__group-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600;
+  padding: 6px 10px; border-radius: 8px; color: rgb(var(--fg-muted)); transition: all 0.14s ease;
+}
+.docs-nav__group-toggle:hover { color: rgb(var(--fg)); background: rgb(var(--bg-sunken)); }
+.docs-nav__chev { flex-shrink: 0; color: rgb(var(--fg-subtle)); transition: transform 0.15s ease; }
+.docs-nav__chev.open { transform: rotate(90deg); }
+.docs-nav__group--sub > .docs-nav__children {
+  margin-left: 9px; padding-left: 11px; border-left: 1px solid rgb(var(--border));
 }
 .docs-nav__link {
   display: block; padding: 6px 10px; border-radius: 8px;

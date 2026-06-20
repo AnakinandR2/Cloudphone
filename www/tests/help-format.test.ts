@@ -1,7 +1,7 @@
 // 帮助文档纯函数单测（node --test）。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildToc, firstArticleUrl } from '../composables/useHelp.ts'
+import { buildToc, docTrail, firstArticleUrl } from '../composables/useHelp.ts'
 
 test('buildToc 给 h2/h3 注入锚点 id 并产出 TOC', () => {
   const { html, toc } = buildToc('<h2>Quick Start</h2><p>x</p><h3>Sub Section</h3>')
@@ -44,4 +44,18 @@ test('firstArticleUrl 深度优先取第一篇 url', () => {
   ]
   assert.equal(firstArticleUrl(tree), '/help/a1')
   assert.equal(firstArticleUrl([]), undefined)
+})
+
+test('docTrail 返回通往文章的祖先分组标题链（含嵌套子组）', () => {
+  const tree = [
+    { kind: 'group', title: '对外读取 API', slug: 'api', collapsed: false, children: [
+      { kind: 'article', title: 'Pub API 总览', slug: 'pub-api', url: '/help/pub-api', collapsed: false },
+      { kind: 'group', title: 'API 文档（Scalar）', slug: 'apidocs', collapsed: false, children: [
+        { kind: 'article', title: 'API 文档接入', slug: 'apidoc', url: '/help/apidoc', collapsed: false },
+      ] },
+    ] },
+  ]
+  assert.deepEqual(docTrail(tree, 'apidoc'), ['对外读取 API', 'API 文档（Scalar）'])
+  assert.deepEqual(docTrail(tree, 'pub-api'), ['对外读取 API'])
+  assert.deepEqual(docTrail(tree, 'nope'), [])
 })
