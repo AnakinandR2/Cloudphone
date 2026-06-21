@@ -194,18 +194,14 @@ export interface QuoteResult2 {
   payable_cents: number
 }
 
-/** GET /billing/license-units — 续费 tab 用 */
-export interface LicenseUnitInstance {
-  cp_id: string
-  name: string
-  status: string
-}
+/** GET /billing/license-units — 续费 tab 用（后端 LicenseUnitView） */
 export interface LicenseUnit {
   id: number
   kind: LicenseKind
   created_at: string
   expire_at: string
-  instance: LicenseUnitInstance | null
+  /** 当前占用该单元的实例 cpId；空串表示空闲 */
+  current_instance_id: string
 }
 
 /** Order（新形状，契约 §1.5） */
@@ -231,7 +227,8 @@ export interface OrderItem2 {
   duration_discount_bps: number
   amount_cents: number
 }
-export interface OrderDetail2 { order: Order2, items: OrderItem2[] }
+/** GET /billing/orders/:id — 后端返回扁平订单字段 + items（非 { order, items } 包裹） */
+export interface OrderDetail2 extends Order2 { items: OrderItem2[] }
 
 /** POST /billing/orders 请求体 */
 export interface OrderCreateReq2 {

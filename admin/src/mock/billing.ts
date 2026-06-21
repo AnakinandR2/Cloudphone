@@ -30,21 +30,13 @@ let tiers = [
 let tierNextId = 10
 
 // ---- Orders（购买与费用重构新形状：biz_type + status unpaid/paid/expired）----
-let orders: any[] = [
+const orders: any[] = [
   { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
   { id: 9002, user_id: 102, biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
   { id: 9003, user_id: 101, biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
   { id: 9004, user_id: 103, biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
   { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
 ]
-
-const orderItems: Record<number, any[]> = {
-  9001: [{ id: 1, order_id: 9001, target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800, renew_unit_ids: null }],
-  9002: [],
-  9003: [{ id: 2, order_id: 9003, target_kind: 'runtime_pack', quantity: 600, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 10800, renew_unit_ids: null }],
-  9004: [{ id: 3, order_id: 9004, target_kind: 'boot_slot', quantity: 1, duration_value: 7, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 12600, renew_unit_ids: null }],
-  9005: [{ id: 4, order_id: 9005, target_kind: 'seat', quantity: 1, duration_value: 1, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 3000, renew_unit_ids: [101] }],
-}
 
 // ---- Account (userId=101) ----
 const accountStore: Record<number, any> = {
@@ -56,7 +48,7 @@ const accountStore: Record<number, any> = {
       { id: 3, user_id: 101, subject: 'balance', type: 'consume', delta: -2000, balance_after: 15000, reason: '订单 ORD202606020001', order_id: 3, operator: 'system', created_at: '2026-06-02T14:30:00Z' },
     ],
     ledger_total: 3,
-    capacities: { seat: 5, boot_slot: 10, runtime_minute: 3600 },
+    capacities: { instance_seat: 5, boot_seat: 10, runtime_minute: 3600 },
   },
 }
 
@@ -87,10 +79,9 @@ const trialGrantsStore: Record<number, any[]> = {
 let grantNextId = 4
 
 // ── 购买与费用重构 · 配置（契约 §2）─────────────────────────────────────────
-// 定价（按 kind）
-let pricing: any = {
+// 定价（按 kind）。后端形状为 { kinds: { seat, boot_slot } }，KindPricing 无 kind 字段。
+const pricingKinds: any = {
   seat: {
-    kind: 'seat',
     unit_price_cents: 3000,
     unit_label: '台',
     qty_options: [1, 2, 5, 10, 50, 100, 500, 1000],
@@ -101,7 +92,6 @@ let pricing: any = {
     billing_note: '席位按月计费，数量阶梯折扣 × 时长折扣相乘。',
   },
   boot_slot: {
-    kind: 'boot_slot',
     unit_price_cents: 2000,
     unit_label: '个',
     qty_options: [1, 2, 5, 10, 50, 100],
@@ -113,13 +103,14 @@ let pricing: any = {
   },
 }
 
-// 临时时长配置
+// 临时时长配置（后端 RuntimePackCfg，扁平，含 notice）
 let runtimeCfg: any = {
   unit_price_cents_per_minute: 20,
   packs: [{ minutes: 600, discount_bps: 10000 }, { minutes: 3000, discount_bps: 9000 }],
   min_minutes: 60,
   daily_cap_minutes: 200,
   recycle_retention_days: 30,
+  notice: '临时开机时长无期限，用完为止；每台每天封顶 200 分钟。',
 }
 
 // 支付方式
@@ -219,9 +210,9 @@ export default defineFakeRoute([
       return ok(null)
     },
   },
-  // ---- Orders ----
+  // ---- Biz Orders（新模型，无订单项随列表返回）----
   {
-    url: '/v1/admin/billing/orders',
+    url: '/v1/admin/billing/biz-orders',
     method: 'get',
     response: ({ query }) => {
       let list = [...orders]
@@ -235,14 +226,15 @@ export default defineFakeRoute([
     },
   },
   {
-    url: '/v1/admin/billing/orders/:id/mark-paid',
+    url: '/v1/admin/billing/biz-orders/:id/mark-paid',
     method: 'post',
     response: ({ params }) => {
       const id = Number(params.id)
       const idx = orders.findIndex(o => o.id === id)
       if (idx < 0) return { code: 404, message: 'not found', data: null }
       orders[idx] = { ...orders[idx], status: 'paid', paid_at: new Date().toISOString() }
-      return ok({ ...orders[idx], items: orderItems[id] || [] })
+      // 后端 AdminMarkBizOrderPaid 仅返回订单本身（无 items）。
+      return ok(orders[idx])
     },
   },
   // ---- Accounts ----
@@ -254,13 +246,11 @@ export default defineFakeRoute([
       const view = accountStore[userId]
       if (!view) {
         // Return a default empty account for unknown users
-        const page = Number(query.page) || 1
-        const size = Number(query.size) || 20
         return ok({
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
+          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
         })
       }
       const page = Number(query.page) || 1
@@ -281,7 +271,7 @@ export default defineFakeRoute([
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
+          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
         }
       }
       const acct = accountStore[userId].account
@@ -315,13 +305,14 @@ export default defineFakeRoute([
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
+          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
         }
       }
+      // V2：subject ∈ seat/boot_slot/runtime_minute。seat/boot_slot 用 quantity，runtime_minute 用 minutes。
       const caps = accountStore[userId].capacities
-      if (d.subject in caps) {
-        caps[d.subject as keyof typeof caps] += d.delta
-      }
+      if (d.subject === 'seat') caps.instance_seat += Number(d.quantity) || 0
+      else if (d.subject === 'boot_slot') caps.boot_seat += Number(d.quantity) || 0
+      else if (d.subject === 'runtime_minute') caps.runtime_minute += Number(d.minutes) || 0
       return ok(null)
     },
   },
@@ -411,18 +402,19 @@ export default defineFakeRoute([
       return ok(trialGrantsStore[id] || [])
     },
   },
-  // ── 配置：定价 ──────────────────────────────────────────────
+  // ── 配置：定价（{ kinds }）────────────────────────────────────
   {
     url: '/v1/admin/billing/pricing',
     method: 'get',
-    response: () => ok(pricing),
+    response: () => ok({ kinds: pricingKinds }),
   },
   {
     url: '/v1/admin/billing/pricing',
     method: 'put',
     response: ({ body }) => {
-      pricing = { ...pricing, ...(body as any) }
-      return ok(pricing)
+      const d = body as any
+      if (d?.kinds) Object.assign(pricingKinds, d.kinds)
+      return ok({ kinds: pricingKinds })
     },
   },
   // ── 配置：临时时长 ───────────────────────────────────────────
@@ -439,19 +431,19 @@ export default defineFakeRoute([
       return ok(runtimeCfg)
     },
   },
-  // ── 配置：支付方式 ───────────────────────────────────────────
+  // ── 配置：支付方式（{ payment_methods }）─────────────────────
   {
     url: '/v1/admin/billing/payment-methods',
     method: 'get',
-    response: () => ok([...paymentMethods].sort((a, b) => a.sort - b.sort)),
+    response: () => ok({ payment_methods: [...paymentMethods].sort((a, b) => a.sort - b.sort) }),
   },
   {
     url: '/v1/admin/billing/payment-methods',
     method: 'put',
     response: ({ body }) => {
       const d = body as any
-      if (Array.isArray(d.methods)) paymentMethods = d.methods
-      return ok([...paymentMethods].sort((a, b) => a.sort - b.sort))
+      if (Array.isArray(d.payment_methods)) paymentMethods = d.payment_methods
+      return ok({ payment_methods: [...paymentMethods].sort((a, b) => a.sort - b.sort) })
     },
   },
   // ── 配置：充值预设 ───────────────────────────────────────────

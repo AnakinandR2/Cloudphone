@@ -27,32 +27,33 @@ function addDays(base: Date, days: number) {
 // ---------- 钱包/容量内存状态 ----------
 const wallet = { balance_cents: 1234500, runtime_minutes_remaining: 860 }
 
-// 授权单元（seat / boot_slot），续费 tab 与容量统计共用
+// 授权单元（seat / boot_slot），续费 tab 与容量统计共用。
+// 形状对齐后端 LicenseUnitView：current_instance_id 为占用实例 cpId（空串=空闲）。
 interface LU {
   id: number
   kind: 'seat' | 'boot_slot'
   created_at: string
   expire_at: string
-  instance: { cp_id: string, name: string, status: string } | null
+  current_instance_id: string
 }
 let luSeq = 100
 const today = new Date('2026-06-21T08:00:00+08:00')
 const licenseUnits: LU[] = [
-  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -120)), expire_at: iso(addDays(today, 8)), instance: { cp_id: 'cp-a1', name: '手机A', status: 'RUNNING' } },
-  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -90)), expire_at: iso(addDays(today, 40)), instance: { cp_id: 'cp-a2', name: '手机B', status: 'STOPPED' } },
-  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -60)), expire_at: iso(addDays(today, 3)), instance: { cp_id: 'cp-a3', name: '采集机03', status: 'RUNNING' } },
-  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -30)), expire_at: iso(addDays(today, 200)), instance: null },
-  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -10)), expire_at: iso(addDays(today, 350)), instance: null },
-  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -50)), expire_at: iso(addDays(today, 5)), instance: { cp_id: 'cp-a1', name: '手机A', status: 'RUNNING' } },
-  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -20)), expire_at: iso(addDays(today, 25)), instance: { cp_id: 'cp-a3', name: '采集机03', status: 'RUNNING' } },
-  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -5)), expire_at: iso(addDays(today, 60)), instance: null },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -120)), expire_at: iso(addDays(today, 8)), current_instance_id: 'cp-a1' },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -90)), expire_at: iso(addDays(today, 40)), current_instance_id: 'cp-a2' },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -60)), expire_at: iso(addDays(today, 3)), current_instance_id: 'cp-a3' },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -30)), expire_at: iso(addDays(today, 200)), current_instance_id: '' },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -10)), expire_at: iso(addDays(today, 350)), current_instance_id: '' },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -50)), expire_at: iso(addDays(today, 5)), current_instance_id: 'cp-a1' },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -20)), expire_at: iso(addDays(today, 25)), current_instance_id: 'cp-a3' },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -5)), expire_at: iso(addDays(today, 60)), current_instance_id: '' },
 ]
 
 function capacity(kind: 'seat' | 'boot_slot') {
   return licenseUnits.filter(u => u.kind === kind).length
 }
 function inUse(kind: 'seat' | 'boot_slot') {
-  return licenseUnits.filter(u => u.kind === kind && u.instance).length
+  return licenseUnits.filter(u => u.kind === kind && u.current_instance_id).length
 }
 
 // ---------- 定价配置 ----------
@@ -252,7 +253,7 @@ function fulfill(rec: OrderRec) {
             kind: it.target_kind,
             created_at: now(),
             expire_at: iso(addDays(new Date(), unit)),
-            instance: null,
+            current_instance_id: '',
           })
         }
       }
@@ -373,9 +374,10 @@ export default defineFakeRoute([
         list = list.filter(u => new Date(u.expire_at) <= new Date(String(query.expiring_before)))
       if (query.keyword) {
         const kw = String(query.keyword)
-        list = list.filter(u => u.instance && (u.instance.name.includes(kw) || u.instance.cp_id.includes(kw)))
+        list = list.filter(u => u.current_instance_id.includes(kw))
       }
-      return ok({ items: list, total: list.length })
+      // 后端只返回 { items }（无 total）。
+      return ok({ items: list })
     },
   },
   {
@@ -437,7 +439,8 @@ export default defineFakeRoute([
       let list = orders.map(o => o.order)
       if (query.status) list = list.filter(o => o.status === query.status)
       const total = list.length
-      return ok({ items: list.slice((page - 1) * size, page * size), total })
+      // 后端 OKWithPage 返回 { list, total }。
+      return ok({ list: list.slice((page - 1) * size, page * size), total })
     },
   },
   {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
-import type { BillingOrder, BillingOrderItem } from '@/types/billing'
+import type { BillingOrder } from '@/types/billing'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatDateTime } from '@/utils/date'
-import { fmtCents, fmtDiscountBps } from '@/utils/money'
+import { fmtCents } from '@/utils/money'
 
 const { t } = useI18n()
 
@@ -40,12 +40,7 @@ const filters = reactive({
   status: 'all',
 })
 
-// 明细缓存（按订单 id）。展开行时按需拉 mark-paid 不合适——明细随订单返回；
-// 这里改为从 mark-paid 详情或单独缓存。订单列表不带 items，展开时显示已知字段。
-const itemsCache = reactive<Record<number, BillingOrderItem[]>>({})
-
 const columns = computed<ColumnDef<BillingOrder>[]>(() => [
-  { id: 'expander', header: '', enableHiding: false, meta: { label: '' } },
   { accessorKey: 'id', id: 'id', header: t('billing.colOrderNo'), meta: { label: 'billing.colOrderNo' } },
   { accessorKey: 'user_id', id: 'user_id', header: t('billing.colUserId'), meta: { label: 'billing.colUserId' } },
   { accessorKey: 'biz_type', id: 'biz_type', header: t('billing.colBizType'), meta: { label: 'billing.colBizType' } },
@@ -79,8 +74,7 @@ async function load() {
 
 async function markPaid(row: BillingOrder) {
   try {
-    const res = await billingApi.billingMarkPaid(row.id)
-    itemsCache[row.id] = res.data.items
+    await billingApi.billingMarkPaid(row.id)
     toast.success(t('billing.markPaidOk'))
     load()
   }
@@ -105,13 +99,6 @@ function onFilter() {
   load()
 }
 
-function kindLabel(k: string): string {
-  if (k === 'seat') return t('billing.kind_seat')
-  if (k === 'boot_slot') return t('billing.kind_boot_slot')
-  if (k === 'runtime_pack') return t('billing.kind_runtime_pack')
-  return k
-}
-
 onMounted(load)
 </script>
 
@@ -126,7 +113,6 @@ onMounted(load)
         :columns="columns"
         :data="data"
         :loading="loading"
-        expandable
       >
         <template #filters>
           <Input
@@ -183,42 +169,6 @@ onMounted(load)
               {{ t('billing.markPaid') }}
             </Button>
           </Popconfirm>
-        </template>
-
-        <template #expanded="{ row }">
-          <div class="space-y-2 p-4">
-            <p class="text-sm font-medium">{{ t('billing.orderItemsTitle') }}</p>
-            <template v-if="itemsCache[row.id]?.length">
-              <div class="overflow-auto rounded-md border">
-                <table class="w-full text-xs">
-                  <thead>
-                    <tr class="bg-muted/40 border-b">
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colTargetKind') }}</th>
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colQty') }}</th>
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colDuration') }}</th>
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colUnitPrice') }}</th>
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colDiscount') }}</th>
-                      <th class="px-3 py-2 text-left font-medium">{{ t('billing.colAmount') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="it in itemsCache[row.id]" :key="it.id" class="border-b last:border-0">
-                      <td class="px-3 py-1.5">{{ kindLabel(it.target_kind) }}</td>
-                      <td class="px-3 py-1.5 tabular-nums">{{ it.quantity }}</td>
-                      <td class="px-3 py-1.5 tabular-nums">{{ it.duration_value || '—' }} {{ it.duration_unit }}</td>
-                      <td class="px-3 py-1.5 tabular-nums">¥{{ fmtCents(it.unit_price_cents) }}</td>
-                      <td class="text-muted-foreground px-3 py-1.5">
-                        {{ fmtDiscountBps(it.qty_discount_bps) || t('billing.fullPrice') }}
-                        × {{ fmtDiscountBps(it.duration_discount_bps) || t('billing.fullPrice') }}
-                      </td>
-                      <td class="px-3 py-1.5 tabular-nums">¥{{ fmtCents(it.amount_cents) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </template>
-            <p v-else class="text-muted-foreground text-xs">{{ t('billing.orderItemsHint') }}</p>
-          </div>
         </template>
       </DataTable>
     </CardContent>

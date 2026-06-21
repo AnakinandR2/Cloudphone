@@ -4,7 +4,6 @@ import { Search } from 'lucide-vue-next'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -68,12 +67,6 @@ function toggleOne(id: number, v: boolean) {
   else {
     selected.value = selected.value.filter(x => x !== id)
   }
-}
-
-function statusVariant(s: string): 'default' | 'secondary' | 'outline' {
-  if (s === 'RUNNING') return 'default'
-  if (s === 'STOPPED') return 'secondary'
-  return 'outline'
 }
 
 defineExpose({ reload: load })
@@ -143,13 +136,7 @@ defineExpose({ reload: load })
               {{ formatDate(u.expire_at) }}
             </TableCell>
             <TableCell>
-              <div v-if="u.instance" class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ u.instance.name }}</span>
-                <span class="text-muted-foreground font-mono text-xs">{{ u.instance.cp_id }}</span>
-                <Badge :variant="statusVariant(u.instance.status)" class="text-[10px]">
-                  {{ u.instance.status }}
-                </Badge>
-              </div>
+              <span v-if="u.current_instance_id" class="text-muted-foreground font-mono text-xs">{{ u.current_instance_id }}</span>
               <span v-else class="text-muted-foreground text-xs">{{ t('billing.purchase2.unitIdle') }}</span>
             </TableCell>
           </TableRow>

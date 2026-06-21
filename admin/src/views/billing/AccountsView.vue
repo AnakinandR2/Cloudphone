@@ -217,7 +217,20 @@ async function submitResource() {
   }
   resourceSubmitting.value = true
   try {
-    await billingApi.adjustResource(currentUserId.value, resourceForm.subject, delta, resourceForm.reason.trim())
+    // adjust-resource V2：subject ∈ seat/boot_slot/runtime_minute。
+    const subjectMap: Record<string, 'seat' | 'boot_slot' | 'runtime_minute'> = {
+      instance_seat: 'seat',
+      boot_seat: 'boot_slot',
+      runtime_minute: 'runtime_minute',
+    }
+    const subject = subjectMap[resourceForm.subject] ?? 'seat'
+    const reason = resourceForm.reason.trim()
+    if (subject === 'runtime_minute') {
+      await billingApi.adjustResource(currentUserId.value, { subject, minutes: delta, reason })
+    }
+    else {
+      await billingApi.adjustResource(currentUserId.value, { subject, quantity: delta, duration_value: 30, reason })
+    }
     toast.success(t('billing.adjustOk'))
     resourceDialog.value = false
     reloadAccount()

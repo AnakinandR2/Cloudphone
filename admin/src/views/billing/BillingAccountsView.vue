@@ -36,8 +36,16 @@ import { fmtCents } from '@/utils/money'
 
 const { t } = useI18n()
 
-// 资源科目（契约收敛为 seat/boot_slot/runtime_minute）
-const RESOURCE_SUBJECTS = ['seat', 'boot_slot', 'runtime_minute'] as const
+// 资源科目：调整入口用 seat/boot_slot/runtime_minute（对齐 adjust-resource V2 subject），
+// 容量快照后端字段名是 instance_seat/boot_seat/runtime_minute，故展示时映射。
+type ResourceSubject = 'seat' | 'boot_slot' | 'runtime_minute'
+const RESOURCE_SUBJECTS: ResourceSubject[] = ['seat', 'boot_slot', 'runtime_minute']
+// 调整科目 → 容量快照字段名。
+const CAPACITY_FIELD: Record<ResourceSubject, 'instance_seat' | 'boot_seat' | 'runtime_minute'> = {
+  seat: 'instance_seat',
+  boot_slot: 'boot_seat',
+  runtime_minute: 'runtime_minute',
+}
 
 const userIdInput = ref('')
 const currentUserId = ref<number | null>(null)
@@ -49,7 +57,8 @@ const balanceForm = reactive({ yuan: '', reason: '' })
 const balanceSubmitting = ref(false)
 
 const resourceDialog = ref(false)
-const resourceForm = reactive({ subject: 'seat', delta: '', reason: '' })
+// quantity=台数（seat/boot_slot）或分钟数（runtime_minute）；duration_value=有效期(月/天，仅 seat/boot_slot)。
+const resourceForm = reactive({ subject: 'seat' as ResourceSubject, quantity: '', durationValue: '30', reason: '' })
 const resourceSubmitting = ref(false)
 
 const ledgerColumns = computed<ColumnDef<LedgerEntry>[]>(() => [
@@ -87,9 +96,10 @@ function deltaClass(delta: number): string {
   return delta >= 0 ? 'text-emerald-600 tabular-nums' : 'text-destructive tabular-nums'
 }
 
-function capacityValue(subject: string): number {
-  const caps = accountView.value?.capacities as unknown as Record<string, number> | undefined
-  return caps?.[subject] ?? 0
+function capacityValue(subject: ResourceSubject): number {
+  const caps = accountView.value?.capacities
+  if (!caps) return 0
+  return caps[CAPACITY_FIELD[subject]] ?? 0
 }
 
 async function fetchAccount(uid: number) {
@@ -156,10 +166,13 @@ async function submitBalance() {
 
 function openResourceDialog() {
   resourceForm.subject = 'seat'
-  resourceForm.delta = ''
+  resourceForm.quantity = ''
+  resourceForm.durationValue = '30'
   resourceForm.reason = ''
   resourceDialog.value = true
 }
+
+const isRuntimeSubject = computed(() => resourceForm.subject === 'runtime_minute')
 
 async function submitResource() {
   if (!currentUserId.value) return
@@ -167,14 +180,28 @@ async function submitResource() {
     toast.error(t('billing.errReasonRequired'))
     return
   }
-  const delta = Number(resourceForm.delta)
-  if (!Number.isInteger(delta) || delta === 0) {
+  const qty = Number(resourceForm.quantity)
+  if (!Number.isInteger(qty) || qty <= 0) {
     toast.error(t('billing.errInvalidDelta'))
     return
   }
   resourceSubmitting.value = true
   try {
-    await billingApi.adjustResource(currentUserId.value, resourceForm.subject, delta, resourceForm.reason.trim())
+    const reason = resourceForm.reason.trim()
+    if (resourceForm.subject === 'runtime_minute') {
+      // runtime_minute：用 minutes
+      await billingApi.adjustResource(currentUserId.value, { subject: 'runtime_minute', minutes: qty, reason })
+    }
+    else {
+      // seat/boot_slot：quantity=台数，duration_value=有效期
+      const durationValue = Number(resourceForm.durationValue)
+      if (!Number.isInteger(durationValue) || durationValue <= 0) {
+        toast.error(t('billing.errInvalidDelta'))
+        resourceSubmitting.value = false
+        return
+      }
+      await billingApi.adjustResource(currentUserId.value, { subject: resourceForm.subject, quantity: qty, duration_value: durationValue, reason })
+    }
     toast.success(t('billing.adjustOk'))
     resourceDialog.value = false
     reloadAccount()
@@ -316,9 +343,14 @@ async function submitResource() {
             </Select>
           </div>
           <div class="space-y-1.5">
-            <Label>{{ t('billing.fAdjustDelta') }}</Label>
-            <Input v-model="resourceForm.delta" type="number" step="1" :placeholder="t('billing.fAdjustDeltaPlaceholder')" />
+            <Label>{{ isRuntimeSubject ? t('billing.fAdjustMinutes') : t('billing.fAdjustQuantity') }}</Label>
+            <Input v-model="resourceForm.quantity" type="number" min="1" step="1" :placeholder="t('billing.fAdjustQuantityPlaceholder')" />
             <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustResourceHint') }}</p>
+          </div>
+          <div v-if="!isRuntimeSubject" class="space-y-1.5">
+            <Label>{{ t('billing.fAdjustDuration') }}</Label>
+            <Input v-model="resourceForm.durationValue" type="number" min="1" step="1" :placeholder="t('billing.fAdjustDurationPlaceholder')" />
+            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustDurationHint') }}</p>
           </div>
           <div class="space-y-1.5">
             <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>

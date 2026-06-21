@@ -26,7 +26,7 @@ async function load() {
   loading.value = true
   try {
     const { data } = await billingApi.getPaymentMethods()
-    methods.value = [...data].sort((a, b) => a.sort - b.sort)
+    methods.value = [...(data.payment_methods ?? [])].sort((a, b) => a.sort - b.sort)
   }
   catch {
     toast.error(t('billing.loadFail'))

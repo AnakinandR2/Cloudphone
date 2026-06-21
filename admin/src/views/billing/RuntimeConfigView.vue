@@ -25,6 +25,7 @@ interface Form {
   min_minutes: number
   daily_cap_minutes: number
   recycle_retention_days: number
+  notice: string
 }
 
 const form = reactive<Form>({
@@ -33,6 +34,7 @@ const form = reactive<Form>({
   min_minutes: 0,
   daily_cap_minutes: 200,
   recycle_retention_days: 30,
+  notice: '',
 })
 const loading = ref(false)
 const saving = ref(false)
@@ -46,6 +48,7 @@ async function load() {
     form.min_minutes = data.min_minutes
     form.daily_cap_minutes = data.daily_cap_minutes
     form.recycle_retention_days = data.recycle_retention_days
+    form.notice = data.notice ?? ''
   }
   catch {
     toast.error(t('billing.loadFail'))
@@ -65,6 +68,8 @@ async function save() {
       min_minutes: Number(form.min_minutes) || 0,
       daily_cap_minutes: Number(form.daily_cap_minutes) || 0,
       recycle_retention_days: Number(form.recycle_retention_days) || 0,
+      // 透传 notice，避免 PUT 整体覆盖时清空（notice 由须知文案页维护）。
+      notice: form.notice,
     }
     await billingApi.saveRuntimeBillingConfig(payload)
     toast.success(t('billing.savedOk'))

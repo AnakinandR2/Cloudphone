@@ -70,8 +70,8 @@ async function load() {
   loading.value = true
   try {
     const { data } = await billingApi.getPricing()
-    forms.seat = toForm(data.seat)
-    forms.boot_slot = toForm(data.boot_slot)
+    forms.seat = toForm(data.kinds.seat)
+    forms.boot_slot = toForm(data.kinds.boot_slot)
   }
   catch {
     toast.error(t('billing.loadFail'))
@@ -92,7 +92,6 @@ function parseQtyOptions(s: string): number[] {
 function buildKind(kind: BillingKind): KindPricing {
   const f = forms[kind]
   return {
-    kind,
     unit_price_cents: Math.round(f.unit_price_yuan * 100),
     unit_label: f.unit_label,
     qty_options: parseQtyOptions(f.qty_options_str),
@@ -107,7 +106,7 @@ function buildKind(kind: BillingKind): KindPricing {
 async function save() {
   saving.value = true
   try {
-    const payload: PricingConfig = { seat: buildKind('seat'), boot_slot: buildKind('boot_slot') }
+    const payload: PricingConfig = { kinds: { seat: buildKind('seat'), boot_slot: buildKind('boot_slot') } }
     await billingApi.savePricing(payload)
     toast.success(t('billing.savedOk'))
     load()

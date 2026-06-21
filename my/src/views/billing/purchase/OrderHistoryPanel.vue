@@ -25,7 +25,7 @@ async function load() {
     const params: { page: number, size: number, status?: string } = { page: 1, size: 200 }
     if (filters.status !== 'all') params.status = filters.status
     const res = await billingApi.orders2(params)
-    data.value = res.data.items
+    data.value = res.data.list
   }
   finally {
     loading.value = false
