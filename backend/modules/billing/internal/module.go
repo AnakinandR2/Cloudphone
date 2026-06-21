@@ -18,9 +18,7 @@ func (m *billingModule) Name() string { return "billing" }
 func (m *billingModule) Init(db *gorm.DB) error {
 	m.db = db
 	BillingService = newService(newRepository(db))
-	CatalogService = newCatalogService(newCatalogRepository(db))
 	EntitlementService = newEntitlementService(newEntitlementRepository(db))
-	OrderService = newOrderService(newOrderRepository(db), CatalogService)
 	TrialService = newTrialService(newTrialRepository(db))
 	SeatService = newSeatService(newSeatRepository(db), EntitlementService)
 	RuntimeService = newRuntimeService(newRuntimeRepository(db), EntitlementService, newRepository(db))
@@ -44,7 +42,6 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/account", GetMyAccount)
 		g.GET("/ledger", GetMyLedger)
 		g.POST("/topup", Topup)
-		g.GET("/skus", ListSkus)
 		g.GET("/entitlements", GetMyEntitlements)
 		g.GET("/trials", ListMyTrials)
 		g.POST("/trials/:code/claim", ClaimTrial)
@@ -60,16 +57,6 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/orders/:id", GetBizOrder)
 		g.POST("/orders/:id/pay", PayBizOrder)
 		g.GET("/runtime/log", GetRuntimeLog)
-
-		// 旧端点切换期保留（移到 legacy 子路径，避免与契约路径冲突；Phase 6 收口删除）。
-		legacy := g.Group("/legacy")
-		{
-			legacy.POST("/quote", Quote)
-			legacy.POST("/orders", CreateOrder)
-			legacy.GET("/orders", ListMyOrders)
-			legacy.GET("/orders/:id", GetMyOrder)
-			legacy.POST("/orders/:id/pay", PayMyOrder)
-		}
 	}
 
 	// 后台：运营查看账户 + 调整余额（staff 登录 + 权限）。
@@ -78,30 +65,17 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 	{
 		admin.GET("/accounts/:userId", staff.PermissionMiddleware("billing:view"), AdminGetAccount)
 		admin.POST("/accounts/:userId/adjust", staff.PermissionMiddleware("billing:manage"), AdminAdjustBalance)
-		// 资源赠送走统一履约（source=grant）。旧 entitlement 版本移到 legacy。
+		// 资源赠送走统一履约（source=grant）。
 		admin.POST("/accounts/:userId/adjust-resource", staff.PermissionMiddleware("billing:manage"), AdminAdjustResourceV2)
-		admin.POST("/accounts/:userId/adjust-resource-legacy", staff.PermissionMiddleware("billing:manage"), AdminAdjustResource)
-		admin.GET("/skus", staff.PermissionMiddleware("billing:view"), AdminListSkus)
-		admin.POST("/skus", staff.PermissionMiddleware("billing:manage"), AdminCreateSku)
-		admin.PUT("/skus/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateSku)
-		admin.DELETE("/skus/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteSku)
-		admin.GET("/skus/:id/tiers", staff.PermissionMiddleware("billing:view"), AdminListTiers)
-		admin.POST("/skus/:id/tiers", staff.PermissionMiddleware("billing:manage"), AdminCreateTier)
-		admin.PUT("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminUpdateTier)
-		admin.DELETE("/tiers/:tierId", staff.PermissionMiddleware("billing:manage"), AdminDeleteTier)
-		admin.GET("/orders", staff.PermissionMiddleware("billing:view"), AdminListOrders)
-		admin.POST("/orders/:id/mark-paid", staff.PermissionMiddleware("billing:manage"), AdminMarkOrderPaid)
 		admin.GET("/trials", staff.PermissionMiddleware("billing:view"), AdminListTrialPolicies)
 		admin.POST("/trials", staff.PermissionMiddleware("billing:manage"), AdminCreateTrialPolicy)
 		admin.PUT("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateTrialPolicy)
 		admin.DELETE("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteTrialPolicy)
 		admin.POST("/trials/:id/eligibility", staff.PermissionMiddleware("billing:manage"), AdminGrantTrialEligibility)
 		admin.GET("/trials/:id/grants", staff.PermissionMiddleware("billing:view"), AdminListTrialGrants)
-		// 新模型时长配置（契约 §2）：runtime-config 指向新版；旧版移 legacy。
+		// 新模型时长配置（契约 §2）。
 		admin.GET("/runtime-config", staff.PermissionMiddleware("billing:view"), AdminGetRuntimePricing)
 		admin.PUT("/runtime-config", staff.PermissionMiddleware("billing:manage"), AdminSaveRuntimePricing)
-		admin.GET("/runtime-config-legacy", staff.PermissionMiddleware("billing:view"), AdminGetRuntimeConfig)
-		admin.PUT("/runtime-config-legacy", staff.PermissionMiddleware("billing:manage"), AdminSaveRuntimeConfig)
 
 		// 新购买/费用模型后台配置（契约 §2）。
 		admin.GET("/pricing", staff.PermissionMiddleware("billing:view"), AdminGetPricing)
@@ -139,9 +113,10 @@ func (m *billingModule) OnStop() error {
 func init() {
 	framework.GlobalModule.Register(&billingModule{})
 
-	// 建表（幂等）：计费账户 + 统一流水 + 商品目录 + 折扣阶梯。
+	// 建表（幂等）：计费账户 + 统一流水 + 授权单元/订单等。
+	// 旧 Order（billing_orders）与 EntitlementBatch 仍被 TrialService 使用，保留。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{}, &Order{}, &OrderItem{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}, &BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &EntitlementBatch{}, &Order{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}, &BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
 			&PricingConfig{}, &RuntimeMinuteWallet{}, &RuntimeDailyUsage{}, &RuntimeCharge{}, &RuntimeSessionProgress{}, &BizOrder{}, &BizOrderItem{}); err != nil {
 			return err
 		}
@@ -150,17 +125,14 @@ func init() {
 			return err
 		}
 		// 定价配置 seed（幂等：不存在才写默认值）。
-		if err := seedPricingConfig(db); err != nil {
-			return err
-		}
-		return SeedCatalog(db)
+		return seedPricingConfig(db)
 	})
 }
 
 // InitForTest 供其他模块的测试装配 billing（建表 + 装配服务）。仅测试用。
 func InitForTest(db *gorm.DB) error {
-	if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &Sku{}, &DiscountTier{}, &EntitlementBatch{},
-		&Order{}, &OrderItem{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{},
+	if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &EntitlementBatch{},
+		&Order{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{},
 		&BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
 		&PricingConfig{}, &RuntimeMinuteWallet{}, &RuntimeDailyUsage{}, &RuntimeCharge{}, &RuntimeSessionProgress{}, &BizOrder{}, &BizOrderItem{}); err != nil {
 		return err

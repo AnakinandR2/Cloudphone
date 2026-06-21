@@ -2,6 +2,9 @@ package billing
 
 import "time"
 
+// DiscountBpsFull 折扣基点满值（10000 = 原价无折扣）。bps 折扣的真相口径。
+const DiscountBpsFull = 10000
+
 // 管理可持久化的定价配置（admin 后台读写，用户端 purchase-config / quote 读取）。
 // 用单行 JSON 配置存储（id 固定 1），避免为每个折扣档位单独建表；启动时幂等 seed 默认值。
 

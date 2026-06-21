@@ -22,55 +22,7 @@ export interface LedgerEntry {
 }
 
 // SKU + 折扣阶梯
-export interface DiscountTier {
-  id: number
-  sku_id: number
-  cycle_months: number
-  min_quantity: number
-  discount_bps: number
-}
-export interface Sku {
-  id: number
-  code: string
-  category: string // instance_fee/boot_pack/time_pack
-  name: string
-  description: string
-  unit_price_cents: number
-  unit: string
-  listed: boolean
-  sort: number
-}
-export interface SkuWithTiers { sku: Sku, tiers: DiscountTier[] }
-
-// 计价
-export interface QuoteRequest { sku_code: string, cycle_months: number, quantity: number }
-export interface QuoteResult {
-  sku_code: string
-  sku_name: string
-  category: string
-  cycle_months: number
-  quantity: number
-  unit_price_cents: number
-  billing_units: number
-  original_cents: number
-  discount_bps: number
-  payable_cents: number
-}
-
-// 订单
-export interface OrderItem {
-  id: number
-  order_id: number
-  sku_code: string
-  sku_name: string
-  category: string
-  cycle_months: number
-  quantity: number
-  unit_price_cents: number
-  discount_bps: number
-  original_cents: number
-  payable_cents: number
-}
+// 订单（旧列表形状，BillingOrdersView 仍在用）
 export interface Order {
   id: number
   order_no: string
@@ -82,9 +34,6 @@ export interface Order {
   created_at: string
   updated_at: string
 }
-export interface OrderDetail { order: Order, items: OrderItem[] }
-export interface OrderItemReq { sku_code: string, cycle_months: number, quantity: number }
-export interface OrderCreateReq { items: OrderItemReq[], pay_method: string }
 
 // 权益/资源
 export interface CapacitySnapshot { instance_seat: number, boot_seat: number, runtime_minute: number }

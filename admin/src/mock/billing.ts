@@ -4,31 +4,6 @@ function ok<T>(data: T, message = '成功') {
   return { code: 0, message, data }
 }
 
-// ---- SKUs ----
-let skus = [
-  { id: 1, code: 'instance_fee', category: 'instance_fee', name: '云手机实例费', description: '按台月计费', unit_price_cents: 3000, unit: '台月', listed: true, sort: 1 },
-  { id: 2, code: 'boot_pack', category: 'boot_pack', name: '开机包', description: '一次性开机包', unit_price_cents: 2000, unit: '次', listed: true, sort: 2 },
-  { id: 3, code: 'time_pack', category: 'time_pack', name: '时长包', description: '按小时计费', unit_price_cents: 20, unit: '小时', listed: true, sort: 3 },
-]
-let skuNextId = 4
-
-// ---- Discount Tiers ----
-let tiers = [
-  // instance_fee: 按订阅周期
-  { id: 1, sku_id: 1, cycle_months: 1, min_quantity: 1, discount_bps: 10000 },
-  { id: 2, sku_id: 1, cycle_months: 3, min_quantity: 1, discount_bps: 8500 },
-  { id: 3, sku_id: 1, cycle_months: 12, min_quantity: 1, discount_bps: 7000 },
-  // boot_pack: 按订阅周期
-  { id: 4, sku_id: 2, cycle_months: 1, min_quantity: 1, discount_bps: 10000 },
-  { id: 5, sku_id: 2, cycle_months: 3, min_quantity: 1, discount_bps: 8500 },
-  { id: 6, sku_id: 2, cycle_months: 12, min_quantity: 1, discount_bps: 7000 },
-  // time_pack: 按数量阶梯（cycle_months=0 表示时长包）
-  { id: 7, sku_id: 3, cycle_months: 0, min_quantity: 1, discount_bps: 10000 },
-  { id: 8, sku_id: 3, cycle_months: 0, min_quantity: 500, discount_bps: 9000 },
-  { id: 9, sku_id: 3, cycle_months: 0, min_quantity: 1000, discount_bps: 8000 },
-]
-let tierNextId = 10
-
 // ---- Orders（购买与费用重构新形状：biz_type + status unpaid/paid/expired）----
 const orders: any[] = [
   { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
@@ -150,85 +125,6 @@ let notices: any = {
 }
 
 export default defineFakeRoute([
-  // ---- SKUs ----
-  {
-    url: '/v1/admin/billing/skus',
-    method: 'get',
-    response: () => ok(skus),
-  },
-  {
-    url: '/v1/admin/billing/skus',
-    method: 'post',
-    response: ({ body }) => {
-      const d = body as any
-      const sku = { id: skuNextId++, code: d.code, category: d.category, name: d.name, description: d.description || '', unit_price_cents: d.unit_price_cents, unit: d.unit || '', listed: d.listed !== false, sort: d.sort || 0 }
-      skus.push(sku)
-      return ok(sku)
-    },
-  },
-  {
-    url: '/v1/admin/billing/skus/:id',
-    method: 'put',
-    response: ({ params, body }) => {
-      const id = Number(params.id)
-      const idx = skus.findIndex(s => s.id === id)
-      if (idx < 0) return { code: 404, message: 'not found', data: null }
-      const d = body as any
-      skus[idx] = { ...skus[idx], ...d }
-      return ok(skus[idx])
-    },
-  },
-  {
-    url: '/v1/admin/billing/skus/:id',
-    method: 'delete',
-    response: ({ params }) => {
-      const id = Number(params.id)
-      skus = skus.filter(s => s.id !== id)
-      return ok(null)
-    },
-  },
-  // ---- Tiers by SKU ----
-  {
-    url: '/v1/admin/billing/skus/:id/tiers',
-    method: 'get',
-    response: ({ params }) => {
-      const skuId = Number(params.id)
-      return ok(tiers.filter(t => t.sku_id === skuId))
-    },
-  },
-  {
-    url: '/v1/admin/billing/skus/:id/tiers',
-    method: 'post',
-    response: ({ params, body }) => {
-      const skuId = Number(params.id)
-      const d = body as any
-      const tier = { id: tierNextId++, sku_id: skuId, cycle_months: d.cycle_months, min_quantity: d.min_quantity, discount_bps: d.discount_bps }
-      tiers.push(tier)
-      return ok(tier)
-    },
-  },
-  // ---- Tier by tierId ----
-  {
-    url: '/v1/admin/billing/tiers/:tierId',
-    method: 'put',
-    response: ({ params, body }) => {
-      const tierId = Number(params.tierId)
-      const idx = tiers.findIndex(t => t.id === tierId)
-      if (idx < 0) return { code: 404, message: 'not found', data: null }
-      const d = body as any
-      tiers[idx] = { ...tiers[idx], ...d }
-      return ok(tiers[idx])
-    },
-  },
-  {
-    url: '/v1/admin/billing/tiers/:tierId',
-    method: 'delete',
-    response: ({ params }) => {
-      const tierId = Number(params.tierId)
-      tiers = tiers.filter(t => t.id !== tierId)
-      return ok(null)
-    },
-  },
   // ---- Biz Orders（新模型，无订单项随列表返回）----
   {
     url: '/v1/admin/billing/biz-orders',

@@ -4,21 +4,12 @@ import type {
   AdjustResourceBody,
   BillingOrder,
   BillingOrderDetail,
-  DiscountTier,
   NoticesConfig,
-  Order,
-  OrderDetail,
   PaymentMethod,
   PaymentMethodsResp,
   PricingConfig,
   RechargePresets,
   RuntimeBillingConfig,
-  RuntimeConfig,
-  Sku,
-  SkuCreate,
-  SkuUpdate,
-  TierCreate,
-  TierUpdate,
   TrialGrant,
   TrialPolicy,
   TrialPolicyCreate,
@@ -30,25 +21,6 @@ interface R<T> { code: number, message: string, data: T }
 interface Page<T> { list: T[], total: number }
 
 export default {
-  // 定价
-  listSkus: () => api.get<unknown, R<Sku[]>>('admin/billing/skus'),
-  createSku: (d: SkuCreate) => api.post<unknown, R<Sku>>('admin/billing/skus', d),
-  updateSku: (id: number, d: SkuUpdate) => api.put<unknown, R<Sku>>(`admin/billing/skus/${id}`, d),
-  deleteSku: (id: number) => api.delete<unknown, R<null>>(`admin/billing/skus/${id}`),
-  listTiers: (skuId: number) => api.get<unknown, R<DiscountTier[]>>(`admin/billing/skus/${skuId}/tiers`),
-  createTier: (skuId: number, d: TierCreate) => api.post<unknown, R<DiscountTier>>(`admin/billing/skus/${skuId}/tiers`, d),
-  updateTier: (tierId: number, d: TierUpdate) => api.put<unknown, R<DiscountTier>>(`admin/billing/tiers/${tierId}`, d),
-  deleteTier: (tierId: number) => api.delete<unknown, R<null>>(`admin/billing/tiers/${tierId}`),
-
-  // 时长费配置
-  getRuntimeConfig: () => api.get<unknown, R<RuntimeConfig>>('admin/billing/runtime-config'),
-  saveRuntimeConfig: (d: RuntimeConfig) => api.put<unknown, R<RuntimeConfig>>('admin/billing/runtime-config', d),
-
-  // 订单
-  orders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>
-    api.get<unknown, R<Page<Order>>>('admin/billing/orders', { params }),
-  markPaid: (id: number) => api.post<unknown, R<OrderDetail>>(`admin/billing/orders/${id}/mark-paid`),
-
   // 账户/资源调整
   account: (userId: number, params?: { page?: number, size?: number }) =>
     api.get<unknown, R<AccountView>>(`admin/billing/accounts/${userId}`, { params }),

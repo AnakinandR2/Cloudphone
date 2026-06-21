@@ -2,12 +2,15 @@ package billing
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"manager-backend/framework/apperr"
 
 	"gorm.io/gorm"
 )
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 type trialRepository interface {
 	createPolicy(p *TrialPolicy) error

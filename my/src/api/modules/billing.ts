@@ -8,19 +8,14 @@ import type {
   LicenseUnit,
   Order,
   Order2,
-  OrderCreateReq,
   OrderCreateReq2,
   OrderCreateResult,
-  OrderDetail,
   OrderDetail2,
   PurchaseConfig,
   QuoteReq2,
-  QuoteRequest,
-  QuoteResult,
   QuoteResult2,
   RuntimeLogResult,
   RuntimeUsageSlice,
-  SkuWithTiers,
 } from '@/types/billing'
 import api from '../index'
 
@@ -34,16 +29,9 @@ export default {
     api.get<unknown, R<Page<LedgerEntry>>>('billing/ledger', { params }),
   topup: (amount_cents: number) => api.post<unknown, R<BillingAccount>>('billing/topup', { amount_cents }),
 
-  // 目录/计价
-  skus: () => api.get<unknown, R<SkuWithTiers[]>>('billing/skus'),
-  quote: (req: QuoteRequest) => api.post<unknown, R<QuoteResult>>('billing/quote', req),
-
-  // 订单
-  createOrder: (req: OrderCreateReq) => api.post<unknown, R<OrderDetail>>('billing/orders', req),
+  // 订单（旧列表形状，BillingOrdersView 仍在用）
   orders: (params: { page?: number, size?: number, status?: string }) =>
     api.get<unknown, R<Page<Order>>>('billing/orders', { params }),
-  orderDetail: (id: number) => api.get<unknown, R<OrderDetail>>(`billing/orders/${id}`),
-  payOrder: (id: number) => api.post<unknown, R<OrderDetail>>(`billing/orders/${id}/pay`),
 
   // 权益
   entitlements: () => api.get<unknown, R<EntitlementsResult>>('billing/entitlements'),
