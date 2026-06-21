@@ -4,6 +4,7 @@ import { Search } from 'lucide-vue-next'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -67,6 +68,13 @@ function toggleOne(id: number, v: boolean) {
   else {
     selected.value = selected.value.filter(x => x !== id)
   }
+}
+
+// 实例状态徽章配色，与云手机列表一致（RUNNING 主色 / 失败异常红 / 其余次要）。
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (status === 'RUNNING') return 'default'
+  if (status === 'CREATE_FAILED' || status === 'ERROR') return 'destructive'
+  return 'secondary'
 }
 
 defineExpose({ reload: load })
@@ -136,7 +144,13 @@ defineExpose({ reload: load })
               {{ formatDate(u.expire_at) }}
             </TableCell>
             <TableCell>
-              <span v-if="u.current_instance_id" class="text-muted-foreground font-mono text-xs">{{ u.current_instance_id }}</span>
+              <div v-if="u.instance" class="flex min-w-0 items-center gap-2">
+                <span class="truncate text-sm font-medium">{{ u.instance.name }}</span>
+                <Badge :variant="statusVariant(u.instance.status)" class="shrink-0 text-[10px]">
+                  {{ t(`phone.status_${u.instance.status}`, u.instance.status) }}
+                </Badge>
+                <span class="text-muted-foreground shrink-0 font-mono text-xs">{{ u.instance.cp_id }}</span>
+              </div>
               <span v-else class="text-muted-foreground text-xs">{{ t('billing.purchase2.unitIdle') }}</span>
             </TableCell>
           </TableRow>

@@ -15,7 +15,9 @@ export interface OrderDetail { order: Order, items: OrderItem[] }
 export interface LedgerEntry { id: number, user_id: number, subject: string, type: string, delta: number, balance_after: number, reason: string, order_id: number, operator: string, created_at: string }
 export interface Account { id: number, user_id: number, balance_cents: number, created_at: string, updated_at: string }
 export interface CapacitySnapshot { instance_seat: number, boot_seat: number, runtime_minute: number }
-export interface AccountView { account: Account, ledger: LedgerEntry[], ledger_total: number, capacities: CapacitySnapshot }
+/** 新模型容量快照（按 V2 科目命名：seat/boot_slot/runtime_minute）。 */
+export interface CapacitySnapshotV2 { seat: number, boot_slot: number, runtime_minute: number }
+export interface AccountView { account: Account, ledger: LedgerEntry[], ledger_total: number, capacities: CapacitySnapshot, capacities_v2: CapacitySnapshotV2 }
 
 export interface TrialPolicyItem { id: number, policy_id: number, subject: string, quantity: number, expire_days: number }
 export interface TrialPolicyItemInput { subject: string, quantity: number, expire_days: number }

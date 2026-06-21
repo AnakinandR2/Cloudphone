@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"manager-backend/framework"
+	"manager-backend/modules/billing"
 	"manager-backend/modules/staff"
 	"manager-backend/modules/user"
 
@@ -20,7 +21,20 @@ func (m *phoneModule) Name() string { return "phone" }
 
 func (m *phoneModule) Init(db *gorm.DB) error {
 	m.db = db
-	PhoneService = newService(newRepository(db), newMidplatPort())
+	repo := newRepository(db)
+	PhoneService = newService(repo, newMidplatPort())
+	// 向 billing 注册实例展示信息提供者（依赖反转：billing 仅持函数指针，不依赖 phone）。
+	billing.SetInstanceMetaProvider(func(cpIDs []string) map[string]billing.InstanceMeta {
+		metas, err := repo.metaByCpIDs(cpIDs)
+		if err != nil {
+			return nil
+		}
+		out := make(map[string]billing.InstanceMeta, len(metas))
+		for cp, m := range metas {
+			out[cp] = billing.InstanceMeta{Name: m.Name, Status: m.Status}
+		}
+		return out
+	})
 	return nil
 }
 

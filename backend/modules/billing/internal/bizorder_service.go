@@ -241,6 +241,18 @@ func (s *bizOrderServiceImpl) AdminListOrders(page, size, userID int, status str
 	return s.repo.listAll(off, lim, userID, status)
 }
 
+// AdminGetOrder 后台查任意订单详情（含订单项），不限属主。
+func (s *bizOrderServiceImpl) AdminGetOrder(id int) (*BizOrder, []BizOrderItem, error) {
+	o, items, err := s.repo.get(id)
+	if err != nil {
+		if isNotFoundBizOrder(err) {
+			return nil, nil, apperr.NotFound("订单不存在")
+		}
+		return nil, nil, err
+	}
+	return o, items, nil
+}
+
 func bizItemFromQuote(kind string, q PriceQuote, renewIDs string) BizOrderItem {
 	return BizOrderItem{
 		TargetKind: kind, Quantity: q.Quantity, DurationValue: q.DurationValue,

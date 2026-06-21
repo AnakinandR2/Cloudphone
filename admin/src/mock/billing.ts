@@ -38,6 +38,23 @@ const orders: any[] = [
   { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
 ]
 
+// ---- Biz Order Items（订单项明细，按订单 id 索引；GET /biz-orders/:id 返回）----
+const orderItems: Record<number, any[]> = {
+  9001: [
+    { target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800 },
+  ],
+  9002: [], // recharge：无订单项
+  9003: [
+    { target_kind: 'runtime_minute', quantity: 600, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 10800 },
+  ],
+  9004: [
+    { target_kind: 'boot_slot', quantity: 3, duration_value: 30, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 12600 },
+  ],
+  9005: [
+    { target_kind: 'seat', quantity: 1, duration_value: 1, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 3000 },
+  ],
+}
+
 // ---- Account (userId=101) ----
 const accountStore: Record<number, any> = {
   101: {
@@ -49,6 +66,8 @@ const accountStore: Record<number, any> = {
     ],
     ledger_total: 3,
     capacities: { instance_seat: 5, boot_seat: 10, runtime_minute: 3600 },
+    // 新模型容量快照（权威），前端容量卡片读这里。
+    capacities_v2: { seat: 2, boot_slot: 1, runtime_minute: 600 },
   },
 }
 
@@ -226,6 +245,17 @@ export default defineFakeRoute([
     },
   },
   {
+    url: '/v1/admin/billing/biz-orders/:id',
+    method: 'get',
+    response: ({ params }) => {
+      const id = Number(params.id)
+      const order = orders.find(o => o.id === id)
+      if (!order) return { code: 404, message: 'not found', data: null }
+      // 后端 AdminBizOrderDetail 返回扁平订单字段 + items（含 user_id）。
+      return ok({ ...order, items: orderItems[id] ?? [] })
+    },
+  },
+  {
     url: '/v1/admin/billing/biz-orders/:id/mark-paid',
     method: 'post',
     response: ({ params }) => {
@@ -251,6 +281,7 @@ export default defineFakeRoute([
           ledger: [],
           ledger_total: 0,
           capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities_v2: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         })
       }
       const page = Number(query.page) || 1
@@ -272,6 +303,7 @@ export default defineFakeRoute([
           ledger: [],
           ledger_total: 0,
           capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities_v2: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         }
       }
       const acct = accountStore[userId].account
@@ -306,13 +338,25 @@ export default defineFakeRoute([
           ledger: [],
           ledger_total: 0,
           capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities_v2: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         }
       }
       // V2：subject ∈ seat/boot_slot/runtime_minute。seat/boot_slot 用 quantity，runtime_minute 用 minutes。
       const caps = accountStore[userId].capacities
-      if (d.subject === 'seat') caps.instance_seat += Number(d.quantity) || 0
-      else if (d.subject === 'boot_slot') caps.boot_seat += Number(d.quantity) || 0
-      else if (d.subject === 'runtime_minute') caps.runtime_minute += Number(d.minutes) || 0
+      const capsV2 = accountStore[userId].capacities_v2
+      if (d.subject === 'seat') {
+        caps.instance_seat += Number(d.quantity) || 0
+        capsV2.seat += Number(d.quantity) || 0
+      }
+      else if (d.subject === 'boot_slot') {
+        caps.boot_seat += Number(d.quantity) || 0
+        capsV2.boot_slot += Number(d.quantity) || 0
+      }
+      else if (d.subject === 'runtime_minute') {
+        const m = Number(d.minutes) || 0
+        caps.runtime_minute += m
+        capsV2.runtime_minute += m
+      }
       return ok(null)
     },
   },

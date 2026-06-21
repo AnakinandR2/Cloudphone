@@ -113,6 +113,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.GET("/notices", staff.PermissionMiddleware("billing:view"), AdminGetNotices)
 		admin.PUT("/notices", staff.PermissionMiddleware("billing:manage"), AdminSaveNotices)
 		admin.GET("/biz-orders", staff.PermissionMiddleware("billing:view"), AdminListBizOrders)
+		admin.GET("/biz-orders/:id", staff.PermissionMiddleware("billing:view"), AdminGetBizOrder)
 		admin.POST("/biz-orders/:id/mark-paid", staff.PermissionMiddleware("billing:manage"), AdminMarkBizOrderPaid)
 	}
 }

@@ -36,16 +36,10 @@ import { fmtCents } from '@/utils/money'
 
 const { t } = useI18n()
 
-// 资源科目：调整入口用 seat/boot_slot/runtime_minute（对齐 adjust-resource V2 subject），
-// 容量快照后端字段名是 instance_seat/boot_seat/runtime_minute，故展示时映射。
+// 资源科目：调整入口用 seat/boot_slot/runtime_minute（对齐 adjust-resource V2 subject）。
+// 容量展示读后端新模型字段 capacities_v2.{seat,boot_slot,runtime_minute}（与科目同名）。
 type ResourceSubject = 'seat' | 'boot_slot' | 'runtime_minute'
 const RESOURCE_SUBJECTS: ResourceSubject[] = ['seat', 'boot_slot', 'runtime_minute']
-// 调整科目 → 容量快照字段名。
-const CAPACITY_FIELD: Record<ResourceSubject, 'instance_seat' | 'boot_seat' | 'runtime_minute'> = {
-  seat: 'instance_seat',
-  boot_slot: 'boot_seat',
-  runtime_minute: 'runtime_minute',
-}
 
 const userIdInput = ref('')
 const currentUserId = ref<number | null>(null)
@@ -97,9 +91,9 @@ function deltaClass(delta: number): string {
 }
 
 function capacityValue(subject: ResourceSubject): number {
-  const caps = accountView.value?.capacities
+  const caps = accountView.value?.capacities_v2
   if (!caps) return 0
-  return caps[CAPACITY_FIELD[subject]] ?? 0
+  return caps[subject] ?? 0
 }
 
 async function fetchAccount(uid: number) {
@@ -244,13 +238,19 @@ async function submitResource() {
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card class="bg-muted/30">
               <CardContent class="pt-4">
-                <p class="text-muted-foreground text-xs">{{ t('billing.accountBalance') }}</p>
-                <p class="mt-1 text-2xl font-semibold tabular-nums">¥{{ fmtCents(accountView.account.balance_cents) }}</p>
+                <p class="text-muted-foreground text-xs">
+                  {{ t('billing.accountBalance') }}
+                </p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">
+                  ¥{{ fmtCents(accountView.account.balance_cents) }}
+                </p>
               </CardContent>
             </Card>
             <Card v-for="s in RESOURCE_SUBJECTS" :key="s" class="bg-muted/30">
               <CardContent class="pt-4">
-                <p class="text-muted-foreground text-xs">{{ subjectLabel(s) }}</p>
+                <p class="text-muted-foreground text-xs">
+                  {{ subjectLabel(s) }}
+                </p>
                 <p class="mt-1 text-2xl font-semibold tabular-nums">
                   {{ capacityValue(s) }}
                   <span class="text-muted-foreground text-sm font-normal">{{ subjectUnit(s) }}</span>
@@ -277,7 +277,9 @@ async function submitResource() {
                 <span class="tabular-nums text-muted-foreground text-xs">{{ formatDateTime(row.created_at) }}</span>
               </template>
               <template #cell-subject="{ row }">
-                <Badge variant="outline" class="text-xs">{{ subjectLabel(row.subject) }}</Badge>
+                <Badge variant="outline" class="text-xs">
+                  {{ subjectLabel(row.subject) }}
+                </Badge>
               </template>
               <template #cell-type="{ row }">
                 <span class="text-muted-foreground text-xs">{{ t(`billing.ledgerType_${row.type}`) }}</span>
@@ -310,7 +312,9 @@ async function submitResource() {
           <div class="space-y-1.5">
             <Label>{{ t('billing.fAdjustAmount') }}</Label>
             <Input v-model="balanceForm.yuan" type="number" step="0.01" :placeholder="t('billing.fAdjustAmountPlaceholder')" />
-            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustAmountHint') }}</p>
+            <p class="text-muted-foreground text-xs">
+              {{ t('billing.fAdjustAmountHint') }}
+            </p>
           </div>
           <div class="space-y-1.5">
             <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
@@ -318,7 +322,9 @@ async function submitResource() {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="balanceDialog = false">{{ t('crud.cancel') }}</Button>
+          <Button variant="outline" @click="balanceDialog = false">
+            {{ t('crud.cancel') }}
+          </Button>
           <Button :disabled="balanceSubmitting" @click="submitBalance">
             {{ balanceSubmitting ? t('common.loading') : t('crud.confirm') }}
           </Button>
@@ -338,19 +344,25 @@ async function submitResource() {
             <Select v-model="resourceForm.subject">
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="s in RESOURCE_SUBJECTS" :key="s" :value="s">{{ subjectLabel(s) }}</SelectItem>
+                <SelectItem v-for="s in RESOURCE_SUBJECTS" :key="s" :value="s">
+                  {{ subjectLabel(s) }}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div class="space-y-1.5">
             <Label>{{ isRuntimeSubject ? t('billing.fAdjustMinutes') : t('billing.fAdjustQuantity') }}</Label>
             <Input v-model="resourceForm.quantity" type="number" min="1" step="1" :placeholder="t('billing.fAdjustQuantityPlaceholder')" />
-            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustResourceHint') }}</p>
+            <p class="text-muted-foreground text-xs">
+              {{ t('billing.fAdjustResourceHint') }}
+            </p>
           </div>
           <div v-if="!isRuntimeSubject" class="space-y-1.5">
             <Label>{{ t('billing.fAdjustDuration') }}</Label>
             <Input v-model="resourceForm.durationValue" type="number" min="1" step="1" :placeholder="t('billing.fAdjustDurationPlaceholder')" />
-            <p class="text-muted-foreground text-xs">{{ t('billing.fAdjustDurationHint') }}</p>
+            <p class="text-muted-foreground text-xs">
+              {{ t('billing.fAdjustDurationHint') }}
+            </p>
           </div>
           <div class="space-y-1.5">
             <Label>{{ t('billing.fAdjustReason') }}<span class="text-destructive ml-1">*</span></Label>
@@ -358,7 +370,9 @@ async function submitResource() {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="resourceDialog = false">{{ t('crud.cancel') }}</Button>
+          <Button variant="outline" @click="resourceDialog = false">
+            {{ t('crud.cancel') }}
+          </Button>
           <Button :disabled="resourceSubmitting" @click="submitResource">
             {{ resourceSubmitting ? t('common.loading') : t('crud.confirm') }}
           </Button>

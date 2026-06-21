@@ -66,6 +66,15 @@ func GetRuntimeCoverage(userID int) (RuntimeCoverage, error) {
 // InstanceRef 跨模块传入的实例引用（cpId + 创建时间）。
 type InstanceRef = billinginternal.InstanceRef
 
+// InstanceMeta 实例展示信息（名称/状态），供续费列表/费用日志富化。
+type InstanceMeta = billinginternal.InstanceMeta
+
+// SetInstanceMetaProvider 注册实例展示信息提供者（phone 装配时调用）。
+// billing 仅持有函数指针，无对 phone 的编译期依赖（依赖反转，遵守 Modulith 边界）。
+func SetInstanceMetaProvider(fn func(cpIDs []string) map[string]InstanceMeta) {
+	billinginternal.SetInstanceMetaProvider(fn)
+}
+
 // SeatCapacity 未过期 seat 授权单元数。
 func SeatCapacity(userID int) (int, error) {
 	return billinginternal.LicenseService.Capacity(userID, billinginternal.KindSeat)

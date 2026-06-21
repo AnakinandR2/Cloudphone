@@ -62,10 +62,27 @@ func (s *runtimeEngineServiceImpl) RuntimeLog(userID, page, size int, runningRef
 		}
 		out.Items = append(out.Items, aggregateSession(ref, cs, runningRefs))
 	}
+	enrichRuntimeLogNames(out.Items)
 	return out, nil
 }
 
 // aggregateSession 把一个会话的多条 charge 聚合为一行（含分段与合计 + 整体 quota_type）。
+// enrichRuntimeLogNames 用实例富化 provider 给费用日志填充实例名称。
+func enrichRuntimeLogNames(items []RuntimeLogItem) {
+	cpIDs := make([]string, 0, len(items))
+	for _, it := range items {
+		if it.CpID != "" {
+			cpIDs = append(cpIDs, it.CpID)
+		}
+	}
+	meta := lookupInstanceMeta(cpIDs)
+	for i := range items {
+		if m, ok := meta[items[i].CpID]; ok {
+			items[i].InstanceName = m.Name
+		}
+	}
+}
+
 func aggregateSession(ref string, cs []RuntimeCharge, runningRefs map[string]bool) RuntimeLogItem {
 	item := RuntimeLogItem{
 		CpID:      cs[0].InstanceID,

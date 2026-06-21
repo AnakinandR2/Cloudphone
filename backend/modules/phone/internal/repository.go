@@ -53,6 +53,8 @@ type repository interface {
 	ownedCpIDs(userID int) ([]string, error)
 	// 运行会话（计费同步/结算/护栏）
 	ownersByCpIDs(cpIDs []string) (map[string]uint, error)
+	// metaByCpIDs 批量取 cpId → 实例展示信息（名称/状态），供 billing 富化续费列表/费用日志。
+	metaByCpIDs(cpIDs []string) (map[string]CpMeta, error)
 	upsertRunSession(rs *RunSession) (isNew bool, err error)
 	runningSessions() ([]RunSession, error)
 	runningSessionCountByUser(userID int) (int64, error)
@@ -90,6 +92,30 @@ func (r *gormRepository) ownersByCpIDs(cpIDs []string) (map[string]uint, error) 
 	for _, p := range rows {
 		if p.CpID != "" {
 			out[p.CpID] = p.UserID
+		}
+	}
+	return out, nil
+}
+
+// CpMeta 实例展示信息投影（cpId → 名称/状态）。
+type CpMeta struct {
+	Name   string
+	Status string
+}
+
+// metaByCpIDs 批量取 cpId → 名称/状态（含回收态，供费用日志/续费列表展示历史实例）。
+func (r *gormRepository) metaByCpIDs(cpIDs []string) (map[string]CpMeta, error) {
+	out := map[string]CpMeta{}
+	if len(cpIDs) == 0 {
+		return out, nil
+	}
+	var rows []CloudPhone
+	if err := r.db.Select("cp_id, name, status").Where("cp_id IN ?", cpIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, p := range rows {
+		if p.CpID != "" {
+			out[p.CpID] = CpMeta{Name: p.Name, Status: p.Status}
 		}
 	}
 	return out, nil

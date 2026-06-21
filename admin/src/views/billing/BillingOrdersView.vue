@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
-import type { BillingOrder } from '@/types/billing'
+import type { BillingOrder, BillingOrderItem } from '@/types/billing'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -40,7 +40,33 @@ const filters = reactive({
   status: 'all',
 })
 
+// 订单项明细：按需懒加载（展开行时拉 biz-orders/:id）。
+const itemsCache = reactive<Record<number, BillingOrderItem[]>>({})
+const itemsLoading = reactive<Record<number, boolean>>({})
+
+async function ensureDetail(id: number) {
+  if (itemsCache[id] || itemsLoading[id]) return
+  itemsLoading[id] = true
+  try {
+    const res = await billingApi.billingOrderDetail(id)
+    itemsCache[id] = res.data.items ?? []
+  }
+  catch {
+    toast.error(t('billing.loadFail'))
+  }
+  finally {
+    itemsLoading[id] = false
+  }
+}
+
+function fmtBps(bps: number): string {
+  // 10000=无折扣；展示为「X 折」（8500→8.5折）。无折扣显示 -。
+  if (bps >= 10000) return '-'
+  return `${(bps / 1000).toFixed(1).replace(/\.0$/, '')}${t('billing.discountUnit')}`
+}
+
 const columns = computed<ColumnDef<BillingOrder>[]>(() => [
+  { id: 'expander', header: '', enableHiding: false, meta: { label: '' } },
   { accessorKey: 'id', id: 'id', header: t('billing.colOrderNo'), meta: { label: 'billing.colOrderNo' } },
   { accessorKey: 'user_id', id: 'user_id', header: t('billing.colUserId'), meta: { label: 'billing.colUserId' } },
   { accessorKey: 'biz_type', id: 'biz_type', header: t('billing.colBizType'), meta: { label: 'billing.colBizType' } },
@@ -113,6 +139,7 @@ onMounted(load)
         :columns="columns"
         :data="data"
         :loading="loading"
+        expandable
       >
         <template #filters>
           <Input
@@ -127,10 +154,18 @@ onMounted(load)
               <SelectValue :placeholder="t('billing.allStatus')" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{{ t('billing.allStatus') }}</SelectItem>
-              <SelectItem value="unpaid">{{ t('billing.status_unpaid') }}</SelectItem>
-              <SelectItem value="paid">{{ t('billing.status_paid') }}</SelectItem>
-              <SelectItem value="expired">{{ t('billing.status_expired') }}</SelectItem>
+              <SelectItem value="all">
+                {{ t('billing.allStatus') }}
+              </SelectItem>
+              <SelectItem value="unpaid">
+                {{ t('billing.status_unpaid') }}
+              </SelectItem>
+              <SelectItem value="paid">
+                {{ t('billing.status_paid') }}
+              </SelectItem>
+              <SelectItem value="expired">
+                {{ t('billing.status_expired') }}
+              </SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" @click="onFilter">
@@ -145,7 +180,9 @@ onMounted(load)
           <span class="tabular-nums text-muted-foreground">{{ row.user_id }}</span>
         </template>
         <template #cell-biz_type="{ row }">
-          <Badge variant="outline" class="text-xs">{{ bizLabel(row.biz_type) }}</Badge>
+          <Badge variant="outline" class="text-xs">
+            {{ bizLabel(row.biz_type) }}
+          </Badge>
         </template>
         <template #cell-pay_method="{ row }">
           <span class="text-muted-foreground">{{ t(`billing.pay_${row.pay_method}`) }}</span>
@@ -154,7 +191,9 @@ onMounted(load)
           <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
         </template>
         <template #cell-status="{ row }">
-          <Badge :variant="statusVariant(row.status)">{{ t(`billing.status_${row.status}`) }}</Badge>
+          <Badge :variant="statusVariant(row.status)">
+            {{ t(`billing.status_${row.status}`) }}
+          </Badge>
         </template>
         <template #cell-created_at="{ row }">
           <span class="tabular-nums text-muted-foreground">{{ formatDateTime(row.created_at) }}</span>
@@ -169,6 +208,82 @@ onMounted(load)
               {{ t('billing.markPaid') }}
             </Button>
           </Popconfirm>
+        </template>
+
+        <!-- 展开行：订单项明细（懒加载 biz-orders/:id） -->
+        <template #expanded="{ row }">
+          <div class="p-4">
+            <p class="mb-2 text-sm font-medium">
+              {{ t('billing.orderItemsTitle') }}
+            </p>
+            <!-- 触发懒加载（首帧调用，已加载则 no-op） -->
+            {{ (ensureDetail(row.id), '') }}
+            <p v-if="itemsLoading[row.id]" class="text-muted-foreground text-xs">
+              {{ t('common.loading') }}
+            </p>
+            <p v-else-if="!itemsCache[row.id]?.length" class="text-muted-foreground text-xs">
+              {{ t('billing.orderItemsEmpty') }}
+            </p>
+            <div v-else class="overflow-auto rounded-md border">
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="bg-muted/40 border-b text-muted-foreground">
+                    <th class="px-3 py-2 text-left font-medium">
+                      {{ t('billing.colTargetKind') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colQty') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colDuration') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colUnitPrice') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colQtyDiscount') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colDurDiscount') }}
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      {{ t('billing.colAmount') }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(it, i) in itemsCache[row.id]" :key="i" class="border-b last:border-0">
+                    <td class="px-3 py-2">
+                      <Badge variant="outline" class="text-[10px]">
+                        {{ t(`billing.kind_${it.target_kind}`, it.target_kind) }}
+                      </Badge>
+                    </td>
+                    <td class="px-3 py-2 text-right tabular-nums">
+                      {{ it.quantity }}
+                    </td>
+                    <td class="px-3 py-2 text-right tabular-nums">
+                      <template v-if="it.duration_value">
+                        {{ it.duration_value }}{{ it.duration_unit === 'day' ? t('billing.durDay') : t('billing.durMonth') }}
+                      </template>
+                      <span v-else class="text-muted-foreground">-</span>
+                    </td>
+                    <td class="px-3 py-2 text-right tabular-nums">
+                      ¥{{ fmtCents(it.unit_price_cents) }}
+                    </td>
+                    <td class="px-3 py-2 text-right tabular-nums">
+                      {{ fmtBps(it.qty_discount_bps) }}
+                    </td>
+                    <td class="px-3 py-2 text-right tabular-nums">
+                      {{ fmtBps(it.duration_discount_bps) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-medium tabular-nums">
+                      ¥{{ fmtCents(it.amount_cents) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </template>
       </DataTable>
     </CardContent>

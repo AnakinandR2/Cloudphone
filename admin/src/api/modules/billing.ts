@@ -3,6 +3,7 @@ import type {
   AccountView,
   AdjustResourceBody,
   BillingOrder,
+  BillingOrderDetail,
   DiscountTier,
   NoticesConfig,
   Order,
@@ -85,4 +86,6 @@ export default {
   billingOrders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>
     api.get<unknown, R<Page<BillingOrder>>>('admin/billing/biz-orders', { params }),
   billingMarkPaid: (id: number) => api.post<unknown, R<BillingOrder>>(`admin/billing/biz-orders/${id}/mark-paid`),
+  // 订单详情（含 items，订单项明细）。后端返回扁平订单字段 + items。
+  billingOrderDetail: (id: number) => api.get<unknown, R<BillingOrderDetail>>(`admin/billing/biz-orders/${id}`),
 }

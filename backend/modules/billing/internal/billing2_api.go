@@ -3,6 +3,7 @@ package billing
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"manager-backend/framework"
@@ -124,6 +125,9 @@ func ListLicenseUnits(c *gin.Context) {
 	if err != nil {
 		framework.FailErr(c, err)
 		return
+	}
+	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
+		items = filterUnitsByKeyword(items, kw)
 	}
 	framework.OKWithData(c, gin.H{"items": items})
 }
@@ -409,6 +413,23 @@ func AdminMarkBizOrderPaid(c *gin.Context) {
 		return
 	}
 	framework.OKWithData(c, o)
+}
+
+// AdminGetBizOrder GET /admin/billing/biz-orders/:id —— 后台订单详情（含订单项）。
+func AdminGetBizOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "无效的ID")
+		return
+	}
+	o, items, err := BizOrderService.AdminGetOrder(id)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{"id": o.ID, "user_id": o.UserID, "biz_type": o.BizType, "status": o.Status,
+		"total_cents": o.TotalCents, "pay_method": o.PayMethod, "created_at": o.CreatedAt,
+		"paid_at": o.PaidAt, "expired_at": o.ExpiredAt, "items": items})
 }
 
 // AdminAdjustResourceV2 POST /admin/billing/accounts/:userId/adjust-resource —— 走统一履约（source=grant）。

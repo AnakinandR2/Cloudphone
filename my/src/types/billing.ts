@@ -194,6 +194,12 @@ export interface QuoteResult2 {
   payable_cents: number
 }
 
+/** 授权单元上占用的实例摘要（后端填充；空闲单元为 null） */
+export interface LicenseUnitInstance {
+  cp_id: string
+  name: string
+  status: string
+}
 /** GET /billing/license-units — 续费 tab 用（后端 LicenseUnitView） */
 export interface LicenseUnit {
   id: number
@@ -202,6 +208,8 @@ export interface LicenseUnit {
   expire_at: string
   /** 当前占用该单元的实例 cpId；空串表示空闲 */
   current_instance_id: string
+  /** 占用实例摘要（名称/状态/cpId）；空闲单元为 null */
+  instance?: LicenseUnitInstance | null
 }
 
 /** Order（新形状，契约 §1.5） */
