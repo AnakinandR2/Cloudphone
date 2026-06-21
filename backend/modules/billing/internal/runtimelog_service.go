@@ -1,0 +1,109 @@
+package billing
+
+import "time"
+
+// 费用日志聚合（契约 §1.6）：把 runtime_charges 按「实例 + 开机会话」聚合成一行，
+// 含分段（segments）与临时时长合计。
+
+// RuntimeLogSegment 一个 quota_type 的连续分段。
+type RuntimeLogSegment struct {
+	QuotaType string    `json:"quota_type"`
+	Minutes   int       `json:"minutes"`
+	From      time.Time `json:"from"`
+	To        time.Time `json:"to"`
+}
+
+// RuntimeLogItem 一行聚合的开机会话费用记录。
+type RuntimeLogItem struct {
+	CpID               string              `json:"cp_id"`
+	InstanceName       string              `json:"instance_name"`
+	PowerOnAt          time.Time           `json:"power_on_at"`
+	PowerOffAt         *time.Time          `json:"power_off_at"`
+	QuotaType          string              `json:"quota_type"`
+	TempMinutesCharged int                 `json:"temp_minutes_charged"`
+	Running            bool                `json:"running"`
+	Segments           []RuntimeLogSegment `json:"segments"`
+}
+
+// RuntimeLogPage 费用日志分页结果。
+type RuntimeLogPage struct {
+	Items           []RuntimeLogItem `json:"items"`
+	Total           int64            `json:"total"`
+	DailyCapMinutes int              `json:"daily_cap_minutes"`
+}
+
+// RuntimeLog 聚合费用日志。runningRefs 为「仍在运行的会话标识」集合（由 phone 提供，可为 nil）。
+func (s *runtimeEngineServiceImpl) RuntimeLog(userID, page, size int, runningRefs map[string]bool) (*RuntimeLogPage, error) {
+	off, lim := pageOffset(page, size)
+	refs, total, err := s.charges.listSessions(userID, off, lim)
+	if err != nil {
+		return nil, err
+	}
+	cap, err := s.pricing.DailyCapMinutes()
+	if err != nil {
+		return nil, err
+	}
+	out := &RuntimeLogPage{Items: []RuntimeLogItem{}, Total: total, DailyCapMinutes: cap}
+	if len(refs) == 0 {
+		return out, nil
+	}
+	charges, err := s.charges.chargesForSessions(userID, refs)
+	if err != nil {
+		return nil, err
+	}
+	grouped := map[string][]RuntimeCharge{}
+	for _, c := range charges {
+		grouped[c.RunSessionRef] = append(grouped[c.RunSessionRef], c)
+	}
+	for _, ref := range refs {
+		cs := grouped[ref]
+		if len(cs) == 0 {
+			continue
+		}
+		out.Items = append(out.Items, aggregateSession(ref, cs, runningRefs))
+	}
+	return out, nil
+}
+
+// aggregateSession 把一个会话的多条 charge 聚合为一行（含分段与合计 + 整体 quota_type）。
+func aggregateSession(ref string, cs []RuntimeCharge, runningRefs map[string]bool) RuntimeLogItem {
+	item := RuntimeLogItem{
+		CpID:      cs[0].InstanceID,
+		PowerOnAt: cs[0].WindowStart,
+	}
+	tempTotal := 0
+	powerOff := cs[0].WindowEnd
+	seen := map[string]bool{}
+	for _, c := range cs {
+		item.Segments = append(item.Segments, RuntimeLogSegment{
+			QuotaType: c.QuotaType, Minutes: c.ChargedMinutes, From: c.WindowStart, To: c.WindowEnd,
+		})
+		if c.QuotaType == QuotaTemp {
+			tempTotal += c.ChargedMinutes
+		}
+		if c.WindowStart.Before(item.PowerOnAt) {
+			item.PowerOnAt = c.WindowStart
+		}
+		if c.WindowEnd.After(powerOff) {
+			powerOff = c.WindowEnd
+		}
+		seen[c.QuotaType] = true
+	}
+	item.TempMinutesCharged = tempTotal
+	// 整体 quota_type：单一则用该类型，多类混合为 mixed。
+	if len(seen) == 1 {
+		for k := range seen {
+			item.QuotaType = k
+		}
+	} else {
+		item.QuotaType = QuotaMixed
+	}
+	if runningRefs != nil && runningRefs[ref] {
+		item.Running = true
+		item.PowerOffAt = nil
+	} else {
+		po := powerOff
+		item.PowerOffAt = &po
+	}
+	return item
+}

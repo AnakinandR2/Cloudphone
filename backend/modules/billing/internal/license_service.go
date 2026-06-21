@@ -27,6 +27,34 @@ func (s *licenseServiceImpl) Capacity(userID int, kind string) (int, error) {
 	return len(units), nil
 }
 
+// LicenseUnitView 续费 tab 列表项（契约 §1.4）。instance 为空表示空闲单元。
+type LicenseUnitView struct {
+	ID                uint      `json:"id"`
+	Kind              string    `json:"kind"`
+	CreatedAt         time.Time `json:"created_at"`
+	ExpireAt          time.Time `json:"expire_at"`
+	CurrentInstanceID string    `json:"current_instance_id"`
+}
+
+// ListActiveUnits 列某用户某类未过期授权单元（续费用）。expiringBefore 为零值时不过滤。
+func (s *licenseServiceImpl) ListActiveUnits(userID int, kind string, expiringBefore time.Time) ([]LicenseUnitView, error) {
+	units, err := s.repo.activeUnits(userID, kind, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LicenseUnitView, 0, len(units))
+	for _, u := range units {
+		if !expiringBefore.IsZero() && u.ExpireAt.After(expiringBefore) {
+			continue
+		}
+		out = append(out, LicenseUnitView{
+			ID: u.ID, Kind: u.Kind, CreatedAt: u.CreatedAt,
+			ExpireAt: u.ExpireAt, CurrentInstanceID: u.CurrentInstanceID,
+		})
+	}
+	return out, nil
+}
+
 // ReconcileSeats 重新分配席位池：物化「实例坐哪个席位」，返回因席位不足需进回收站的实例 cpId（最新溢出）。
 func (s *licenseServiceImpl) ReconcileSeats(userID int, instances []InstanceRef) ([]string, error) {
 	now := time.Now()

@@ -1,12 +1,32 @@
 import type {
-  BillingAccount, ClaimableItem, EntitlementsResult, LedgerEntry,
-  Order, OrderCreateReq, OrderDetail, QuoteRequest, QuoteResult,
-  RuntimeUsageSlice, SkuWithTiers,
+  BillingAccount,
+  BillingOverview,
+  ClaimableItem,
+  EntitlementsResult,
+  LedgerEntry,
+  LicenseKind,
+  LicenseUnit,
+  Order,
+  Order2,
+  OrderCreateReq,
+  OrderCreateReq2,
+  OrderCreateResult,
+  OrderDetail,
+  OrderDetail2,
+  PurchaseConfig,
+  QuoteReq2,
+  QuoteRequest,
+  QuoteResult,
+  QuoteResult2,
+  RuntimeLogResult,
+  RuntimeUsageSlice,
+  SkuWithTiers,
 } from '@/types/billing'
 import api from '../index'
 
 interface R<T> { code: number, message: string, data: T }
 interface Page<T> { list: T[], total: number }
+interface ItemsTotal<T> { items: T[], total: number }
 
 export default {
   // 账户/资金
@@ -37,4 +57,27 @@ export default {
   trials: () => api.get<unknown, R<ClaimableItem[]>>('billing/trials'),
   claimTrial: (code: string, invite_code = '') =>
     api.post<unknown, R<null>>(`billing/trials/${code}/claim`, { invite_code }),
+
+  // ===== 购买与费用重构（2026-06-21，契约 §1）=====
+  // KPI 概览（余额/席位/包月数/临时时长一次拿齐）
+  overview: () => api.get<unknown, R<BillingOverview>>('billing/overview'),
+  // 购买配置（支付方式/充值预设/各 kind 档位与时长/须知/临时时长包）
+  purchaseConfig: () => api.get<unknown, R<PurchaseConfig>>('billing/purchase-config'),
+  // 服务端权威报价（前端不自算价）
+  quote2: (req: QuoteReq2) => api.post<unknown, R<QuoteResult2>>('billing/quote', req),
+  // 授权单元列表（续费 tab）
+  licenseUnits: (params: { kind: LicenseKind, expiring_before?: string, keyword?: string }) =>
+    api.get<unknown, R<ItemsTotal<LicenseUnit>>>('billing/license-units', { params }),
+  // 创建订单（含 recharge / 新购 / 续费 / 时长包）
+  createOrder2: (req: OrderCreateReq2) => api.post<unknown, R<OrderCreateResult>>('billing/orders', req),
+  // 订单列表（新形状）
+  orders2: (params: { page?: number, size?: number, status?: string }) =>
+    api.get<unknown, R<ItemsTotal<Order2>>>('billing/orders', { params }),
+  // 订单详情（含 items）
+  orderDetail2: (id: number) => api.get<unknown, R<OrderDetail2>>(`billing/orders/${id}`),
+  // 继续支付未支付订单
+  payOrder2: (id: number) => api.post<unknown, R<OrderCreateResult>>(`billing/orders/${id}/pay`),
+  // 费用日志（聚合到开机会话）
+  runtimeLog: (params: { page?: number, size?: number }) =>
+    api.get<unknown, R<RuntimeLogResult>>('billing/runtime/log', { params }),
 }

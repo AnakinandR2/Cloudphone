@@ -29,21 +29,21 @@ let tiers = [
 ]
 let tierNextId = 10
 
-// ---- Orders ----
-let orders = [
-  { id: 1, order_no: 'ORD202606010001', user_id: 101, status: 'paid', pay_method: 'balance', total_cents: 3000, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', updated_at: '2026-06-01T10:00:00Z' },
-  { id: 2, order_no: 'ORD202606010002', user_id: 102, status: 'pending', pay_method: 'wechat', total_cents: 8500, paid_at: null, created_at: '2026-06-01T11:00:00Z', updated_at: '2026-06-01T11:00:00Z' },
-  { id: 3, order_no: 'ORD202606020001', user_id: 101, status: 'paid', pay_method: 'alipay', total_cents: 20000, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', updated_at: '2026-06-02T14:30:00Z' },
-  { id: 4, order_no: 'ORD202606030001', user_id: 103, status: 'pending', pay_method: 'alipay', total_cents: 6000, paid_at: null, created_at: '2026-06-03T08:00:00Z', updated_at: '2026-06-03T08:00:00Z' },
-  { id: 5, order_no: 'ORD202606040001', user_id: 104, status: 'cancelled', pay_method: 'wechat', total_cents: 1000, paid_at: null, created_at: '2026-06-04T16:00:00Z', updated_at: '2026-06-04T17:00:00Z' },
+// ---- Orders（购买与费用重构新形状：biz_type + status unpaid/paid/expired）----
+let orders: any[] = [
+  { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
+  { id: 9002, user_id: 102, biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
+  { id: 9003, user_id: 101, biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
+  { id: 9004, user_id: 103, biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
+  { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
 ]
 
 const orderItems: Record<number, any[]> = {
-  1: [{ id: 1, order_id: 1, sku_code: 'instance_fee', sku_name: '云手机实例费', category: 'instance_fee', cycle_months: 1, quantity: 1, unit_price_cents: 3000, discount_bps: 10000, original_cents: 3000, payable_cents: 3000 }],
-  2: [{ id: 2, order_id: 2, sku_code: 'instance_fee', sku_name: '云手机实例费', category: 'instance_fee', cycle_months: 3, quantity: 1, unit_price_cents: 3000, discount_bps: 8500, original_cents: 9000, payable_cents: 8500 }],
-  3: [{ id: 3, order_id: 3, sku_code: 'time_pack', sku_name: '时长包', category: 'time_pack', cycle_months: 0, quantity: 1000, unit_price_cents: 20, discount_bps: 8000, original_cents: 20000, payable_cents: 16000 }],
-  4: [{ id: 4, order_id: 4, sku_code: 'instance_fee', sku_name: '云手机实例费', category: 'instance_fee', cycle_months: 1, quantity: 2, unit_price_cents: 3000, discount_bps: 10000, original_cents: 6000, payable_cents: 6000 }],
-  5: [{ id: 5, order_id: 5, sku_code: 'boot_pack', sku_name: '开机包', category: 'boot_pack', cycle_months: 1, quantity: 1, unit_price_cents: 1000, discount_bps: 10000, original_cents: 1000, payable_cents: 1000 }],
+  9001: [{ id: 1, order_id: 9001, target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800, renew_unit_ids: null }],
+  9002: [],
+  9003: [{ id: 2, order_id: 9003, target_kind: 'runtime_pack', quantity: 600, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 10800, renew_unit_ids: null }],
+  9004: [{ id: 3, order_id: 9004, target_kind: 'boot_slot', quantity: 1, duration_value: 7, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 12600, renew_unit_ids: null }],
+  9005: [{ id: 4, order_id: 9005, target_kind: 'seat', quantity: 1, duration_value: 1, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 3000, renew_unit_ids: [101] }],
 }
 
 // ---- Account (userId=101) ----
@@ -56,20 +56,20 @@ const accountStore: Record<number, any> = {
       { id: 3, user_id: 101, subject: 'balance', type: 'consume', delta: -2000, balance_after: 15000, reason: '订单 ORD202606020001', order_id: 3, operator: 'system', created_at: '2026-06-02T14:30:00Z' },
     ],
     ledger_total: 3,
-    capacities: { instance_seat: 5, boot_seat: 10, runtime_minute: 3600 },
+    capacities: { seat: 5, boot_slot: 10, runtime_minute: 3600 },
   },
 }
 
 // ---- Trial Policies ----
 let trials: any[] = [
   { id: 1, code: 'new_user_trial', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [
-    { id: 1, policy_id: 1, subject: 'instance_seat', quantity: 1, expire_days: 7 },
+    { id: 1, policy_id: 1, subject: 'seat', quantity: 1, expire_days: 7 },
     { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 },
   ], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
   { id: 2, code: 'invite_trial', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: 'GLORY2026', items: [
-    { id: 3, policy_id: 2, subject: 'instance_seat', quantity: 2, expire_days: 30 },
+    { id: 3, policy_id: 2, subject: 'seat', quantity: 2, expire_days: 30 },
     { id: 4, policy_id: 2, subject: 'runtime_minute', quantity: 1440, expire_days: 30 },
-    { id: 5, policy_id: 2, subject: 'boot_seat', quantity: 1, expire_days: 30 },
+    { id: 5, policy_id: 2, subject: 'boot_slot', quantity: 1, expire_days: 30 },
   ], created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' },
 ]
 let trialNextId = 3
@@ -77,14 +77,67 @@ let trialItemNextId = 6
 
 const trialGrantsStore: Record<number, any[]> = {
   1: [
-    { id: 1, policy_id: 1, user_id: 201, subject: 'instance_seat', quantity: 1, created_at: '2026-05-10T08:00:00Z' },
-    { id: 2, policy_id: 1, user_id: 202, subject: 'instance_seat', quantity: 1, created_at: '2026-05-15T10:30:00Z' },
+    { id: 1, policy_id: 1, user_id: 201, subject: 'seat', quantity: 1, created_at: '2026-05-10T08:00:00Z' },
+    { id: 2, policy_id: 1, user_id: 202, subject: 'seat', quantity: 1, created_at: '2026-05-15T10:30:00Z' },
   ],
   2: [
     { id: 3, policy_id: 2, user_id: 203, subject: 'runtime_minute', quantity: 1440, created_at: '2026-06-01T12:00:00Z' },
   ],
 }
 let grantNextId = 4
+
+// ── 购买与费用重构 · 配置（契约 §2）─────────────────────────────────────────
+// 定价（按 kind）
+let pricing: any = {
+  seat: {
+    kind: 'seat',
+    unit_price_cents: 3000,
+    unit_label: '台',
+    qty_options: [1, 2, 5, 10, 50, 100, 500, 1000],
+    qty_tiers: [{ min_quantity: 10, discount_bps: 9000 }, { min_quantity: 100, discount_bps: 8000 }],
+    duration_unit: 'month',
+    duration_options: [{ value: 1, discount_bps: 10000 }, { value: 3, discount_bps: 8500 }, { value: 12, discount_bps: 7000 }],
+    notice: '云手机为固定套餐，购买席位即获得「能存在」的权利。',
+    billing_note: '席位按月计费，数量阶梯折扣 × 时长折扣相乘。',
+  },
+  boot_slot: {
+    kind: 'boot_slot',
+    unit_price_cents: 2000,
+    unit_label: '个',
+    qty_options: [1, 2, 5, 10, 50, 100],
+    qty_tiers: [{ min_quantity: 10, discount_bps: 9000 }],
+    duration_unit: 'day',
+    duration_options: [{ value: 7, discount_bps: 10000 }, { value: 30, discount_bps: 9000 }],
+    notice: '包月开机数决定能同时开机的实例数，多实例轮流共享。',
+    billing_note: '包月开机数按天计费，名额满后开机改扣临时时长。',
+  },
+}
+
+// 临时时长配置
+let runtimeCfg: any = {
+  unit_price_cents_per_minute: 20,
+  packs: [{ minutes: 600, discount_bps: 10000 }, { minutes: 3000, discount_bps: 9000 }],
+  min_minutes: 60,
+  daily_cap_minutes: 200,
+  recycle_retention_days: 30,
+}
+
+// 支付方式
+let paymentMethods: any[] = [
+  { code: 'balance', name: '余额支付', enabled: true, sort: 0 },
+  { code: 'wechat', name: '微信支付', enabled: true, sort: 1 },
+  { code: 'alipay', name: '支付宝', enabled: true, sort: 2 },
+]
+
+// 充值预设
+let rechargePresets: number[] = [1000, 5000, 10000, 50000]
+
+// 须知文案
+let notices: any = {
+  seat: { notice: '云手机为固定套餐，用完为止。', billing_note: '席位实例计费说明……' },
+  boot_slot: { notice: '包月开机数说明……', billing_note: '包月开机数计费说明……' },
+  runtime_pack: { notice: '临时开机时长无期限，用完为止；每台每天封顶 200 分钟。' },
+}
 
 export default defineFakeRoute([
   // ---- SKUs ----
@@ -188,8 +241,8 @@ export default defineFakeRoute([
       const id = Number(params.id)
       const idx = orders.findIndex(o => o.id === id)
       if (idx < 0) return { code: 404, message: 'not found', data: null }
-      orders[idx] = { ...orders[idx], status: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-      return ok({ order: orders[idx], items: orderItems[id] || [] })
+      orders[idx] = { ...orders[idx], status: 'paid', paid_at: new Date().toISOString() }
+      return ok({ ...orders[idx], items: orderItems[id] || [] })
     },
   },
   // ---- Accounts ----
@@ -207,7 +260,7 @@ export default defineFakeRoute([
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         })
       }
       const page = Number(query.page) || 1
@@ -228,7 +281,7 @@ export default defineFakeRoute([
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         }
       }
       const acct = accountStore[userId].account
@@ -262,7 +315,7 @@ export default defineFakeRoute([
           account: { id: 0, user_id: userId, balance_cents: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           ledger: [],
           ledger_total: 0,
-          capacities: { instance_seat: 0, boot_seat: 0, runtime_minute: 0 },
+          capacities: { seat: 0, boot_slot: 0, runtime_minute: 0 },
         }
       }
       const caps = accountStore[userId].capacities
@@ -335,7 +388,7 @@ export default defineFakeRoute([
       if (!trialGrantsStore[id]) trialGrantsStore[id] = []
       const policy = trials.find(t => t.id === id)
       const claimId = grantNextId++
-      const items = policy?.items?.length ? policy.items : [{ subject: 'instance_seat', quantity: 1 }]
+      const items = policy?.items?.length ? policy.items : [{ subject: 'seat', quantity: 1 }]
       for (const it of items) {
         trialGrantsStore[id].push({
           id: grantNextId++,
@@ -356,6 +409,78 @@ export default defineFakeRoute([
     response: ({ params }) => {
       const id = Number(params.id)
       return ok(trialGrantsStore[id] || [])
+    },
+  },
+  // ── 配置：定价 ──────────────────────────────────────────────
+  {
+    url: '/v1/admin/billing/pricing',
+    method: 'get',
+    response: () => ok(pricing),
+  },
+  {
+    url: '/v1/admin/billing/pricing',
+    method: 'put',
+    response: ({ body }) => {
+      pricing = { ...pricing, ...(body as any) }
+      return ok(pricing)
+    },
+  },
+  // ── 配置：临时时长 ───────────────────────────────────────────
+  {
+    url: '/v1/admin/billing/runtime-config',
+    method: 'get',
+    response: () => ok(runtimeCfg),
+  },
+  {
+    url: '/v1/admin/billing/runtime-config',
+    method: 'put',
+    response: ({ body }) => {
+      runtimeCfg = { ...runtimeCfg, ...(body as any) }
+      return ok(runtimeCfg)
+    },
+  },
+  // ── 配置：支付方式 ───────────────────────────────────────────
+  {
+    url: '/v1/admin/billing/payment-methods',
+    method: 'get',
+    response: () => ok([...paymentMethods].sort((a, b) => a.sort - b.sort)),
+  },
+  {
+    url: '/v1/admin/billing/payment-methods',
+    method: 'put',
+    response: ({ body }) => {
+      const d = body as any
+      if (Array.isArray(d.methods)) paymentMethods = d.methods
+      return ok([...paymentMethods].sort((a, b) => a.sort - b.sort))
+    },
+  },
+  // ── 配置：充值预设 ───────────────────────────────────────────
+  {
+    url: '/v1/admin/billing/recharge-presets',
+    method: 'get',
+    response: () => ok({ presets_cents: rechargePresets }),
+  },
+  {
+    url: '/v1/admin/billing/recharge-presets',
+    method: 'put',
+    response: ({ body }) => {
+      const d = body as any
+      if (Array.isArray(d.presets_cents)) rechargePresets = d.presets_cents
+      return ok({ presets_cents: rechargePresets })
+    },
+  },
+  // ── 配置：须知文案 ───────────────────────────────────────────
+  {
+    url: '/v1/admin/billing/notices',
+    method: 'get',
+    response: () => ok(notices),
+  },
+  {
+    url: '/v1/admin/billing/notices',
+    method: 'put',
+    response: ({ body }) => {
+      notices = { ...notices, ...(body as any) }
+      return ok(notices)
     },
   },
 ])

@@ -1,9 +1,16 @@
 import type {
   Account,
   AccountView,
+  BillingOrder,
+  BillingOrderDetail,
   DiscountTier,
+  NoticesConfig,
   Order,
   OrderDetail,
+  PaymentMethod,
+  PricingConfig,
+  RechargePresets,
+  RuntimeBillingConfig,
   RuntimeConfig,
   Sku,
   SkuCreate,
@@ -55,4 +62,25 @@ export default {
   deleteTrial: (id: number) => api.delete<unknown, R<null>>(`admin/billing/trials/${id}`),
   grantEligibility: (id: number, user_id: number) => api.post<unknown, R<null>>(`admin/billing/trials/${id}/eligibility`, { user_id }),
   trialGrants: (id: number) => api.get<unknown, R<TrialGrant[]>>(`admin/billing/trials/${id}/grants`),
+
+  // ── 购买与费用重构 · 配置后台（契约 §2）─────────────────────────────────
+  // 定价（按 kind：unit_price_cents、qty_tiers、duration_options、notice、billing_note）
+  getPricing: () => api.get<unknown, R<PricingConfig>>('admin/billing/pricing'),
+  savePricing: (d: PricingConfig) => api.put<unknown, R<PricingConfig>>('admin/billing/pricing', d),
+  // 临时时长（per-minute 单价、时长包预设、手输最低值、200/天封顶值、回收站保留天数）
+  getRuntimeBillingConfig: () => api.get<unknown, R<RuntimeBillingConfig>>('admin/billing/runtime-config'),
+  saveRuntimeBillingConfig: (d: RuntimeBillingConfig) => api.put<unknown, R<RuntimeBillingConfig>>('admin/billing/runtime-config', d),
+  // 支付方式（开关 + 排序）
+  getPaymentMethods: () => api.get<unknown, R<PaymentMethod[]>>('admin/billing/payment-methods'),
+  savePaymentMethods: (methods: PaymentMethod[]) => api.put<unknown, R<PaymentMethod[]>>('admin/billing/payment-methods', { methods }),
+  // 充值预设（金额档位）
+  getRechargePresets: () => api.get<unknown, R<RechargePresets>>('admin/billing/recharge-presets'),
+  saveRechargePresets: (presets_cents: number[]) => api.put<unknown, R<RechargePresets>>('admin/billing/recharge-presets', { presets_cents }),
+  // 须知文案（各 kind 的 notice/billing_note + runtime_pack notice）
+  getNotices: () => api.get<unknown, R<NoticesConfig>>('admin/billing/notices'),
+  saveNotices: (d: NoticesConfig) => api.put<unknown, R<NoticesConfig>>('admin/billing/notices', d),
+  // 订单（新形状，status ∈ unpaid/paid/expired；标记支付）
+  billingOrders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>
+    api.get<unknown, R<Page<BillingOrder>>>('admin/billing/orders', { params }),
+  billingMarkPaid: (id: number) => api.post<unknown, R<BillingOrderDetail>>(`admin/billing/orders/${id}/mark-paid`),
 }

@@ -51,14 +51,49 @@ type RuntimeCoverage = billinginternal.RuntimeCoverage
 // SettleResult 一次结算扣费结果。
 type SettleResult = billinginternal.SettleResult
 
-// SettleRuntime 结算某用户已发生的运行分钟（覆盖优先级扣费，幂等）。
+// SettleRuntime 结算某用户已发生的运行分钟（新引擎：满1分钟取整/包月名额优先/200封顶/临时时长回落，幂等）。
 func SettleRuntime(userID int, windowEnd time.Time, intervals []RuntimeInterval) (SettleResult, error) {
-	return billinginternal.RuntimeService.SettleRuntime(userID, windowEnd, intervals)
+	return billinginternal.RuntimeEngineService.Settle(userID, windowEnd, intervals)
 }
 
-// GetRuntimeCoverage 读用户覆盖能力（护栏用）。
+// GetRuntimeCoverage 读用户覆盖能力（旧护栏用，切换期保留）。
 func GetRuntimeCoverage(userID int) (RuntimeCoverage, error) {
 	return billinginternal.RuntimeService.RuntimeCoverage(userID)
+}
+
+// ---- 新购买/费用模型门面（契约 §3）----
+
+// InstanceRef 跨模块传入的实例引用（cpId + 创建时间）。
+type InstanceRef = billinginternal.InstanceRef
+
+// SeatCapacity 未过期 seat 授权单元数。
+func SeatCapacity(userID int) (int, error) {
+	return billinginternal.LicenseService.Capacity(userID, billinginternal.KindSeat)
+}
+
+// BootSlotCapacity 未过期 boot_slot 授权单元数。
+func BootSlotCapacity(userID int) (int, error) {
+	return billinginternal.LicenseService.Capacity(userID, billinginternal.KindBootSlot)
+}
+
+// RuntimeMinutesRemaining 临时开机时长余量（分钟）。
+func RuntimeMinutesRemaining(userID int) (int64, error) {
+	return billinginternal.RuntimeWalletService.Remaining(userID)
+}
+
+// ReconcileSeats 席位池 reconcile：传入用户全部非回收实例，返回需进回收站的 cpId（最新溢出）。
+func ReconcileSeats(userID int, instances []InstanceRef) (recycle []string, err error) {
+	return billinginternal.LicenseService.ReconcileSeats(userID, instances)
+}
+
+// CanBoot 开机前置校验：有空闲包月名额或临时时长>0 才允许。
+func CanBoot(userID int) (bool, error) {
+	return billinginternal.RuntimeEngineService.CanBoot(userID)
+}
+
+// ReleaseInstanceOccupancy 实例被删除/回收时释放其在 seat 单元上的占用。
+func ReleaseInstanceOccupancy(userID int, cpIDs []string) error {
+	return billinginternal.RuntimeEngineService.ReleaseInstanceOccupancy(userID, cpIDs)
 }
 
 // InitForTest 测试用：供其他模块装配 billing。

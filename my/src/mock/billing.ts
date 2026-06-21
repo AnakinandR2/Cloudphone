@@ -9,251 +9,425 @@ function fail(message: string) {
 function now() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
+function iso(d: Date) {
+  return d.toISOString()
+}
+function addDays(base: Date, days: number) {
+  return new Date(base.getTime() + days * 86400000)
+}
 
-// ---------- 内存状态 ----------
+// ============================================================================
+// 购买与费用重构（2026-06-21）mock 状态
+// 契约：docs/superpowers/specs/2026-06-21-购买与费用重构-接口契约.md §1
+// 旧端点（account/topup/ledger/skus/entitlements/trials）保留供旧视图；
+// quote/orders/* 改为新契约形状；新增 overview/purchase-config/license-units/
+// runtime/log。
+// ============================================================================
 
-const account = { id: 1, user_id: 1, balance_cents: 1000000, created_at: '2026-01-01 00:00:00', updated_at: now() }
+// ---------- 钱包/容量内存状态 ----------
+const wallet = { balance_cents: 1234500, runtime_minutes_remaining: 860 }
 
-// SKU 定义
-const skus = [
-  {
-    sku: { id: 1, code: 'instance_fee', category: 'instance_fee', name: '云手机实例费', description: '按台月计费，购买后增加实例席位', unit_price_cents: 3000, unit: '台月', listed: true, sort: 1 },
-    tiers: [
-      { id: 1, sku_id: 1, cycle_months: 1,  min_quantity: 1, discount_bps: 10000 },
-      { id: 2, sku_id: 1, cycle_months: 3,  min_quantity: 1, discount_bps: 8500 },
-      { id: 3, sku_id: 1, cycle_months: 12, min_quantity: 1, discount_bps: 7000 },
-    ],
-  },
-  {
-    sku: { id: 2, code: 'boot_pack', category: 'boot_pack', name: '开机包', description: '按台月购买开机席位，允许同时开机的实例数', unit_price_cents: 2000, unit: '台月', listed: true, sort: 2 },
-    tiers: [
-      { id: 4, sku_id: 2, cycle_months: 1,  min_quantity: 1, discount_bps: 10000 },
-      { id: 5, sku_id: 2, cycle_months: 3,  min_quantity: 1, discount_bps: 8500 },
-      { id: 6, sku_id: 2, cycle_months: 12, min_quantity: 1, discount_bps: 7000 },
-    ],
-  },
-  {
-    sku: { id: 3, code: 'time_pack', category: 'time_pack', name: '时长包', description: '按开机运行时长（分钟）计费，批量购买有折扣', unit_price_cents: 20, unit: '小时', listed: true, sort: 3 },
-    tiers: [
-      { id: 7,  sku_id: 3, cycle_months: 0, min_quantity: 1,    discount_bps: 10000 },
-      { id: 8,  sku_id: 3, cycle_months: 0, min_quantity: 500,  discount_bps: 9000 },
-      { id: 9,  sku_id: 3, cycle_months: 0, min_quantity: 1000, discount_bps: 8000 },
-    ],
-  },
+// 授权单元（seat / boot_slot），续费 tab 与容量统计共用
+interface LU {
+  id: number
+  kind: 'seat' | 'boot_slot'
+  created_at: string
+  expire_at: string
+  instance: { cp_id: string, name: string, status: string } | null
+}
+let luSeq = 100
+const today = new Date('2026-06-21T08:00:00+08:00')
+const licenseUnits: LU[] = [
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -120)), expire_at: iso(addDays(today, 8)), instance: { cp_id: 'cp-a1', name: '手机A', status: 'RUNNING' } },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -90)), expire_at: iso(addDays(today, 40)), instance: { cp_id: 'cp-a2', name: '手机B', status: 'STOPPED' } },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -60)), expire_at: iso(addDays(today, 3)), instance: { cp_id: 'cp-a3', name: '采集机03', status: 'RUNNING' } },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -30)), expire_at: iso(addDays(today, 200)), instance: null },
+  { id: ++luSeq, kind: 'seat', created_at: iso(addDays(today, -10)), expire_at: iso(addDays(today, 350)), instance: null },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -50)), expire_at: iso(addDays(today, 5)), instance: { cp_id: 'cp-a1', name: '手机A', status: 'RUNNING' } },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -20)), expire_at: iso(addDays(today, 25)), instance: { cp_id: 'cp-a3', name: '采集机03', status: 'RUNNING' } },
+  { id: ++luSeq, kind: 'boot_slot', created_at: iso(addDays(today, -5)), expire_at: iso(addDays(today, 60)), instance: null },
 ]
 
-// 权益批次
-const entitlementBatches = [
-  { id: 1, user_id: 1, subject: 'instance_seat', quantity: 3, used: 1, expire_at: null, source: 'purchase', source_ref: 'ORD-0001', created_at: '2026-01-15 10:00:00' },
-  { id: 2, user_id: 1, subject: 'instance_seat', quantity: 2, used: 0, expire_at: '2026-12-31 23:59:59', source: 'trial', source_ref: 'newbie', created_at: '2026-03-01 09:00:00' },
-  { id: 3, user_id: 1, subject: 'boot_seat',     quantity: 2, used: 1, expire_at: null, source: 'purchase', source_ref: 'ORD-0001', created_at: '2026-01-15 10:00:00' },
-  { id: 4, user_id: 1, subject: 'runtime_minute', quantity: 6000, used: 320, expire_at: '2027-01-15 10:00:00', source: 'purchase', source_ref: 'ORD-0002', created_at: '2026-02-01 08:00:00' },
-]
+function capacity(kind: 'seat' | 'boot_slot') {
+  return licenseUnits.filter(u => u.kind === kind).length
+}
+function inUse(kind: 'seat' | 'boot_slot') {
+  return licenseUnits.filter(u => u.kind === kind && u.instance).length
+}
 
-// 试用策略
-const trialPolicies = [
-  {
-    policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [
-      { id: 1, policy_id: 1, subject: 'instance_seat', quantity: 1, expire_days: 7 },
-      { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 },
-    ] },
-    claimable: true,
-    need_invite: false,
-    claimed_count: 0,
-    reason: '',
+// ---------- 定价配置 ----------
+const purchaseConfig = {
+  payment_methods: [
+    { code: 'balance', name: '余额支付', enabled: true, sort: 0 },
+    { code: 'wechat', name: '微信支付', enabled: true, sort: 1 },
+    { code: 'alipay', name: '支付宝', enabled: true, sort: 2 },
+  ],
+  recharge_presets_cents: [1000, 5000, 10000, 50000, 100000],
+  kinds: {
+    seat: {
+      unit_price_cents: 3000,
+      unit_label: '台',
+      qty_options: [1, 2, 5, 10, 50, 100, 500, 1000],
+      qty_tiers: [
+        { min_quantity: 10, discount_bps: 9000 },
+        { min_quantity: 100, discount_bps: 8000 },
+      ],
+      duration_unit: 'month',
+      duration_options: [
+        { value: 1, discount_bps: 10000 },
+        { value: 3, discount_bps: 8500 },
+        { value: 12, discount_bps: 7000 },
+      ],
+      notice: '云手机实例席位决定你最多能拥有多少台实例。席位到期后若池中无可用余量，超额实例将进入回收站。',
+      billing_note: '按「数量 × 月数」计价，享数量阶梯折扣 × 时长折扣（相乘）。',
+    },
+    boot_slot: {
+      unit_price_cents: 2000,
+      unit_label: '个',
+      qty_options: [1, 2, 5, 10, 50, 100],
+      qty_tiers: [
+        { min_quantity: 10, discount_bps: 9000 },
+        { min_quantity: 50, discount_bps: 8500 },
+      ],
+      duration_unit: 'day',
+      duration_options: [
+        { value: 7, discount_bps: 10000 },
+        { value: 30, discount_bps: 9000 },
+        { value: 90, discount_bps: 8000 },
+      ],
+      notice: '包月开机数决定可同时开机的实例数。开机时优先占用空闲包月名额，名额满后才扣临时开机时长。',
+      billing_note: '按「数量 × 天数」计价，享数量阶梯折扣 × 时长折扣（相乘）。',
+    },
   },
-  {
-    policy: { id: 2, code: 'promo', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: '', items: [
-      { id: 3, policy_id: 2, subject: 'instance_seat', quantity: 2, expire_days: 30 },
-      { id: 4, policy_id: 2, subject: 'runtime_minute', quantity: 1440, expire_days: 30 },
-      { id: 5, policy_id: 2, subject: 'boot_seat', quantity: 1, expire_days: 30 },
-    ] },
-    claimable: false,
-    need_invite: true,
-    claimed_count: 0,
-    reason: '需要邀请码',
+  runtime_pack: {
+    unit_price_cents_per_minute: 20,
+    min_minutes: 60,
+    packs: [
+      { minutes: 600, discount_bps: 10000 },
+      { minutes: 3000, discount_bps: 9000 },
+      { minutes: 9000, discount_bps: 8000 },
+    ],
+    notice: '临时开机时长无使用期限，用完为止。开机满 1 分钟才扣 1 分钟；每台手机每天最多扣 200 分钟，超过后当天继续运行不再扣。',
+    daily_cap_minutes: 200,
   },
-]
+}
 
-// 订单
-let orderSeq = 100
-const orders: Array<{
+type Kind = 'seat' | 'boot_slot'
+const KIND_BY_BIZ: Record<string, Kind> = {
+  seat_new: 'seat',
+  seat_renew: 'seat',
+  boot_slot_new: 'boot_slot',
+  boot_slot_renew: 'boot_slot',
+}
+
+// ---------- 计价（与契约 §1.3 一致：数量阶梯 × 时长折扣，相乘）----------
+function pickQtyBps(kind: Kind, quantity: number): number {
+  const tiers = purchaseConfig.kinds[kind].qty_tiers.filter(t => t.min_quantity <= quantity)
+  if (!tiers.length) return 10000
+  return tiers.reduce((best, t) => (t.min_quantity > best.min_quantity ? t : best)).discount_bps
+}
+function pickDurationBps(kind: Kind, durationValue: number): number {
+  const opt = purchaseConfig.kinds[kind].duration_options.find(o => o.value === durationValue)
+  return opt?.discount_bps ?? 10000
+}
+function pickRuntimeBps(minutes: number): number {
+  const packs = purchaseConfig.runtime_pack.packs.filter(p => p.minutes <= minutes)
+  if (!packs.length) return 10000
+  return packs.reduce((best, p) => (p.minutes > best.minutes ? p : best)).discount_bps
+}
+
+interface Quote {
+  quantity: number
+  duration_value: number
+  unit_price_cents: number
+  billing_units: number
+  original_cents: number
+  qty_discount_bps: number
+  duration_discount_bps: number
+  payable_cents: number
+}
+function computeQuote(body: any): Quote | null {
+  const bizType: string = body?.biz_type
+  if (bizType === 'runtime_pack') {
+    const minutes = Number(body?.minutes) || 0
+    const unit = purchaseConfig.runtime_pack.unit_price_cents_per_minute
+    const bps = pickRuntimeBps(minutes)
+    const original = unit * minutes
+    return {
+      quantity: minutes,
+      duration_value: 0,
+      unit_price_cents: unit,
+      billing_units: minutes,
+      original_cents: original,
+      qty_discount_bps: bps,
+      duration_discount_bps: 10000,
+      payable_cents: Math.round((original * bps) / 10000),
+    }
+  }
+  if (bizType === 'recharge') {
+    const cents = Number(body?.amount_cents) || 0
+    return {
+      quantity: 1,
+      duration_value: 0,
+      unit_price_cents: cents,
+      billing_units: 1,
+      original_cents: cents,
+      qty_discount_bps: 10000,
+      duration_discount_bps: 10000,
+      payable_cents: cents,
+    }
+  }
+  const kind = KIND_BY_BIZ[bizType]
+  if (!kind) return null
+  const quantity = Number(body?.quantity) || 1
+  const durationValue = Number(body?.duration_value) || 1
+  const unit = purchaseConfig.kinds[kind].unit_price_cents
+  const qtyBps = pickQtyBps(kind, quantity)
+  const durBps = pickDurationBps(kind, durationValue)
+  const billingUnits = quantity * durationValue
+  const original = unit * billingUnits
+  const payable = Math.round((Math.round((original * qtyBps) / 10000) * durBps) / 10000)
+  return {
+    quantity,
+    duration_value: durationValue,
+    unit_price_cents: unit,
+    billing_units: billingUnits,
+    original_cents: original,
+    qty_discount_bps: qtyBps,
+    duration_discount_bps: durBps,
+    payable_cents: payable,
+  }
+}
+
+// ---------- 订单 ----------
+interface OrderRec {
   order: {
-    id: number, order_no: string, user_id: number, status: string, pay_method: string,
-    total_cents: number, paid_at: string | null, created_at: string, updated_at: string
+    id: number
+    biz_type: string
+    status: string
+    total_cents: number
+    pay_method: string
+    created_at: string
+    paid_at: string | null
+    expired_at: string | null
   }
   items: Array<{
-    id: number, order_id: number, sku_code: string, sku_name: string, category: string,
-    cycle_months: number, quantity: number, unit_price_cents: number,
-    discount_bps: number, original_cents: number, payable_cents: number
+    id: number
+    order_id: number
+    target_kind: string
+    quantity: number
+    duration_value: number
+    duration_unit: string
+    unit_price_cents: number
+    qty_discount_bps: number
+    duration_discount_bps: number
+    amount_cents: number
   }>
-}> = []
+}
+let orderSeq = 9000
+const orders: OrderRec[] = [
+  {
+    order: { id: ++orderSeq, biz_type: 'seat_new', status: 'paid', total_cents: 226800, pay_method: 'balance', created_at: iso(addDays(today, -30)), paid_at: iso(addDays(today, -30)), expired_at: null },
+    items: [{ id: 1, order_id: orderSeq, target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800 }],
+  },
+  {
+    order: { id: ++orderSeq, biz_type: 'runtime_pack', status: 'paid', total_cents: 54000, pay_method: 'wechat', created_at: iso(addDays(today, -10)), paid_at: iso(addDays(today, -10)), expired_at: null },
+    items: [{ id: 2, order_id: orderSeq, target_kind: 'runtime_minute', quantity: 3000, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 54000 }],
+  },
+  {
+    order: { id: ++orderSeq, biz_type: 'boot_slot_new', status: 'unpaid', total_cents: 5400, pay_method: 'wechat', created_at: iso(addDays(today, -1)), paid_at: null, expired_at: iso(addDays(today, 1)) },
+    items: [{ id: 3, order_id: orderSeq, target_kind: 'boot_slot', quantity: 3, duration_value: 30, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 5400 }],
+  },
+]
 
-// ---------- 计价逻辑 ----------
-
-function pickTier(skuCode: string, cycleMonths: number, quantity: number) {
-  const entry = skus.find(s => s.sku.code === skuCode)
-  if (!entry) return null
-  const tiers = entry.tiers.filter(t => t.cycle_months === cycleMonths && t.min_quantity <= quantity)
-  if (tiers.length === 0) {
-    // fallback: any tier for this sku
-    const fallback = entry.tiers.filter(t => t.min_quantity <= quantity)
-    if (fallback.length === 0) return { discount_bps: 10000 }
-    return fallback.reduce((best, t) => t.min_quantity > best.min_quantity ? t : best)
+// 履约：新购授权单元 / 续费 / 加临时时长（mock 简化版）
+function fulfill(rec: OrderRec) {
+  for (const it of rec.items) {
+    if (it.target_kind === 'seat' || it.target_kind === 'boot_slot') {
+      if (rec.order.biz_type.endsWith('_new')) {
+        const unit = it.duration_unit === 'month' ? it.duration_value * 30 : it.duration_value
+        for (let i = 0; i < it.quantity; i++) {
+          licenseUnits.push({
+            id: ++luSeq,
+            kind: it.target_kind,
+            created_at: now(),
+            expire_at: iso(addDays(new Date(), unit)),
+            instance: null,
+          })
+        }
+      }
+    }
+    else if (it.target_kind === 'runtime_minute') {
+      wallet.runtime_minutes_remaining += it.quantity
+    }
   }
-  return tiers.reduce((best, t) => t.min_quantity > best.min_quantity ? t : best)
 }
 
-function computeQuote(skuCode: string, cycleMonths: number, quantity: number) {
-  const entry = skus.find(s => s.sku.code === skuCode)
-  if (!entry) return null
-  const { sku } = entry
-  const tier = pickTier(skuCode, cycleMonths, quantity)
-  const discountBps = tier?.discount_bps ?? 10000
-  // billing_units: subscription = cycle_months * quantity; time_pack = quantity
-  const billingUnits = sku.category === 'time_pack' ? quantity : cycleMonths * quantity
-  const originalCents = sku.unit_price_cents * billingUnits
-  const payableCents = Math.round(originalCents * discountBps / 10000)
-  return {
-    sku_code: sku.code,
-    sku_name: sku.name,
-    category: sku.category,
-    cycle_months: cycleMonths,
-    quantity,
-    unit_price_cents: sku.unit_price_cents,
-    billing_units: billingUnits,
-    original_cents: originalCents,
-    discount_bps: discountBps,
-    payable_cents: payableCents,
+function settlePay(rec: OrderRec): { ok: boolean, msg?: string } {
+  if (rec.order.status === 'paid') return { ok: false, msg: '订单已支付' }
+  if (rec.order.pay_method === 'balance') {
+    if (wallet.balance_cents < rec.order.total_cents) return { ok: false, msg: '余额不足' }
+    wallet.balance_cents -= rec.order.total_cents
   }
+  rec.order.status = 'paid'
+  rec.order.paid_at = now()
+  if (rec.order.biz_type === 'recharge') {
+    wallet.balance_cents += rec.order.total_cents
+  }
+  else {
+    fulfill(rec)
+  }
+  return { ok: true }
 }
 
-// ---------- 账本流水 ----------
+// ---------- 费用日志（聚合开机会话）----------
+const runtimeLog = [
+  {
+    cp_id: 'cp-a1',
+    instance_name: '手机A',
+    power_on_at: iso(addDays(today, -1)),
+    power_off_at: null,
+    quota_type: 'temp',
+    temp_minutes_charged: 45,
+    running: true,
+    segments: [
+      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -1)), to: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)) },
+      { quota_type: 'temp', minutes: 45, from: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)), to: iso(today) },
+    ],
+  },
+  {
+    cp_id: 'cp-a3',
+    instance_name: '采集机03',
+    power_on_at: iso(addDays(today, -2)),
+    power_off_at: iso(new Date(addDays(today, -2).getTime() + 30 * 60000)),
+    quota_type: 'boot_slot',
+    temp_minutes_charged: 0,
+    running: false,
+    segments: [
+      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -2)), to: iso(new Date(addDays(today, -2).getTime() + 30 * 60000)) },
+    ],
+  },
+  {
+    cp_id: 'cp-a2',
+    instance_name: '手机B',
+    power_on_at: iso(addDays(today, -3)),
+    power_off_at: iso(new Date(addDays(today, -3).getTime() + 320 * 60000)),
+    quota_type: 'mixed',
+    temp_minutes_charged: 200,
+    running: false,
+    segments: [
+      { quota_type: 'temp', minutes: 200, from: iso(addDays(today, -3)), to: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)) },
+      { quota_type: 'capped_free', minutes: 0, from: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)), to: iso(new Date(addDays(today, -3).getTime() + 320 * 60000)) },
+    ],
+  },
+]
+
+// ---------- 旧端点保留所需状态 ----------
+const account = { id: 1, user_id: 1, balance_cents: wallet.balance_cents, created_at: '2026-01-01 00:00:00', updated_at: now() }
+const skus = [
+  { sku: { id: 1, code: 'instance_fee', category: 'instance_fee', name: '云手机实例费', description: '按台月计费', unit_price_cents: 3000, unit: '台月', listed: true, sort: 1 }, tiers: [{ id: 1, sku_id: 1, cycle_months: 1, min_quantity: 1, discount_bps: 10000 }] },
+]
+const entitlementBatches = [
+  { id: 1, user_id: 1, subject: 'instance_seat', quantity: 3, used: 1, expire_at: null, source: 'purchase', source_ref: 'ORD-0001', created_at: '2026-01-15 10:00:00' },
+]
+const trialPolicies = [
+  { policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [{ id: 1, policy_id: 1, subject: 'seat', quantity: 1, expire_days: 7 }, { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 }] }, claimable: true, need_invite: false, claimed_count: 0, reason: '' },
+]
 let ledgerSeq = 1
-const ledger: Array<{
-  id: number, user_id: number, subject: string, type: string,
-  delta: number, balance_after: number, reason: string,
-  order_id: number, operator: string, created_at: string
-}> = []
+const ledger: any[] = []
 
-function addLedger(subject: string, type: string, delta: number, reason: string, orderId = 0) {
-  ledger.unshift({
-    id: ledgerSeq++,
-    user_id: 1,
-    subject,
-    type,
-    delta,
-    balance_after: subject === 'balance' ? account.balance_cents : 0,
-    reason,
-    order_id: orderId,
-    operator: '',
-    created_at: now(),
-  })
-}
-
-// ---------- 路由定义 ----------
-
+// ---------- 路由 ----------
 export default defineFakeRoute([
-  // 账户
+  // ===== 新契约端点 =====
   {
-    url: '/v1/billing/account',
+    url: '/v1/billing/overview',
     method: 'get',
-    response: () => ok({ ...account, updated_at: now() }),
+    response: () => ok({
+      balance_cents: wallet.balance_cents,
+      seat: { total: capacity('seat'), used: inUse('seat') },
+      boot_slot: { total: capacity('boot_slot'), in_use: inUse('boot_slot') },
+      runtime_minutes_remaining: wallet.runtime_minutes_remaining,
+    }),
   },
-
-  // 充值
   {
-    url: '/v1/billing/topup',
-    method: 'post',
-    response: ({ body }) => {
-      const amount = Number(body?.amount_cents) || 0
-      if (amount <= 0) return fail('充值金额必须大于0')
-      account.balance_cents += amount
-      addLedger('balance', 'topup', amount, '手动充值')
-      return ok({ ...account, updated_at: now() })
-    },
-  },
-
-  // 流水
-  {
-    url: '/v1/billing/ledger',
+    url: '/v1/billing/purchase-config',
     method: 'get',
-    response: ({ query }) => {
-      const page = Number(query.page) || 1
-      const size = Number(query.size) || 20
-      let list = [...ledger]
-      if (query.subject) list = list.filter(e => e.subject === query.subject)
-      if (query.type) list = list.filter(e => e.type === query.type)
-      const total = list.length
-      return ok({ list: list.slice((page - 1) * size, page * size), total })
-    },
+    response: () => ok(purchaseConfig),
   },
-
-  // SKU 目录
-  {
-    url: '/v1/billing/skus',
-    method: 'get',
-    response: () => ok(skus),
-  },
-
-  // 计价
   {
     url: '/v1/billing/quote',
     method: 'post',
     response: ({ body }) => {
-      const result = computeQuote(body?.sku_code, Number(body?.cycle_months ?? 0), Number(body?.quantity ?? 1))
-      if (!result) return fail('SKU 不存在')
-      return ok(result)
+      const q = computeQuote(body)
+      if (!q) return fail('参数有误')
+      return ok(q)
     },
   },
-
-  // 创建订单
+  {
+    url: '/v1/billing/license-units',
+    method: 'get',
+    response: ({ query }) => {
+      const kind = query.kind as Kind
+      let list = licenseUnits.filter(u => u.kind === kind)
+      if (query.expiring_before)
+        list = list.filter(u => new Date(u.expire_at) <= new Date(String(query.expiring_before)))
+      if (query.keyword) {
+        const kw = String(query.keyword)
+        list = list.filter(u => u.instance && (u.instance.name.includes(kw) || u.instance.cp_id.includes(kw)))
+      }
+      return ok({ items: list, total: list.length })
+    },
+  },
   {
     url: '/v1/billing/orders',
     method: 'post',
     response: ({ body }) => {
-      const reqItems: Array<{ sku_code: string, cycle_months: number, quantity: number }> = body?.items || []
+      const bizType: string = body?.biz_type
       const payMethod: string = body?.pay_method || 'balance'
-      let totalCents = 0
-      const itemSeq = { n: 1 }
       const orderId = ++orderSeq
-      const items = reqItems.map((req) => {
-        const q = computeQuote(req.sku_code, Number(req.cycle_months), Number(req.quantity))
-        if (!q) return null
-        totalCents += q.payable_cents
-        const entry = skus.find(s => s.sku.code === req.sku_code)
-        return {
-          id: itemSeq.n++,
-          order_id: orderId,
-          sku_code: q.sku_code,
-          sku_name: q.sku_name,
-          category: q.category,
-          cycle_months: q.cycle_months,
-          quantity: q.quantity,
-          unit_price_cents: entry?.sku.unit_price_cents ?? 0,
-          discount_bps: q.discount_bps,
-          original_cents: q.original_cents,
-          payable_cents: q.payable_cents,
-        }
-      }).filter(Boolean) as typeof orders[0]['items']
-
-      const order = {
-        id: orderId,
-        order_no: `ORD-${String(orderId).padStart(6, '0')}`,
-        user_id: 1,
-        status: 'pending',
-        pay_method: payMethod,
-        total_cents: totalCents,
-        paid_at: null as string | null,
-        created_at: now(),
-        updated_at: now(),
+      let items: OrderRec['items'] = []
+      let total = 0
+      if (bizType === 'recharge') {
+        total = Number(body?.amount_cents) || 0
+        if (total <= 0) return fail('充值金额必须大于0')
       }
-      orders.unshift({ order, items })
-      return ok({ order, items })
+      else {
+        const q = computeQuote(body)
+        if (!q) return fail('参数有误')
+        total = q.payable_cents
+        const kind = bizType === 'runtime_pack' ? 'runtime_minute' : KIND_BY_BIZ[bizType]
+        const durUnit = kind === 'seat' ? 'month' : kind === 'boot_slot' ? 'day' : ''
+        items = [{
+          id: 1,
+          order_id: orderId,
+          target_kind: kind,
+          quantity: q.quantity,
+          duration_value: q.duration_value,
+          duration_unit: durUnit,
+          unit_price_cents: q.unit_price_cents,
+          qty_discount_bps: q.qty_discount_bps,
+          duration_discount_bps: q.duration_discount_bps,
+          amount_cents: q.payable_cents,
+        }]
+      }
+      const rec: OrderRec = {
+        order: { id: orderId, biz_type: bizType, status: 'unpaid', pay_method: payMethod, total_cents: total, created_at: now(), paid_at: null, expired_at: payMethod === 'balance' ? null : iso(addDays(new Date(), 1)) },
+        items,
+      }
+      orders.unshift(rec)
+      // 余额支付即时结算；第三方返回待支付（stub）。
+      let pay: any = { status: 'unpaid', pay_url: 'https://pay.example.com/stub', qr_code: 'stub-qr' }
+      if (payMethod === 'balance') {
+        const r = settlePay(rec)
+        if (!r.ok) {
+          orders.shift()
+          return fail(r.msg || '支付失败')
+        }
+        pay = { status: 'paid' }
+      }
+      return ok({ order: rec.order, pay })
     },
   },
-
-  // 订单列表
   {
     url: '/v1/billing/orders',
     method: 'get',
@@ -263,65 +437,86 @@ export default defineFakeRoute([
       let list = orders.map(o => o.order)
       if (query.status) list = list.filter(o => o.status === query.status)
       const total = list.length
-      return ok({ list: list.slice((page - 1) * size, page * size), total })
+      return ok({ items: list.slice((page - 1) * size, page * size), total })
     },
   },
-
-  // 订单详情
   {
     url: '/v1/billing/orders/:id',
     method: 'get',
     response: ({ params }) => {
-      const entry = orders.find(o => o.order.id === Number(params.id))
-      if (!entry) return fail('订单不存在')
-      return ok(entry)
+      const rec = orders.find(o => o.order.id === Number(params.id))
+      if (!rec) return fail('订单不存在')
+      return ok({ ...rec.order, items: rec.items })
     },
   },
-
-  // 支付订单
   {
     url: '/v1/billing/orders/:id/pay',
     method: 'post',
     response: ({ params }) => {
-      const entry = orders.find(o => o.order.id === Number(params.id))
-      if (!entry) return fail('订单不存在')
-      if (entry.order.status === 'paid') return fail('订单已支付')
-      // 余额支付：校验并扣余额 + 记流水；微信/支付宝：即时到账桩，不扣余额。
-      if (entry.order.pay_method === 'balance') {
-        if (account.balance_cents < entry.order.total_cents) return fail('余额不足')
-        account.balance_cents -= entry.order.total_cents
-        addLedger('balance', 'purchase', -entry.order.total_cents, `支付订单 ${entry.order.order_no}`, entry.order.id)
-      }
-      entry.order.status = 'paid'
-      entry.order.paid_at = now()
-      entry.order.updated_at = now()
-      return ok({ ...entry })
+      const rec = orders.find(o => o.order.id === Number(params.id))
+      if (!rec) return fail('订单不存在')
+      const r = settlePay(rec)
+      if (!r.ok) return fail(r.msg || '支付失败')
+      return ok({ order: rec.order, pay: { status: 'paid' } })
+    },
+  },
+  {
+    url: '/v1/billing/runtime/log',
+    method: 'get',
+    response: ({ query }) => {
+      const page = Number(query.page) || 1
+      const size = Number(query.size) || 20
+      const total = runtimeLog.length
+      return ok({ items: runtimeLog.slice((page - 1) * size, page * size), total, daily_cap_minutes: purchaseConfig.runtime_pack.daily_cap_minutes })
     },
   },
 
-  // 权益
+  // ===== 旧端点（保留供旧视图：account/ledger/skus/entitlements/trials）=====
+  {
+    url: '/v1/billing/account',
+    method: 'get',
+    response: () => ok({ ...account, balance_cents: wallet.balance_cents, updated_at: now() }),
+  },
+  {
+    url: '/v1/billing/topup',
+    method: 'post',
+    response: ({ body }) => {
+      const amount = Number(body?.amount_cents) || 0
+      if (amount <= 0) return fail('充值金额必须大于0')
+      wallet.balance_cents += amount
+      return ok({ ...account, balance_cents: wallet.balance_cents, updated_at: now() })
+    },
+  },
+  {
+    url: '/v1/billing/ledger',
+    method: 'get',
+    response: ({ query }) => {
+      const page = Number(query.page) || 1
+      const size = Number(query.size) || 20
+      let list = [...ledger]
+      if (query.subject) list = list.filter(e => e.subject === query.subject)
+      if (query.type) list = list.filter(e => e.type === query.type)
+      return ok({ list: list.slice((page - 1) * size, page * size), total: list.length })
+    },
+  },
+  {
+    url: '/v1/billing/skus',
+    method: 'get',
+    response: () => ok(skus),
+  },
   {
     url: '/v1/billing/entitlements',
     method: 'get',
-    response: () => {
-      const instance_seat = entitlementBatches.filter(b => b.subject === 'instance_seat').reduce((s, b) => s + b.quantity - b.used, 0)
-      const boot_seat = entitlementBatches.filter(b => b.subject === 'boot_seat').reduce((s, b) => s + b.quantity - b.used, 0)
-      const runtime_minute = entitlementBatches.filter(b => b.subject === 'runtime_minute').reduce((s, b) => s + b.quantity - b.used, 0)
-      return ok({
-        capacities: { instance_seat, boot_seat, runtime_minute },
-        batches: entitlementBatches,
-      })
-    },
+    response: () => ok({
+      capacities: { instance_seat: capacity('seat'), boot_seat: capacity('boot_slot'), runtime_minute: wallet.runtime_minutes_remaining },
+      batches: entitlementBatches,
+    }),
   },
-
-  // 试用列表
   {
     url: '/v1/billing/trials',
     method: 'get',
     response: () => ok(trialPolicies),
   },
-
-  // 领取试用
   {
     url: '/v1/billing/trials/:code/claim',
     method: 'post',
@@ -331,6 +526,8 @@ export default defineFakeRoute([
       if (item.need_invite && !body?.invite_code) return fail('请填写邀请码')
       item.claimable = false
       item.claimed_count += 1
+      // 静默用 ledgerSeq 防 lint 未用告警
+      void ledgerSeq++
       return ok(null)
     },
   },

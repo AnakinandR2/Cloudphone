@@ -43,8 +43,8 @@ const granting = reactive<Record<number, boolean>>({})
 const grants = reactive<Record<number, TrialGrant[]>>({})
 const grantsLoading = reactive<Record<number, boolean>>({})
 
-// 三类资源科目（表单固定三行；数量 0 = 不发该项）。
-const ITEM_SUBJECTS = ['instance_seat', 'runtime_minute', 'boot_seat'] as const
+// 三类资源科目（表单固定三行；数量 0 = 不发该项）。契约收敛为 seat/boot_slot/runtime_minute。
+const ITEM_SUBJECTS = ['seat', 'runtime_minute', 'boot_slot'] as const
 
 function subjectLabel(s: string): string {
   return t(`billing.subject_${s}`)
@@ -111,9 +111,9 @@ interface FormState {
 
 function emptyItems(): Record<string, ItemRow> {
   return {
-    instance_seat: { quantity: 0, expire_days: 0 },
+    seat: { quantity: 0, expire_days: 0 },
     runtime_minute: { quantity: 0, expire_days: 0 },
-    boot_seat: { quantity: 0, expire_days: 0 },
+    boot_slot: { quantity: 0, expire_days: 0 },
   }
 }
 

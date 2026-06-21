@@ -12,7 +12,7 @@ export interface LedgerEntry {
   id: number
   user_id: number
   subject: string // balance/instance_seat/boot_seat/runtime_minute
-  type: string    // topup/consume/adjust_grant/adjust_deduct/purchase/trial
+  type: string // topup/consume/adjust_grant/adjust_deduct/purchase/trial
   delta: number
   balance_after: number
   reason: string
@@ -114,6 +114,159 @@ export interface RuntimeUsageSlice {
   unfunded_minutes: number
   unit_price_cents: number
   created_at: string
+}
+
+// ============================================================================
+// 购买与费用重构（2026-06-21）— 新模型类型
+// 契约：docs/superpowers/specs/2026-06-21-购买与费用重构-接口契约.md §1
+// 金额一律 cents（分）；时间一律 RFC3339 字符串；bps：10000=全价，8500=8.5折。
+// kind ∈ {seat, boot_slot}；biz_type ∈ {recharge, seat_new, seat_renew,
+//   boot_slot_new, boot_slot_renew, runtime_pack}。
+// ============================================================================
+
+export type LicenseKind = 'seat' | 'boot_slot'
+export type BizType = 'recharge' | 'seat_new' | 'seat_renew' | 'boot_slot_new' | 'boot_slot_renew' | 'runtime_pack'
+export type OrderStatus2 = 'unpaid' | 'paid' | 'expired'
+export type QuotaType = 'boot_slot' | 'temp' | 'capped_free' | 'mixed'
+
+/** GET /billing/overview — KPI 概览 */
+export interface BillingOverview {
+  balance_cents: number
+  seat: { total: number, used: number }
+  boot_slot: { total: number, in_use: number }
+  runtime_minutes_remaining: number
+}
+
+/** GET /billing/purchase-config — 渲染拉条/按钮组/须知/支付方式 */
+export interface PaymentMethod {
+  code: string // wechat/alipay/balance
+  name: string
+  enabled: boolean
+  sort: number
+}
+export interface QtyTier {
+  min_quantity: number
+  discount_bps: number
+}
+export interface DurationOption {
+  value: number
+  discount_bps: number
+}
+export interface KindConfig {
+  unit_price_cents: number
+  unit_label: string
+  qty_options: number[]
+  qty_tiers: QtyTier[]
+  duration_unit: 'month' | 'day'
+  duration_options: DurationOption[]
+  notice: string
+  billing_note: string
+}
+export interface RuntimePackConfig {
+  unit_price_cents_per_minute: number
+  min_minutes: number
+  packs: { minutes: number, discount_bps: number }[]
+  notice: string
+  daily_cap_minutes: number
+}
+export interface PurchaseConfig {
+  payment_methods: PaymentMethod[]
+  recharge_presets_cents: number[]
+  kinds: Record<LicenseKind, KindConfig>
+  runtime_pack: RuntimePackConfig
+}
+
+/** POST /billing/quote — 服务端权威计价 */
+export interface QuoteReq2 {
+  biz_type: BizType
+  quantity?: number
+  duration_value?: number
+  minutes?: number
+}
+export interface QuoteResult2 {
+  quantity: number
+  duration_value: number
+  unit_price_cents: number
+  billing_units: number
+  original_cents: number
+  qty_discount_bps: number
+  duration_discount_bps: number
+  payable_cents: number
+}
+
+/** GET /billing/license-units — 续费 tab 用 */
+export interface LicenseUnitInstance {
+  cp_id: string
+  name: string
+  status: string
+}
+export interface LicenseUnit {
+  id: number
+  kind: LicenseKind
+  created_at: string
+  expire_at: string
+  instance: LicenseUnitInstance | null
+}
+
+/** Order（新形状，契约 §1.5） */
+export interface Order2 {
+  id: number
+  biz_type: BizType
+  status: OrderStatus2
+  total_cents: number
+  pay_method: string
+  created_at: string
+  paid_at: string | null
+  expired_at: string | null
+}
+export interface OrderItem2 {
+  id: number
+  order_id: number
+  target_kind: string
+  quantity: number
+  duration_value: number
+  duration_unit: string
+  unit_price_cents: number
+  qty_discount_bps: number
+  duration_discount_bps: number
+  amount_cents: number
+}
+export interface OrderDetail2 { order: Order2, items: OrderItem2[] }
+
+/** POST /billing/orders 请求体 */
+export interface OrderCreateReq2 {
+  biz_type: BizType
+  quantity?: number
+  duration_value?: number
+  unit_ids?: number[]
+  minutes?: number
+  amount_cents?: number
+  pay_method: string
+}
+export interface PayInfo { status: OrderStatus2, [k: string]: unknown }
+export interface OrderCreateResult { order: Order2, pay: PayInfo }
+
+/** GET /billing/runtime/log — 聚合到开机会话的费用记录 */
+export interface RuntimeLogSegment {
+  quota_type: QuotaType
+  minutes: number
+  from: string
+  to: string
+}
+export interface RuntimeLogEntry {
+  cp_id: string
+  instance_name: string
+  power_on_at: string
+  power_off_at: string | null
+  quota_type: QuotaType
+  temp_minutes_charged: number
+  running: boolean
+  segments: RuntimeLogSegment[]
+}
+export interface RuntimeLogResult {
+  items: RuntimeLogEntry[]
+  total: number
+  daily_cap_minutes: number
 }
 
 // 试用

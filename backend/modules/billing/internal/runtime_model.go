@@ -39,9 +39,12 @@ type RuntimeSettlementWatermark struct {
 }
 
 // RuntimeInterval 一段运行区间（End=nil 表示运行中，以窗口右界为准）。供 SettleRuntime 入参。
+// CpID / RunSessionRef 由新计费引擎使用（旧引擎只读 Start/End）；为空时引擎按 Start 合成会话标识。
 type RuntimeInterval struct {
-	Start time.Time
-	End   *time.Time
+	Start         time.Time
+	End           *time.Time
+	CpID          string // 实例 cpId（新引擎用于按台封顶/落账）
+	RunSessionRef string // 开机会话标识（新引擎用于幂等结算）
 }
 
 // RuntimeCoverage 给护栏读的覆盖能力快照。
@@ -53,6 +56,8 @@ type RuntimeCoverage struct {
 }
 
 // SettleResult 一次结算的扣费结果。
+// 旧引擎填 BillableUnitMinutes/ChargedPackMinutes/ChargedBalanceCents/UnfundedMinutes；
+// 新引擎填 ChargedTempMinutes/BootSlotMinutes/CappedFreeMinutes（按 quota_type 汇总本次结算扣量）。
 type SettleResult struct {
 	WindowStart         time.Time
 	WindowEnd           time.Time
@@ -60,4 +65,9 @@ type SettleResult struct {
 	ChargedPackMinutes  int64
 	ChargedBalanceCents int64
 	UnfundedMinutes     int64
+
+	// 新引擎汇总：
+	ChargedTempMinutes int64
+	BootSlotMinutes    int64
+	CappedFreeMinutes  int64
 }

@@ -13,6 +13,11 @@ type repository interface {
 	getAccountOrNil(userID int) (*Account, error)
 	applyBalance(userID int, delta int64, typ, reason string, orderID uint, operator string) (*Account, error)
 	listLedger(userID, offset, limit int, subject, typ string) ([]LedgerEntry, int64, error)
+	insertLedgerEntry(e *LedgerEntry) error
+}
+
+func (r *gormRepository) insertLedgerEntry(e *LedgerEntry) error {
+	return r.db.Create(e).Error
 }
 
 type gormRepository struct{ db *gorm.DB }
