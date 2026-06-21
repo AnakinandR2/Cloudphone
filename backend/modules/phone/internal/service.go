@@ -467,13 +467,6 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 	}
 
 	if operation == "开机" {
-		frozen, err := billing.IsFrozen(userID)
-		if err != nil {
-			return err
-		}
-		if frozen {
-			return apperr.Forbidden("账户已冻结，无法开机，请续费实例席位")
-		}
 		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}

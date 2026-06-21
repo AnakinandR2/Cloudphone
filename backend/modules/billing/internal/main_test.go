@@ -9,7 +9,7 @@ import (
 
 func TestMain(m *testing.M) {
 	tdb, _ := framework.SetupTestDB(m)
-	if err := framework.DB.AutoMigrate(&Account{}, &LedgerEntry{}, &EntitlementBatch{}, &Order{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}, &BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
+	if err := framework.DB.AutoMigrate(&Account{}, &LedgerEntry{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &LicenseUnit{},
 		&PricingConfig{}, &RuntimeMinuteWallet{}, &RuntimeDailyUsage{}, &RuntimeCharge{}, &RuntimeSessionProgress{}, &BizOrder{}, &BizOrderItem{}, &framework.CronLock{}); err != nil {
 		panic(err)
 	}

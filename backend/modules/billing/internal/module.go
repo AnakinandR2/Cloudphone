@@ -18,10 +18,7 @@ func (m *billingModule) Name() string { return "billing" }
 func (m *billingModule) Init(db *gorm.DB) error {
 	m.db = db
 	BillingService = newService(newRepository(db))
-	EntitlementService = newEntitlementService(newEntitlementRepository(db))
 	TrialService = newTrialService(newTrialRepository(db))
-	SeatService = newSeatService(newSeatRepository(db), EntitlementService)
-	RuntimeService = newRuntimeService(newRuntimeRepository(db), EntitlementService, newRepository(db))
 	LicenseService = newLicenseService(newLicenseRepository(db))
 
 	// 新购买/费用模型（Phase 1c + 2）装配。
@@ -42,10 +39,8 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		g.GET("/account", GetMyAccount)
 		g.GET("/ledger", GetMyLedger)
 		g.POST("/topup", Topup)
-		g.GET("/entitlements", GetMyEntitlements)
 		g.GET("/trials", ListMyTrials)
 		g.POST("/trials/:code/claim", ClaimTrial)
-		g.GET("/runtime/usage", GetMyRuntimeUsage)
 
 		// 新购买/费用模型（契约 §1）：占用 quote/orders 等契约路径。
 		g.GET("/overview", GetBillingOverview)
@@ -92,36 +87,17 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 	}
 }
 
-func (m *billingModule) OnStart() error {
-	if SeatService != nil {
-		dunningRunner = framework.NewPeriodicRunner(m.db, "billing:dunning", dunningInterval, dunningLease, func() error {
-			return SeatService.runDunning(defaultGraceDays, defaultFrozenDays)
-		})
-		dunningRunner.Start()
-	}
-	return nil
-}
+func (m *billingModule) OnStart() error { return nil }
 
-func (m *billingModule) OnStop() error {
-	if dunningRunner != nil {
-		dunningRunner.Stop()
-		dunningRunner = nil
-	}
-	return nil
-}
+func (m *billingModule) OnStop() error { return nil }
 
 func init() {
 	framework.GlobalModule.Register(&billingModule{})
 
-	// 建表（幂等）：计费账户 + 统一流水 + 授权单元/订单等。
-	// 旧 Order（billing_orders）与 EntitlementBatch 仍被 TrialService 使用，保留。
+	// 建表（幂等）：计费账户 + 统一流水 + 授权单元 + 试用 + 新购买/费用模型表。
 	framework.RegisterSetup(func(db *gorm.DB) error {
-		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &EntitlementBatch{}, &Order{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{}, &BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
+		if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &LicenseUnit{},
 			&PricingConfig{}, &RuntimeMinuteWallet{}, &RuntimeDailyUsage{}, &RuntimeCharge{}, &RuntimeSessionProgress{}, &BizOrder{}, &BizOrderItem{}); err != nil {
-			return err
-		}
-		// 时长费单行配置 seed（幂等：不存在才建，默认单价 0=未启用收费）。
-		if err := db.Where(BillingRuntimeConfig{ID: 1}).FirstOrCreate(&BillingRuntimeConfig{ID: 1}).Error; err != nil {
 			return err
 		}
 		// 定价配置 seed（幂等：不存在才写默认值）。
@@ -131,9 +107,8 @@ func init() {
 
 // InitForTest 供其他模块的测试装配 billing（建表 + 装配服务）。仅测试用。
 func InitForTest(db *gorm.DB) error {
-	if err := db.AutoMigrate(&Account{}, &LedgerEntry{}, &EntitlementBatch{},
-		&Order{}, &TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &SeatUsage{}, &DunningState{},
-		&BillingRuntimeConfig{}, &RuntimeUsageSlice{}, &RuntimeSettlementWatermark{}, &LicenseUnit{},
+	if err := db.AutoMigrate(&Account{}, &LedgerEntry{},
+		&TrialPolicy{}, &TrialPolicyItem{}, &TrialClaim{}, &TrialGrant{}, &TrialEligibility{}, &LicenseUnit{},
 		&PricingConfig{}, &RuntimeMinuteWallet{}, &RuntimeDailyUsage{}, &RuntimeCharge{}, &RuntimeSessionProgress{}, &BizOrder{}, &BizOrderItem{}); err != nil {
 		return err
 	}

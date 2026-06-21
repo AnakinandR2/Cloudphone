@@ -101,9 +101,10 @@ func (r *gormTrialRepository) manualEligible(policyID, userID int) (bool, error)
 	return n > 0, err
 }
 
+// countPaidOrders 查新模型已支付订单数（新用户资格判定）。
 func (r *gormTrialRepository) countPaidOrders(userID int) (int, error) {
 	var n int64
-	err := r.db.Model(&Order{}).Where("user_id = ? AND status = ?", userID, OrderPaid).Count(&n).Error
+	err := r.db.Model(&BizOrder{}).Where("user_id = ? AND status = ?", userID, BizOrderPaid).Count(&n).Error
 	return int(n), err
 }
 
@@ -117,7 +118,11 @@ func (r *gormTrialRepository) listGrants(policyID int) ([]TrialGrant, error) {
 	return items, err
 }
 
-// claim 单事务：守卫式限领（按 TrialClaim）+ 建领取头 + 遍历各发放项发放权益(type=trial)。
+// claim 单事务：守卫式限领（按 TrialClaim）+ 建领取头 + 遍历各发放项发放（新模型）。
+//   - seat / boot_slot：在 tx 内创建 Quantity 个 LicenseUnit（到期 = now + ExpireDays 天，0 视为永久=100 年）。
+//   - runtime_minute：给 RuntimeMinuteWallet 加 Quantity 分钟。
+//
+// 每项写一条 LedgerEntry(type=trial)。与 TrialClaim/TrialGrant 同一 tx，保证原子性。
 func (r *gormTrialRepository) claim(policy *TrialPolicy, userID int) error {
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -134,33 +139,68 @@ func (r *gormTrialRepository) claim(policy *TrialPolicy, userID int) error {
 		if err := tx.Create(&claim).Error; err != nil {
 			return err
 		}
-		entRepo := &gormEntitlementRepository{db: tx}
+		ref := "trial:" + policy.Code
 		for _, it := range policy.Items {
-			var expireAt *time.Time
-			if it.ExpireDays > 0 {
-				exp := now.AddDate(0, 0, it.ExpireDays)
-				expireAt = &exp
-			}
 			if err := tx.Create(&TrialGrant{ClaimID: claim.ID, PolicyID: policy.ID, UserID: uint(userID), Subject: it.Subject, Quantity: it.Quantity}).Error; err != nil {
 				return err
 			}
-			batch := EntitlementBatch{UserID: uint(userID), Subject: it.Subject, Quantity: it.Quantity, Source: SourceTrial, SourceRef: "trial:" + policy.Code, ExpireAt: expireAt}
-			if err := entRepo.createBatch(&batch); err != nil {
-				return err
-			}
-			capacity, err := entRepo.capacity(userID, it.Subject, now)
+			balanceAfter, err := grantTrialItem(tx, userID, it, now, ref)
 			if err != nil {
 				return err
 			}
-			if err := entRepo.insertLedger(&LedgerEntry{
+			if err := tx.Create(&LedgerEntry{
 				UserID: uint(userID), Subject: it.Subject, Type: LedgerTrial,
-				Delta: it.Quantity, BalanceAfter: capacity, Reason: "trial:" + policy.Code, Operator: "user:" + itoa(userID),
-			}); err != nil {
+				Delta: it.Quantity, BalanceAfter: balanceAfter, Reason: ref, Operator: "user:" + itoa(userID),
+			}).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// grantTrialItem 在事务内发放单个试用项，返回发放后的容量/余量（写入 LedgerEntry.BalanceAfter）。
+func grantTrialItem(tx *gorm.DB, userID int, it TrialPolicyItem, now time.Time, ref string) (int64, error) {
+	switch it.Subject {
+	case KindSeat, KindBootSlot:
+		// ExpireDays==0 视为永久 → 100 年后；否则 now + ExpireDays 天。
+		expire := now.AddDate(100, 0, 0)
+		if it.ExpireDays > 0 {
+			expire = now.AddDate(0, 0, it.ExpireDays)
+		}
+		units := make([]LicenseUnit, 0, it.Quantity)
+		for i := int64(0); i < it.Quantity; i++ {
+			units = append(units, LicenseUnit{
+				UserID: uint(userID), Kind: it.Subject, Status: LicenseActive,
+				Source: SourceTrial, SourceRef: ref, ExpireAt: expire,
+			})
+		}
+		if err := tx.Create(&units).Error; err != nil {
+			return 0, err
+		}
+		// 发放后该类未过期单元数（容量）。
+		var cap int64
+		if err := tx.Model(&LicenseUnit{}).
+			Where("user_id = ? AND kind = ? AND status = ? AND expire_at > ?", userID, it.Subject, LicenseActive, now).
+			Count(&cap).Error; err != nil {
+			return 0, err
+		}
+		return cap, nil
+	case SubjectRuntimeMinute:
+		var w RuntimeMinuteWallet
+		if err := tx.Where(RuntimeMinuteWallet{UserID: uint(userID)}).FirstOrCreate(&w).Error; err != nil {
+			return 0, err
+		}
+		if err := tx.Model(&RuntimeMinuteWallet{}).Where("user_id = ?", userID).
+			Update("remaining_minutes", gorm.Expr("remaining_minutes + ?", it.Quantity)).Error; err != nil {
+			return 0, err
+		}
+		if err := tx.Where("user_id = ?", userID).First(&w).Error; err != nil {
+			return 0, err
+		}
+		return w.RemainingMinutes, nil
+	}
+	return 0, apperr.Validation("非法的试用发放科目")
 }
 
 func isNotFoundTrial(err error) bool { return errors.Is(err, gorm.ErrRecordNotFound) }

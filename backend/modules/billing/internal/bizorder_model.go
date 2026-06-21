@@ -26,6 +26,15 @@ var validBizTypes = map[string]bool{
 	BizBootSlotNew: true, BizBootSlotRenew: true, BizRuntimePack: true,
 }
 
+// 支付方式。
+const (
+	PayBalance = "balance"
+	PayWechat  = "wechat"
+	PayAlipay  = "alipay"
+)
+
+var validPayMethods = map[string]bool{PayBalance: true, PayWechat: true, PayAlipay: true}
+
 // BizOrder 新模型订单。
 type BizOrder struct {
 	ID         uint       `gorm:"primaryKey;autoIncrement" json:"id"`

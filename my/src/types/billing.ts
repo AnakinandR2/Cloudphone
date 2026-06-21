@@ -21,50 +21,6 @@ export interface LedgerEntry {
   created_at: string
 }
 
-// SKU + 折扣阶梯
-// 订单（旧列表形状，BillingOrdersView 仍在用）
-export interface Order {
-  id: number
-  order_no: string
-  user_id: number
-  status: string // pending/paid/cancelled
-  pay_method: string // balance/wechat/alipay
-  total_cents: number
-  paid_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-// 权益/资源
-export interface CapacitySnapshot { instance_seat: number, boot_seat: number, runtime_minute: number }
-export interface EntitlementBatch {
-  id: number
-  user_id: number
-  subject: string
-  quantity: number
-  used: number
-  expire_at: string | null
-  source: string
-  source_ref: string
-  created_at: string
-  updated_at: string
-}
-export interface EntitlementsResult { capacities: CapacitySnapshot, batches: EntitlementBatch[] }
-
-/** 时长费用量切片（一次结算一用户） */
-export interface RuntimeUsageSlice {
-  id: number
-  window_start: string
-  window_end: string
-  billable_unit_minutes: number
-  covered_seat_minutes: number
-  charged_pack_minutes: number
-  charged_balance_cents: number
-  unfunded_minutes: number
-  unit_price_cents: number
-  created_at: string
-}
-
 // ============================================================================
 // 购买与费用重构（2026-06-21）— 新模型类型
 // 契约：docs/superpowers/specs/2026-06-21-购买与费用重构-接口契约.md §1

@@ -100,9 +100,6 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 // phoneWorker 异步任务收敛 worker（仅中台已配置时运行）。
 var phoneWorker *taskWorker
 
-// enforceRunner 欠费执行 runner（仅中台已配置时运行）。
-var enforceRunner *framework.PeriodicRunner
-
 // meterRunner 运行日志同步 + 时长费结算 runner（1 分钟）。
 var meterRunner *framework.PeriodicRunner
 
@@ -119,14 +116,6 @@ func (m *phoneModule) OnStart() error {
 	if PhoneService != nil && PhoneService.ops != nil {
 		phoneWorker = newTaskWorker(PhoneService, m.db)
 		phoneWorker.start()
-
-		enforceRunner = framework.NewPeriodicRunner(m.db, "phone:enforcement", time.Minute, 50*time.Second, func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
-			PhoneService.runEnforcement(ctx)
-			return nil
-		})
-		enforceRunner.Start()
 
 		// 时长费：每分钟同步运行日志 + 结算已发生分钟。
 		meterRunner = framework.NewPeriodicRunner(m.db, "phone:metering", time.Minute, 50*time.Second, func() error {
@@ -172,10 +161,6 @@ func (m *phoneModule) OnStop() error {
 	if phoneWorker != nil {
 		phoneWorker.stop()
 		phoneWorker = nil
-	}
-	if enforceRunner != nil {
-		enforceRunner.Stop()
-		enforceRunner = nil
 	}
 	if meterRunner != nil {
 		meterRunner.Stop()

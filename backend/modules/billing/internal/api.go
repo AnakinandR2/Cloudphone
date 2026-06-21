@@ -85,17 +85,12 @@ func AdminGetAccount(c *gin.Context) {
 		framework.FailErr(c, err)
 		return
 	}
-	caps, err := EntitlementService.Capacities(uid)
-	if err != nil {
-		framework.FailErr(c, err)
-		return
-	}
 	capsV2, err := newModelCapacities(uid)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
-	framework.OKWithData(c, gin.H{"account": acc, "ledger": ledger, "ledger_total": total, "capacities": caps, "capacities_v2": capsV2})
+	framework.OKWithData(c, gin.H{"account": acc, "ledger": ledger, "ledger_total": total, "capacities_v2": capsV2})
 }
 
 // AdminAdjustBalance 运营：手动赠送/扣减余额（理由必填）= 退款实现

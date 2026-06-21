@@ -60,13 +60,6 @@ export const asyncRoutes: AppMainRoute[] = [
         component: () => import('@/views/app/AppLibraryView.vue'),
         meta: { title: 'menu.phoneApps', icon: 'AppWindow' },
       },
-      {
-        // 素材管理（占位，功能开发中）
-        path: '/phone/materials',
-        name: 'phoneMaterials',
-        component: () => import('@/views/demo/nested/BlankView.vue'),
-        meta: { title: 'menu.phoneMaterials', icon: 'Images' },
-      },
     ],
   },
   {
@@ -80,21 +73,10 @@ export const asyncRoutes: AppMainRoute[] = [
         meta: { title: 'menu.billingPurchase', icon: 'ShoppingCart' },
       },
       {
-        path: '/billing/usage',
-        name: 'billingUsage',
-        component: () => import('@/views/billing/BillingUsageView.vue'),
-        meta: { title: 'menu.billingUsage', icon: 'LineChart' },
-      },
-      {
-        path: '/billing/orders',
-        name: 'billingOrders',
-        component: () => import('@/views/billing/BillingOrdersView.vue'),
-        meta: { title: 'menu.billingOrders', icon: 'ReceiptText' },
-      },
-      {
-        path: '/billing/ledger',
-        name: 'billingLedger',
-        component: () => import('@/views/billing/BillingLedgerView.vue'),
+        // 费用日志（聚合到开机会话的运行计费记录，设计 §5.5 / 契约 §1.6）
+        path: '/billing/runtime-log',
+        name: 'billingRuntimeLog',
+        component: () => import('@/views/billing/BillingRuntimeLogView.vue'),
         meta: { title: 'menu.billingLedger', icon: 'ScrollText' },
       },
       {

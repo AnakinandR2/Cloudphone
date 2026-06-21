@@ -56,19 +56,15 @@ func (s *serviceImpl) runRuntimeGuard(ctx context.Context) {
 
 	for _, uid := range order {
 		sess := byUser[uid] // power_on_at 升序：越靠后越晚开机
-		cov, err := billing.GetRuntimeCoverage(int(uid))
-		if err != nil {
-			continue
-		}
-		over := int64(len(sess)) - cov.AvailableBootSeats // 超出席位的运行中台数
+		// 新模型：包月开机名额(boot_slot)免费，超出名额的台靠临时时长支撑下一分钟。
+		bootCap, _ := billing.BootSlotCapacity(int(uid))
+		remain, _ := billing.RuntimeMinutesRemaining(int(uid))
+		over := int64(len(sess)) - int64(bootCap) // 超出包月名额的运行中台数
 		if over <= 0 {
-			continue // 全在席位内，免费
+			continue // 全在名额内，免费
 		}
-		// 下一分钟可支撑的超额台数 = 剩余时长包分钟 + 余额可买分钟（各 1 台·分钟/台）。
-		budget := cov.RemainingPackMinutes
-		if cov.UnitPriceCents > 0 {
-			budget += cov.BalanceCents / cov.UnitPriceCents
-		}
+		// 下一分钟可支撑的超额台数 = 剩余临时时长分钟（每台·分钟）。新模型不再用余额折算分钟。
+		budget := remain
 		unfundable := over - budget
 		if unfundable <= 0 {
 			continue // 下一分钟付得起，暂不关

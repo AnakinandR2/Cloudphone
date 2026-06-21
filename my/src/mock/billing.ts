@@ -19,8 +19,8 @@ function addDays(base: Date, days: number) {
 // ============================================================================
 // 购买与费用重构（2026-06-21）mock 状态
 // 契约：docs/superpowers/specs/2026-06-21-购买与费用重构-接口契约.md §1
-// 旧端点（account/topup/ledger/skus/entitlements/trials）保留供旧视图；
-// quote/orders/* 改为新契约形状；新增 overview/purchase-config/license-units/
+// 通用端点（account/topup/ledger/trials）保留；
+// quote/orders/* 为新契约形状；新增 overview/purchase-config/license-units/
 // runtime/log。
 // ============================================================================
 
@@ -329,12 +329,6 @@ const runtimeLog = [
 
 // ---------- 旧端点保留所需状态 ----------
 const account = { id: 1, user_id: 1, balance_cents: wallet.balance_cents, created_at: '2026-01-01 00:00:00', updated_at: now() }
-const skus = [
-  { sku: { id: 1, code: 'instance_fee', category: 'instance_fee', name: '云手机实例费', description: '按台月计费', unit_price_cents: 3000, unit: '台月', listed: true, sort: 1 }, tiers: [{ id: 1, sku_id: 1, cycle_months: 1, min_quantity: 1, discount_bps: 10000 }] },
-]
-const entitlementBatches = [
-  { id: 1, user_id: 1, subject: 'instance_seat', quantity: 3, used: 1, expire_at: null, source: 'purchase', source_ref: 'ORD-0001', created_at: '2026-01-15 10:00:00' },
-]
 const trialPolicies = [
   { policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [{ id: 1, policy_id: 1, subject: 'seat', quantity: 1, expire_days: 7 }, { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 }] }, claimable: true, need_invite: false, claimed_count: 0, reason: '' },
 ]
@@ -478,7 +472,7 @@ export default defineFakeRoute([
     },
   },
 
-  // ===== 旧端点（保留供旧视图：account/ledger/skus/entitlements/trials）=====
+  // ===== 通用端点（account/ledger/topup/trials）=====
   {
     url: '/v1/billing/account',
     method: 'get',
@@ -505,19 +499,6 @@ export default defineFakeRoute([
       if (query.type) list = list.filter(e => e.type === query.type)
       return ok({ list: list.slice((page - 1) * size, page * size), total: list.length })
     },
-  },
-  {
-    url: '/v1/billing/skus',
-    method: 'get',
-    response: () => ok(skus),
-  },
-  {
-    url: '/v1/billing/entitlements',
-    method: 'get',
-    response: () => ok({
-      capacities: { instance_seat: capacity('seat'), boot_seat: capacity('boot_slot'), runtime_minute: wallet.runtime_minutes_remaining },
-      batches: entitlementBatches,
-    }),
   },
   {
     url: '/v1/billing/trials',

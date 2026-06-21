@@ -44,7 +44,8 @@ func (s *trialServiceImpl) ListClaimable(userID int) ([]ClaimableItem, error) {
 	return out, nil
 }
 
-var trialGrantSubjects = resourceSubjects // 试用仅发资源
+// trialGrantSubjects 合法的试用发放科目（新模型命名）：seat / boot_slot 授权单元、runtime_minute 时长。
+var trialGrantSubjects = map[string]bool{KindSeat: true, KindBootSlot: true, SubjectRuntimeMinute: true}
 
 // validateItems 校验发放项：≥1 项、科目合法且不重复、数量>0、有效天数≥0。
 func validateItems(in []TrialPolicyItemInput) ([]TrialPolicyItem, error) {
