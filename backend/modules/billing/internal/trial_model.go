@@ -3,16 +3,18 @@ package billing
 import "time"
 
 type TrialPolicy struct {
-	ID           uint              `gorm:"primaryKey;autoIncrement" json:"id"`
-	Code         string            `gorm:"type:varchar(64);not null;uniqueIndex:idx_billing_trial_code" json:"code"`
-	Name         string            `gorm:"type:varchar(100);not null" json:"name"`
-	Enabled      bool              `gorm:"not null;default:true" json:"enabled"`
-	PerUserLimit int               `gorm:"not null;default:1" json:"per_user_limit"`
-	AllowNewUser bool              `gorm:"not null;default:false" json:"allow_new_user"`
-	InviteCode   string            `gorm:"type:varchar(64)" json:"invite_code"`
-	Items        []TrialPolicyItem `gorm:"foreignKey:PolicyID" json:"items"`
-	CreatedAt    time.Time         `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time         `gorm:"autoUpdateTime" json:"updated_at"`
+	ID           uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code         string `gorm:"type:varchar(64);not null;uniqueIndex:idx_billing_trial_code" json:"code"`
+	Name         string `gorm:"type:varchar(100);not null" json:"name"`
+	Enabled      bool   `gorm:"not null;default:true" json:"enabled"`
+	PerUserLimit int    `gorm:"not null;default:1" json:"per_user_limit"`
+	AllowNewUser bool   `gorm:"not null;default:false" json:"allow_new_user"`
+	InviteCode   string `gorm:"type:varchar(64)" json:"invite_code"`
+	// MarketingFeatured 标记本策略在营销站(www /pricing)展示；全局至多一条（服务层单选保证）。
+	MarketingFeatured bool              `gorm:"not null;default:false" json:"marketing_featured"`
+	Items             []TrialPolicyItem `gorm:"foreignKey:PolicyID" json:"items"`
+	CreatedAt         time.Time         `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt         time.Time         `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (TrialPolicy) TableName() string { return "billing_trial_policies" }
@@ -92,6 +94,11 @@ type ClaimRequest struct {
 
 type EligibilityGrantRequest struct {
 	UserID int `json:"user_id" binding:"required"`
+}
+
+// TrialFeatureRequest 营销展示单选标记入参（featured=true 设为展示，false 取消）。
+type TrialFeatureRequest struct {
+	Featured bool `json:"featured"`
 }
 
 type ClaimableItem struct {

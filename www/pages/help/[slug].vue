@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // /help/<slug> —— 文档三栏：左目录树 + 正文(注入锚点) + 右 TOC。
-const { t } = useGp()
+const { t, locale } = useGp()
 const localePath = useLocalePath()
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
+const fmt = (iso: string) => formatBlogDate(iso, locale.value)
 
 // 目录树（侧栏）与文章（正文）均可 await：SSR 即可拿到，404 透传。
 const { data: tree } = await useHelpDirectory()
@@ -40,7 +41,17 @@ useSeoMeta({
     <article class="article-body docs-article">
       <h1>{{ article.title }}</h1>
       <ArticleBody :html="built.html" />
+      <p v-if="article.updated_at" class="docs-updated">{{ t.docs.updated }}: {{ fmt(article.updated_at) }}</p>
       <ArticleFeedback space="help" :slug="slug" vote feedback />
     </article>
   </DocsLayout>
 </template>
+
+<style scoped>
+.docs-updated {
+  margin-top: 36px;
+  font-size: 12.5px;
+  color: rgb(var(--fg-muted));
+  font-family: var(--font-mono);
+}
+</style>

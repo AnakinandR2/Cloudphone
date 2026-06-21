@@ -9,7 +9,14 @@ const runtime = useRuntimeConfig()
 const authUser = useAuthUser()
 const isLoggedIn = computed(() => !!authUser.value)
 const displayName = computed(() => authUser.value?.nickname || authUser.value?.phone || '')
-const myAppPath = runtime.public.myAppPath
+// my（控制台）地址前缀：取 public.myAppPath（同源 /my/ 或跨域完整地址）。
+// 统一去掉末尾斜杠后拼接，避免 // 或缺斜杠。
+const myBase = computed(() =>
+  String(runtime.public.myAppPath || '/my/').replace(/\/+$/, ''),
+)
+const consoleUrl = computed(() => `${myBase.value}/`)
+const loginUrl = computed(() => `${myBase.value}/login`)
+const registerUrl = computed(() => `${myBase.value}/register`)
 async function onLogout() {
   await logoutAuthUser()
 }
@@ -33,7 +40,7 @@ interface NavLink {
 const links = computed<NavLink[]>(() => [
   { id: 'features', href: localePath('/') + '#features', label: t.value.nav.features },
   { id: 'scenarios', href: localePath('/') + '#scenarios', label: t.value.nav.scenarios },
-  { id: 'pricing', href: localePath('/') + '#pricing', label: t.value.nav.pricing },
+  { id: 'pricing', href: localePath('/pricing'), label: t.value.nav.pricing },
   { id: 'download', href: localePath('/') + '#download', label: t.value.nav.download },
   {
     id: 'resources',
@@ -103,12 +110,12 @@ watch(() => route.fullPath, () => (mobile.value = false))
         </div>
 
         <template v-if="isLoggedIn">
-          <a :href="myAppPath" class="btn btn-ghost btn-sm" style="margin-left: 4px" :title="displayName"><span class="nav-cta-text">{{ t.nav.console }}</span></a>
+          <a :href="consoleUrl" class="btn btn-ghost btn-sm" style="margin-left: 4px" :title="displayName"><span class="nav-cta-text">{{ t.nav.console }}</span></a>
           <a href="#" class="btn btn-primary btn-sm" @click.prevent="onLogout">{{ t.nav.logout }}</a>
         </template>
         <template v-else>
-          <a :href="`${myAppPath}login`" class="btn btn-ghost btn-sm" style="margin-left: 4px"><span class="nav-cta-text">{{ t.nav.login }}</span></a>
-          <a :href="`${myAppPath}register`" class="btn btn-primary btn-sm">{{ t.nav.signup }}</a>
+          <a :href="loginUrl" class="btn btn-ghost btn-sm" style="margin-left: 4px"><span class="nav-cta-text">{{ t.nav.login }}</span></a>
+          <a :href="registerUrl" class="btn btn-primary btn-sm">{{ t.nav.signup }}</a>
         </template>
         <button class="icon-btn nav-burger" aria-label="Menu" @click="mobile = !mobile">
           <GpIcon :name="mobile ? 'x' : 'burger'" />
@@ -138,12 +145,12 @@ watch(() => route.fullPath, () => (mobile.value = false))
           </div>
           <div class="mobile-menu__cta">
             <template v-if="isLoggedIn">
-              <a :href="myAppPath" class="btn btn-ghost">{{ t.nav.console }}</a>
+              <a :href="consoleUrl" class="btn btn-ghost">{{ t.nav.console }}</a>
               <a href="#" class="btn btn-primary" @click.prevent="onLogout">{{ t.nav.logout }}</a>
             </template>
             <template v-else>
-              <a :href="`${myAppPath}login`" class="btn btn-ghost">{{ t.nav.login }}</a>
-              <a :href="`${myAppPath}register`" class="btn btn-primary">{{ t.nav.signup }}</a>
+              <a :href="loginUrl" class="btn btn-ghost">{{ t.nav.login }}</a>
+              <a :href="registerUrl" class="btn btn-primary">{{ t.nav.signup }}</a>
             </template>
           </div>
         </div>

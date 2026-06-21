@@ -102,6 +102,13 @@ var PermissionGroups = []PermissionGroup{
 			{Key: "script:manage", Label: "管理商店脚本/下架用户脚本"},
 		},
 	},
+	{
+		Module: "合作商管理", ModuleKey: "partner",
+		Permissions: []Permission{
+			{Key: "partner:view", Label: "查看代理IP合作商/点击明细"},
+			{Key: "partner:manage", Label: "管理代理IP合作商（增删改/上传）"},
+		},
+	},
 	// scaffold:permission-groups
 }
 

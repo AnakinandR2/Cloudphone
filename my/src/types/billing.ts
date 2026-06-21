@@ -60,7 +60,6 @@ export interface DurationOption {
 export interface KindConfig {
   unit_price_cents: number
   unit_label: string
-  qty_options: number[]
   qty_tiers: QtyTier[]
   duration_unit: 'month' | 'day'
   duration_options: DurationOption[]
@@ -97,6 +96,8 @@ export interface QuoteResult2 {
   qty_discount_bps: number
   duration_discount_bps: number
   payable_cents: number
+  /** 席位新购/续费赠送的临时开机时长（分钟）；其它资源为 0 */
+  gift_runtime_minutes: number
 }
 
 /** 授权单元上占用的实例摘要（后端填充；空闲单元为 null） */
@@ -127,6 +128,10 @@ export interface Order2 {
   created_at: string
   paid_at: string | null
   expired_at: string | null
+  /** 履约时实际赠送的临时开机时长（分钟，仅席位新购/续费 > 0） */
+  gift_runtime_minutes: number
+  /** 订单历史列表随单返回的订单项明细（派生摘要 + 行展开） */
+  items?: OrderItem2[]
 }
 export interface OrderItem2 {
   id: number
@@ -162,6 +167,8 @@ export interface RuntimeLogSegment {
   minutes: number
   from: string
   to: string
+  /** 该段计费的具体原因（后端落账时生成）；旧数据可能为空，前端回退到按类型的通用说明。 */
+  reason?: string
 }
 export interface RuntimeLogEntry {
   cp_id: string

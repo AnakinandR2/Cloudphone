@@ -44,7 +44,11 @@ func (s *runtimeEngineServiceImpl) Settle(userID int, windowEnd time.Time, inter
 		ref        string
 		instanceID string
 		powerOn    time.Time
-		newMinutes int
+		// base 为开机时刻按分钟取整：所有 charge 窗口从 base+settledBefore 起按分钟平铺，
+		// 保证同一会话各窗口首尾相接、永不重叠（不再用 end-newMinutes 反推，避免错位）。
+		base          time.Time
+		settledBefore int
+		newMinutes    int
 	}
 	metas := map[string]meta{}
 	for _, iv := range intervals {
@@ -55,6 +59,10 @@ func (s *runtimeEngineServiceImpl) Settle(userID int, windowEnd time.Time, inter
 		}
 		if cp == "" {
 			cp = ref
+		}
+		// 同一 ref 在本次结算里只处理一次，避免重复区间被重复计费。
+		if _, dup := metas[ref]; dup {
+			continue
 		}
 		ivEnd := end
 		if iv.End != nil && iv.End.Before(ivEnd) {
@@ -81,7 +89,10 @@ func (s *runtimeEngineServiceImpl) Settle(userID int, windowEnd time.Time, inter
 			CpID: cp, RunSessionRef: ref, PowerOn: iv.Start,
 			NewMinutes: newMin, DailyChargedBefore: dailyBefore,
 		})
-		metas[ref] = meta{ref: ref, instanceID: cp, powerOn: iv.Start, newMinutes: newMin}
+		metas[ref] = meta{
+			ref: ref, instanceID: cp, powerOn: iv.Start,
+			base: iv.Start.Truncate(time.Minute), settledBefore: settled, newMinutes: newMin,
+		}
 	}
 
 	if len(states) == 0 {
@@ -92,9 +103,16 @@ func (s *runtimeEngineServiceImpl) Settle(userID int, windowEnd time.Time, inter
 	res.WindowStart = end
 	for _, p := range plans {
 		m := metas[p.RunSessionRef]
-		windowStart := end.Add(-time.Duration(m.newMinutes) * time.Minute)
+		// 游标从「开机时刻 + 已结算分钟」起，按各段分钟数依次平铺，段间首尾相接。
+		cursor := m.base.Add(time.Duration(m.settledBefore) * time.Minute)
+		advance := func(mins int) (time.Time, time.Time) {
+			ws := cursor
+			cursor = cursor.Add(time.Duration(mins) * time.Minute)
+			return ws, cursor
+		}
 		// 扣临时时长（落账 + 余量 + 当天累计）。
 		if p.TempMin > 0 {
+			ws, we := advance(p.TempMin)
 			if _, err := s.rtWallet.consume(userID, int64(p.TempMin)); err != nil {
 				return res, err
 			}
@@ -106,27 +124,31 @@ func (s *runtimeEngineServiceImpl) Settle(userID int, windowEnd time.Time, inter
 			_ = WalletService.insertResourceLedger(userID, SubjectRuntimeMinute, -int64(p.TempMin), afterRem, LedgerRuntimeConsume, "运行扣临时时长", "system")
 			_ = s.charges.insertCharge(&RuntimeCharge{
 				UserID: uint(userID), InstanceID: m.instanceID, RunSessionRef: p.RunSessionRef,
-				WindowStart: windowStart, WindowEnd: end, QuotaType: QuotaTemp, ChargedMinutes: p.TempMin,
+				WindowStart: ws, WindowEnd: we, QuotaType: QuotaTemp, ChargedMinutes: p.TempMin,
+				Reason: tempReason(p.Rank, p.Capacity),
 			})
 			res.ChargedTempMinutes += int64(p.TempMin)
 		}
 		if p.BootSlotMin > 0 {
+			ws, we := advance(p.BootSlotMin)
 			_ = s.charges.insertCharge(&RuntimeCharge{
 				UserID: uint(userID), InstanceID: m.instanceID, RunSessionRef: p.RunSessionRef,
-				WindowStart: windowStart, WindowEnd: end, QuotaType: QuotaBootSlot, ChargedMinutes: 0,
+				WindowStart: ws, WindowEnd: we, QuotaType: QuotaBootSlot, ChargedMinutes: 0,
+				Reason: bootReason(p.Rank, p.Capacity),
 			})
 			res.BootSlotMinutes += int64(p.BootSlotMin)
 		}
 		if p.CappedFreeMin > 0 {
+			ws, we := advance(p.CappedFreeMin)
 			_ = s.charges.insertCharge(&RuntimeCharge{
 				UserID: uint(userID), InstanceID: m.instanceID, RunSessionRef: p.RunSessionRef,
-				WindowStart: windowStart, WindowEnd: end, QuotaType: QuotaCappedFree, ChargedMinutes: 0,
+				WindowStart: ws, WindowEnd: we, QuotaType: QuotaCappedFree, ChargedMinutes: 0,
+				Reason: cappedReason(dailyCap, utc8Day(m.powerOn)),
 			})
 			res.CappedFreeMinutes += int64(p.CappedFreeMin)
 		}
-		// 推进会话结算进度（即便部分免费/名额，整体已结算分钟仍前移，保证幂等不重扣）。
-		settled, _ := s.charges.sessionSettled(p.RunSessionRef)
-		if err := s.charges.bumpSessionSettled(userID, m.instanceID, p.RunSessionRef, settled+m.newMinutes); err != nil {
+		// 推进会话结算进度到绝对值（开机以来累计已结算分钟），保证幂等不重扣。
+		if err := s.charges.bumpSessionSettled(userID, m.instanceID, p.RunSessionRef, m.settledBefore+m.newMinutes); err != nil {
 			return res, err
 		}
 	}

@@ -11,6 +11,8 @@ type RuntimeLogSegment struct {
 	Minutes   int       `json:"minutes"`
 	From      time.Time `json:"from"`
 	To        time.Time `json:"to"`
+	// Reason 该段计费的具体原因（落账时生成），便于排查；旧数据可能为空。
+	Reason string `json:"reason"`
 }
 
 // RuntimeLogItem 一行聚合的开机会话费用记录。
@@ -33,9 +35,10 @@ type RuntimeLogPage struct {
 }
 
 // RuntimeLog 聚合费用日志。runningRefs 为「仍在运行的会话标识」集合（由 phone 提供，可为 nil）。
-func (s *runtimeEngineServiceImpl) RuntimeLog(userID, page, size int, runningRefs map[string]bool) (*RuntimeLogPage, error) {
+// from/to 非空时按时间段筛选，只返回与该区间有重叠的开机会话。
+func (s *runtimeEngineServiceImpl) RuntimeLog(userID, page, size int, runningRefs map[string]bool, from, to *time.Time) (*RuntimeLogPage, error) {
 	off, lim := pageOffset(page, size)
-	refs, total, err := s.charges.listSessions(userID, off, lim)
+	refs, total, err := s.charges.listSessions(userID, off, lim, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +95,20 @@ func aggregateSession(ref string, cs []RuntimeCharge, runningRefs map[string]boo
 	powerOff := cs[0].WindowEnd
 	seen := map[string]bool{}
 	for _, c := range cs {
-		item.Segments = append(item.Segments, RuntimeLogSegment{
-			QuotaType: c.QuotaType, Minutes: c.ChargedMinutes, From: c.WindowStart, To: c.WindowEnd,
-		})
+		// 合并「连续同 quota_type 且同原因」的分钟级 charge 为一段：同类型、同原因、时间相接则
+		// 累加分钟、延伸到 To，否则另起一段。原因不同（如名额数变化）即另起一段，把转折点显式呈现，
+		// 同时避免周期结算的逐分钟记录铺成几十行。
+		n := len(item.Segments)
+		if n > 0 && item.Segments[n-1].QuotaType == c.QuotaType &&
+			item.Segments[n-1].Reason == c.Reason && item.Segments[n-1].To.Equal(c.WindowStart) {
+			item.Segments[n-1].Minutes += c.ChargedMinutes
+			item.Segments[n-1].To = c.WindowEnd
+		} else {
+			item.Segments = append(item.Segments, RuntimeLogSegment{
+				QuotaType: c.QuotaType, Minutes: c.ChargedMinutes,
+				From: c.WindowStart, To: c.WindowEnd, Reason: c.Reason,
+			})
+		}
 		if c.QuotaType == QuotaTemp {
 			tempTotal += c.ChargedMinutes
 		}

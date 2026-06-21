@@ -38,28 +38,37 @@ func TestBizOrder_BalancePaySeatNew_FulfillsAndChargesBalance(t *testing.T) {
 	assert.Equal(t, int64(1000000-226800), bal)
 }
 
-func TestBizOrder_ThirdPartyPending(t *testing.T) {
+func TestBizOrder_ThirdPartyAutoSettles(t *testing.T) {
 	t.Cleanup(func() {
 		framework.CleanTable("billing_biz_orders")
 		framework.CleanTable("billing_biz_order_items")
 		framework.CleanTable("billing_license_units")
 	})
 	uid := 950002
+	// 桩网关：无真实第三方对接，下单即视为支付成功 → 即时履约、置 paid（不扣余额）。
 	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
 		BizType: BizSeatNew, Quantity: 1, DurationValue: 1, PayMethod: PayWechat,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "pending", res.Pay.Status)
-	// 未履约。
+	assert.Equal(t, BizOrderPaid, res.Pay.Status)
 	cap, _ := LicenseService.Capacity(uid, KindSeat)
-	assert.Equal(t, 0, cap)
-
-	// 继续支付（桩：第三方仍 pending，需走 mark-paid 回调）。
-	o, err := BizOrderService.MarkPaid(int(res.Order.ID))
-	require.NoError(t, err)
-	assert.Equal(t, BizOrderPaid, o.Status)
-	cap, _ = LicenseService.Capacity(uid, KindSeat)
 	assert.Equal(t, 1, cap)
+}
+
+func TestBizOrder_ThirdPartyRechargeCreditsBalance(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders")
+		framework.CleanTable("billing_biz_order_items")
+	})
+	uid := 950007
+	// 第三方充值：桩网关即时到账 → 订单 paid 且余额增加（不来自余额扣款）。
+	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizRecharge, AmountCents: 50000, PayMethod: PayAlipay,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, BizOrderPaid, res.Pay.Status)
+	bal, _ := WalletService.BalanceCents(uid)
+	assert.Equal(t, int64(50000), bal)
 }
 
 func TestBizOrder_RenewAccumulatesExpiry(t *testing.T) {

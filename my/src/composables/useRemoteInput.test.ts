@@ -1,30 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { ConnState } from './useWebRTC'
-import { mapDeviceCoords, useRemoteInput } from './useRemoteInput'
+import { useRemoteInput } from './useRemoteInput'
 
-describe('mapDeviceCoords · 旋转坐标变换', () => {
-  it('竖屏（rotation 0、尺寸一致）原样返回', () => {
-    expect(mapDeviceCoords(100, 200, 720, 1280, 720, 1280, 0)).toEqual({ x: 100, y: 200 })
-  })
-  it('竖屏分辨率不一致时等比缩放（360×640 → 720×1280：坐标 ×2）', () => {
-    expect(mapDeviceCoords(100, 200, 360, 640, 720, 1280, 0)).toEqual({ x: 200, y: 400 })
-  })
-  it('横屏（rotation -90，1280×720）中心映射到中心', () => {
-    expect(mapDeviceCoords(640, 360, 1280, 720, 1280, 720, -90)).toEqual({ x: 640, y: 360 })
-  })
-  it('横屏 -90 角点映射（px = W·(1 − vy/H)，py = H·(vx/W)，对齐官方 SDK 矩阵）', () => {
-    expect(mapDeviceCoords(0, 0, 1280, 720, 1280, 720, -90)).toEqual({ x: 1280, y: 0 })
-    expect(mapDeviceCoords(1280, 720, 1280, 720, 1280, 720, -90)).toEqual({ x: 0, y: 720 })
-    expect(mapDeviceCoords(0, 720, 1280, 720, 1280, 720, -90)).toEqual({ x: 0, y: 0 })
-  })
-})
-
-// 构造一个最小可用的 <video> 桩：getCoords 仅依赖 getBoundingClientRect + videoWidth/Height。
+// 构造一个最小可用的 <video> 桩：resolvePos 依赖 getBoundingClientRect（CSS 变换后的外接框）、
+// videoWidth/Height（推流尺寸）、offsetWidth/Height（不受 transform 影响的布局盒）。
 function makeVideo(
   rect: { left: number, top: number, width: number, height: number },
   vw = 720,
   vh = 1280,
+  offset?: { w: number, h: number },
 ) {
   return {
     getBoundingClientRect: () => ({
@@ -37,10 +22,16 @@ function makeVideo(
     }),
     videoWidth: vw,
     videoHeight: vh,
+    offsetWidth: offset?.w ?? rect.width,
+    offsetHeight: offset?.h ?? rect.height,
   } as unknown as HTMLVideoElement
 }
 
-function setup(opts?: { connState?: ConnState, rect?: { left: number, top: number, width: number, height: number } }) {
+function setup(opts?: {
+  connState?: ConnState
+  rect?: { left: number, top: number, width: number, height: number }
+  cssRotation?: number
+}) {
   const sendDC = vi.fn().mockReturnValue(true)
   const tryAutoUnmute = vi.fn()
   // 默认显示区 360x640、设备 720x1280 → 缩放系数 0.5、无黑边。
@@ -48,7 +39,8 @@ function setup(opts?: { connState?: ConnState, rect?: { left: number, top: numbe
   const connState = ref<ConnState>(opts?.connState ?? 'connected')
   const deviceWidth = ref(720)
   const deviceHeight = ref(1280)
-  const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, sendDC, tryAutoUnmute })
+  const cssRotation = ref(opts?.cssRotation ?? 0)
+  const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
   return { input, sendDC, tryAutoUnmute }
 }
 
@@ -78,6 +70,98 @@ describe('useRemoteInput · 坐标换算', () => {
     const msg = sendDC.mock.calls[0][0]
     expect(msg.x).toBe(719)
     expect(msg.y).toBe(1279)
+  })
+})
+
+describe('useRemoteInput · 横屏坐标（推流已是横屏像素，rotation 固定 0）', () => {
+  // 横屏推流 1280×720、显示区 1:1 无黑边；选择分辨率仍是竖屏 720×1280。
+  function landscapeSetup() {
+    const sendDC = vi.fn().mockReturnValue(true)
+    const tryAutoUnmute = vi.fn()
+    const videoRef = ref(makeVideo({ left: 0, top: 0, width: 1280, height: 720 }, 1280, 720))
+    const connState = ref<ConnState>('connected')
+    const deviceWidth = ref(720)
+    const deviceHeight = ref(1280)
+    const cssRotation = ref(0)
+    const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
+    return { input, sendDC }
+  }
+
+  it('横屏点击按推流像素直接下发：x/y 即点击处、rotation=0、width/height=推流尺寸（对齐官方 SDK §5.3）', () => {
+    const { input, sendDC } = landscapeSetup()
+    input.onMouseDown(mouse(100, 50))
+    expect(sendDC).toHaveBeenCalledTimes(1)
+    expect(sendDC.mock.calls[0][0]).toMatchObject({
+      type: 'mouse_down',
+      x: 100,
+      y: 50,
+      width: 1280,
+      height: 720,
+      rotation: 0,
+    })
+  })
+})
+
+describe('useRemoteInput · 前端强制旋转的坐标补偿（cssRotation=-90）', () => {
+  // 桌面锁定竖屏、用户手动转横屏：推流仍是竖屏 720×1280，<video> 被 CSS 旋转 -90° 铺满横屏画面区。
+  // 布局盒（offsetWidth/Height）是竖屏 270×480；旋转后屏上外接框（getBoundingClientRect）是横屏 480×270。
+  // 点击需绕画面中心反旋转 +90° 回到推流系，再按 rotation=0 下发推流像素坐标。
+  function rotatedSetup() {
+    const sendDC = vi.fn().mockReturnValue(true)
+    const tryAutoUnmute = vi.fn()
+    const videoRef = ref(makeVideo(
+      { left: 0, top: 0, width: 480, height: 270 }, // 旋转后的外接框
+      720,
+      1280, // 竖屏推流
+      { w: 270, h: 480 }, // 旋转前布局盒
+    ))
+    const connState = ref<ConnState>('connected')
+    const deviceWidth = ref(720)
+    const deviceHeight = ref(1280)
+    const cssRotation = ref(-90)
+    const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
+    return { input, sendDC }
+  }
+
+  it('画面中心点击 → 推流中心', () => {
+    const { input, sendDC } = rotatedSetup()
+    input.onMouseDown(mouse(240, 135)) // 横屏显示区中心
+    expect(sendDC.mock.calls[0][0]).toMatchObject({ type: 'mouse_down', x: 360, y: 640, width: 720, height: 1280, rotation: 0 })
+  })
+
+  it('横屏显示「上边中点」→ 推流右侧中点（CCW 90° 旋转的几何关系）', () => {
+    const { input, sendDC } = rotatedSetup()
+    input.onMouseDown(mouse(240, 0)) // 显示区上边中点
+    const msg = sendDC.mock.calls[0][0]
+    expect(msg.x).toBe(719) // 推流最右（720 钳到 719）
+    expect(msg.y).toBe(640) // 竖直方向中点
+    expect(msg.rotation).toBe(0)
+  })
+})
+
+describe('useRemoteInput · 坐标锚定「所选分辨率」空间（不随推流编码尺寸漂移）', () => {
+  // 设备坐标系 = join 声明的分辨率(= 所选分辨率)。所选 1080×1920，但编码器实际推流 1072×1920；
+  // 必须按所选 1080×1920 下发坐标，而非推流编码的 1072×1920，否则设备端按 1080 解释会错位。
+  function changedResSetup() {
+    const sendDC = vi.fn().mockReturnValue(true)
+    const tryAutoUnmute = vi.fn()
+    const videoRef = ref(makeVideo({ left: 0, top: 0, width: 536, height: 960 }, 1072, 1920))
+    const connState = ref<ConnState>('connected')
+    const deviceWidth = ref(1080) // 所选分辨率（设备坐标系基准）
+    const deviceHeight = ref(1920)
+    const cssRotation = ref(0)
+    const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
+    return { input, sendDC }
+  }
+
+  it('底部中点点击 → 下发所选 1080×1920 空间坐标（而非推流 1072×1920）', () => {
+    const { input, sendDC } = changedResSetup()
+    input.onMouseDown(mouse(268, 925)) // 显示区底部中点（fraction ≈ 0.5, 0.96）
+    const msg = sendDC.mock.calls[0][0]
+    expect(msg.width).toBe(1080)
+    expect(msg.height).toBe(1920)
+    expect(msg.x).toBe(540) // 0.5 × 1080
+    expect(msg.y).toBe(1850) // (1850/1920) × 1920
   })
 })
 

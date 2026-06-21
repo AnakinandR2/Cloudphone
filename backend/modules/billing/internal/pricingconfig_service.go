@@ -87,11 +87,13 @@ func (s *pricingConfigServiceImpl) QuoteRuntimePack(minutes int) (PriceQuote, er
 	if minutes < rt.MinMinutes {
 		return PriceQuote{}, apperr.Validation("低于最低购买时长")
 	}
+	// 时长包按「阶梯」生效：自定义分钟数命中的最优档 = Minutes 门槛 ≤ 购买分钟中门槛最高者。
 	bps := DiscountBpsFull
+	bestMin := -1
 	for _, p := range rt.Packs {
-		if p.Minutes == minutes {
+		if p.Minutes <= minutes && p.Minutes > bestMin {
+			bestMin = p.Minutes
 			bps = p.DiscountBps
-			break
 		}
 	}
 	original := rt.UnitPriceCentsPerMinute * int64(minutes)
@@ -120,14 +122,26 @@ func (s *pricingConfigServiceImpl) DailyCapMinutes() (int, error) {
 	return d.Runtime.DailyCapMinutes, nil
 }
 
-// RecycleRetentionDays 回收站保留天数（admin 可配，默认 30）。
+// GiftMinutesPerSeatMonth 每席位每月赠送的临时开机时长（分钟，admin 可配，默认 0=关闭）。
+func (s *pricingConfigServiceImpl) GiftMinutesPerSeatMonth() (int, error) {
+	d, err := s.Get()
+	if err != nil {
+		return 0, err
+	}
+	if d.Runtime.GiftMinutesPerSeatMonth < 0 {
+		return 0, nil
+	}
+	return d.Runtime.GiftMinutesPerSeatMonth, nil
+}
+
+// RecycleRetentionDays 回收站保留天数（席位参数，admin 可配，默认 30）。
 func (s *pricingConfigServiceImpl) RecycleRetentionDays() (int, error) {
 	d, err := s.Get()
 	if err != nil {
 		return 0, err
 	}
-	if d.Runtime.RecycleRetentionDays <= 0 {
+	if d.Kinds[KindSeat].RecycleRetentionDays <= 0 {
 		return 30, nil
 	}
-	return d.Runtime.RecycleRetentionDays, nil
+	return d.Kinds[KindSeat].RecycleRetentionDays, nil
 }

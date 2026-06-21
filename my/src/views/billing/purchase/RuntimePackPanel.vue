@@ -33,6 +33,20 @@ const minutes = computed(() => {
 const customInvalid = computed(() =>
   selected.value === 'custom' && minutes.value < rt.value.min_minutes)
 
+// 自定义分钟数命中的时长包折扣（≤ 分钟数的最高门槛档），用于自定义输入右边的「已享 x折」提示。
+const hitBps = computed(() => {
+  let bestMin: number | null = null
+  let bps = 10000
+  for (const p of rt.value.packs) {
+    if (p.minutes <= minutes.value && (bestMin === null || p.minutes > bestMin)) {
+      bestMin = p.minutes
+      bps = p.discount_bps
+    }
+  }
+  return bps
+})
+const hitLabel = computed(() => fmtDiscountBps(hitBps.value))
+
 const { quote, loading } = useQuote(() => {
   if (minutes.value <= 0 || (selected.value === 'custom' && customInvalid.value)) return null
   return { biz_type: 'runtime_pack', minutes: minutes.value }
@@ -110,6 +124,9 @@ async function confirm() {
           :class="customInvalid ? 'border-red-500 focus-visible:ring-red-500/30' : ''"
         />
         <span class="text-muted-foreground text-sm">{{ t('billing.purchase2.minuteUnit') }}</span>
+        <span v-if="!customInvalid && hitBps < 10000" class="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+          {{ t('billing.purchase2.hitTier', { zhe: hitLabel }) }}
+        </span>
       </div>
       <p :class="customInvalid ? 'text-red-500' : 'text-muted-foreground'" class="text-xs">
         {{ t('billing.purchase2.runtimeMinHint', { min: rt.min_minutes }) }}

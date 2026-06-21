@@ -30,6 +30,16 @@ func TestPricingConfig_QuoteRuntimePack(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(54000), q2.PayableCents)
 
+	// 自定义 3500 分钟（≥3000 档门槛）也应享 9 折：20 × 3500 × 0.9 = 63000
+	q3, err := PricingConfigService.QuoteRuntimePack(3500)
+	require.NoError(t, err)
+	assert.Equal(t, int64(63000), q3.PayableCents)
+
+	// 自定义 1500 分钟（≥600 档但 <3000）享全价：20 × 1500 = 30000
+	q4, err := PricingConfigService.QuoteRuntimePack(1500)
+	require.NoError(t, err)
+	assert.Equal(t, int64(30000), q4.PayableCents)
+
 	// 低于最低值报错。
 	_, err = PricingConfigService.QuoteRuntimePack(10)
 	assert.Error(t, err)

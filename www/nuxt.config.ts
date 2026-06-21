@@ -20,12 +20,16 @@ export default defineNuxtConfig({
   // 用户认证：SSR 侧通过 Cookie 调后端 /user/me 拉登录态。
   //  - backendBaseUrl：仅服务端用；nginx 后通常是 http://localhost:9981/api/v1
   //  - public.userCookieName：与后端 USER_JWT_COOKIE_NAME 一致（默认 user_token）
-  //  - public.myAppPath：「进入控制台」按钮跳转目标
+  //  - public.myAppPath：登录/注册/控制台跳转的地址前缀。默认 /my/（同源部署）；
+  //      跨域部署时直接填完整地址（如 https://my.example.com/my 或开发态 http://127.0.0.1:5666/my）。
   // 可用同名大写环境变量覆盖：NUXT_BACKEND_BASE_URL / NUXT_PUBLIC_USER_COOKIE_NAME / NUXT_PUBLIC_MY_APP_PATH
   runtimeConfig: {
     backendBaseUrl: 'http://localhost:9981/api/v1',
+    // 后端公开营销接口基址（免鉴权，/api/open/v1）。供 /pricing 价格页 SSR 取数。
+    // 覆盖：NUXT_BACKEND_PUBLIC_URL（如 http://localhost:9981/api/open/v1）。
+    backendPublicUrl: 'http://localhost:9981/api/open/v1',
     // 内容中台 Pub API（服务端私有，勿放入 public —— 密钥不得进入浏览器）。
-    //  - pubBaseUrl    ← NUXT_PUB_BASE_URL（如 http://192.168.10.110:9981/api/v1/pub）
+    //  - pubBaseUrl    ← NUXT_PUB_BASE_URL（如 http://192.168.10.110:9981/api/open/v1）
     //  - contentApiKey ← NUXT_CONTENT_API_KEY（cp_ 开头的只读密钥）
     //  - contentSpace  博客内容空间 slug
     pubBaseUrl: '',

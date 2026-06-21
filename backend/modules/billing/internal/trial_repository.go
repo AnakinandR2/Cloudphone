@@ -20,6 +20,8 @@ type trialRepository interface {
 	getPolicy(id int) (*TrialPolicy, error)
 	getPolicyByCode(code string) (*TrialPolicy, error)
 	listPolicies(enabledOnly bool) ([]TrialPolicy, error)
+	getFeatured() (*TrialPolicy, error)
+	setFeatured(id int) error
 
 	countClaims(policyID, userID int) (int, error)
 	manualEligible(policyID, userID int) (bool, error)
@@ -86,6 +88,30 @@ func (r *gormTrialRepository) listPolicies(enabledOnly bool) ([]TrialPolicy, err
 	var items []TrialPolicy
 	err := q.Order("id DESC").Find(&items).Error
 	return items, err
+}
+
+// getFeatured 取被标记营销展示的策略（含发放项）；无则 ErrRecordNotFound。
+func (r *gormTrialRepository) getFeatured() (*TrialPolicy, error) {
+	var p TrialPolicy
+	if err := r.db.Preload("Items").Where("marketing_featured = ?", true).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// setFeatured 单选设置营销展示：事务内先清空全部标记，再置 id（id<=0 仅清空=取消）。
+func (r *gormTrialRepository) setFeatured(id int) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&TrialPolicy{}).Where("marketing_featured = ?", true).
+			Update("marketing_featured", false).Error; err != nil {
+			return err
+		}
+		if id > 0 {
+			return tx.Model(&TrialPolicy{}).Where("id = ?", id).
+				Update("marketing_featured", true).Error
+		}
+		return nil
+	})
 }
 
 // countClaims 按领取头 TrialClaim 计数（一次领取一行，不受多发放项影响）。

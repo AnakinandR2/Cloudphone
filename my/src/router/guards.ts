@@ -34,7 +34,7 @@ export function setupGuards(router: Router) {
 
     // 已登录访问登录/注册页或根路径 → 进首页
     if (to.name === 'login' || to.name === 'register' || to.path === '/') {
-      return { path: useMenuStore().firstPath || '/dashboard' }
+      return { path: useMenuStore().firstPath || '/phone' }
     }
 
     // 同步一级菜单高亮

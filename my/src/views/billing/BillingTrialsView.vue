@@ -17,8 +17,10 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useBillingStore } from '@/stores/billing'
 
 const { t } = useI18n()
+const billingStore = useBillingStore()
 
 // ——— 数据状态 ———
 const items = ref<ClaimableItem[]>([])
@@ -35,6 +37,8 @@ async function load() {
   try {
     const res = await billingApi.trials()
     items.value = res.data
+    // 同步菜单「待领取」徽标计数
+    billingStore.claimableTrials = res.data.filter(it => it.claimable).length
     // 初始化邀请码输入
     res.data.forEach((item) => {
       if (!(item.policy.code in inviteCodes.value)) {
@@ -52,27 +56,37 @@ async function load() {
 
 onMounted(load)
 
+// ——— 科目名称（新模型：seat/boot_slot/runtime_minute，复用购买页 KPI 名称）———
+function subjectName(subject: string): string {
+  if (subject === 'seat') return t('billing.purchase2.kpiSeat')
+  if (subject === 'boot_slot') return t('billing.purchase2.kpiBootSlot')
+  if (subject === 'runtime_minute') return t('billing.purchase2.kpiRuntime')
+  return subject
+}
+
 // ——— 科目单位 ———
 function subjectUnit(subject: string): string {
-  if (subject === 'instance_seat') return t('billing.trialUnitTai')
-  if (subject === 'boot_seat') return t('billing.trialUnitBootSeat')
+  if (subject === 'seat') return t('billing.trialUnitTai')
+  if (subject === 'boot_slot') return t('billing.unitGe')
   if (subject === 'runtime_minute') return t('billing.unitMin')
   return ''
 }
 
-// ——— 授予内容描述（多发放项，逐项「数量单位 · 到期」，以「，」连接）———
-function grantDesc(item: ClaimableItem): string {
-  const items = item.policy.items ?? []
-  if (!items.length) {
-    return '—'
-  }
-  return items.map((it) => {
-    const qty = `${it.quantity} ${subjectUnit(it.subject)}`
+// 统一展示顺序：实例席位 → 包月开机数 → 临时开机时长。
+const SUBJECT_ORDER = ['seat', 'boot_slot', 'runtime_minute']
+function subjectRank(s: string): number {
+  const i = SUBJECT_ORDER.indexOf(s)
+  return i < 0 ? 99 : i
+}
+
+// ——— 授予内容（多发放项，逐项「名称 数量单位 · 到期」，逐行展示）———
+function grantLines(item: ClaimableItem): string[] {
+  return [...(item.policy.items ?? [])].sort((a, b) => subjectRank(a.subject) - subjectRank(b.subject)).map((it) => {
     const expire = it.expire_days > 0
       ? t('billing.trialExpireDays', { n: it.expire_days })
       : t('billing.trialPermanent')
-    return `${qty} · ${expire}`
-  }).join('，')
+    return `${subjectName(it.subject)} ${it.quantity} ${subjectUnit(it.subject)} · ${expire}`
+  })
 }
 
 // ——— 领取 ———
@@ -99,8 +113,12 @@ async function claim(item: ClaimableItem) {
   <div class="flex flex-col gap-6">
     <!-- 标题 -->
     <div>
-      <h1 class="text-xl font-semibold tracking-tight">{{ t('billing.trialsTitle') }}</h1>
-      <p class="text-muted-foreground mt-1 text-sm">{{ t('billing.trialsDesc') }}</p>
+      <h1 class="text-xl font-semibold tracking-tight">
+        {{ t('billing.trialsTitle') }}
+      </h1>
+      <p class="text-muted-foreground mt-1 text-sm">
+        {{ t('billing.trialsDesc') }}
+      </p>
     </div>
 
     <!-- 骨架屏 -->
@@ -126,7 +144,9 @@ async function claim(item: ClaimableItem) {
       class="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground"
     >
       <Gift class="size-10 opacity-30" />
-      <p class="text-sm">{{ t('billing.trialsEmpty') }}</p>
+      <p class="text-sm">
+        {{ t('billing.trialsEmpty') }}
+      </p>
     </div>
 
     <!-- 试用卡片列表 -->
@@ -138,14 +158,21 @@ async function claim(item: ClaimableItem) {
       >
         <CardHeader class="pb-2">
           <div class="flex items-start justify-between gap-2">
-            <CardTitle class="text-base leading-tight">{{ item.policy.name }}</CardTitle>
+            <CardTitle class="text-base leading-tight">
+              {{ item.policy.name }}
+            </CardTitle>
             <Badge v-if="item.claimed_count > 0" variant="secondary" class="shrink-0 text-xs">
               {{ t('billing.trialClaimedCount', { n: item.claimed_count }) }}
             </Badge>
           </div>
           <CardDescription class="mt-1 text-xs">
-            {{ t('billing.trialGrantDesc') }}: {{ grantDesc(item) }}
+            {{ t('billing.trialGrantDesc') }}
           </CardDescription>
+          <ul class="text-muted-foreground mt-1 space-y-0.5 text-xs">
+            <li v-for="(line, i) in grantLines(item)" :key="i">
+              {{ line }}
+            </li>
+          </ul>
         </CardHeader>
 
         <CardContent class="pb-2">
@@ -154,7 +181,7 @@ async function claim(item: ClaimableItem) {
             {{ t('billing.trialPerUserLimit', { n: item.policy.per_user_limit }) }}
           </div>
 
-          <!-- 邀请码输入（需邀请码即显示，凭码领取）-->
+          <!-- 邀请码输入（需邀请码即显示，凭码领取） -->
           <div v-if="item.need_invite" class="mt-3">
             <Input
               v-model="inviteCodes[item.policy.code]"

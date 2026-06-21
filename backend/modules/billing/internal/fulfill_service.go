@@ -124,6 +124,19 @@ func (s *fulfillServiceImpl) FulfillRuntimePack(userID int, minutes int, source,
 	return nil
 }
 
+// GiftRuntime 赠送临时开机时长（席位购买/续费触发），落 gift 科目流水。返回赠送后余量。
+func (s *fulfillServiceImpl) GiftRuntime(userID, minutes int, ref string) (int64, error) {
+	if minutes < 1 {
+		return 0, apperr.Validation("赠送时长必须≥1")
+	}
+	after, err := s.rtWallet.addMinutes(userID, int64(minutes))
+	if err != nil {
+		return 0, err
+	}
+	_ = s.writeResourceLedger(userID, SubjectRuntimeMinute, int64(minutes), after, LedgerGift, ref, "system:gift")
+	return after, nil
+}
+
 func (s *fulfillServiceImpl) activeCount(userID int, kind string, now time.Time) (int64, error) {
 	units, err := s.license.activeUnits(userID, kind, now)
 	if err != nil {

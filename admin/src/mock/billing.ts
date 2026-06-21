@@ -48,11 +48,11 @@ const accountStore: Record<number, any> = {
 
 // ---- Trial Policies ----
 let trials: any[] = [
-  { id: 1, code: 'new_user_trial', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [
+  { id: 1, code: 'new_user_trial', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', marketing_featured: true, items: [
     { id: 1, policy_id: 1, subject: 'seat', quantity: 1, expire_days: 7 },
     { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 },
   ], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
-  { id: 2, code: 'invite_trial', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: 'GLORY2026', items: [
+  { id: 2, code: 'invite_trial', name: '邀请码大礼包', enabled: true, per_user_limit: 1, allow_new_user: false, invite_code: 'GLORY2026', marketing_featured: false, items: [
     { id: 3, policy_id: 2, subject: 'seat', quantity: 2, expire_days: 30 },
     { id: 4, policy_id: 2, subject: 'runtime_minute', quantity: 1440, expire_days: 30 },
     { id: 5, policy_id: 2, subject: 'boot_slot', quantity: 1, expire_days: 30 },
@@ -78,18 +78,17 @@ const pricingKinds: any = {
   seat: {
     unit_price_cents: 3000,
     unit_label: '台',
-    qty_options: [1, 2, 5, 10, 50, 100, 500, 1000],
-    qty_tiers: [{ min_quantity: 10, discount_bps: 9000 }, { min_quantity: 100, discount_bps: 8000 }],
+    qty_tiers: [{ min_quantity: 1, discount_bps: 10000 }, { min_quantity: 10, discount_bps: 9000 }, { min_quantity: 100, discount_bps: 8000 }],
     duration_unit: 'month',
     duration_options: [{ value: 1, discount_bps: 10000 }, { value: 3, discount_bps: 8500 }, { value: 12, discount_bps: 7000 }],
     notice: '云手机为固定套餐，购买席位即获得「能存在」的权利。',
     billing_note: '席位按月计费，数量阶梯折扣 × 时长折扣相乘。',
+    recycle_retention_days: 30,
   },
   boot_slot: {
     unit_price_cents: 2000,
     unit_label: '个',
-    qty_options: [1, 2, 5, 10, 50, 100],
-    qty_tiers: [{ min_quantity: 10, discount_bps: 9000 }],
+    qty_tiers: [{ min_quantity: 1, discount_bps: 10000 }, { min_quantity: 10, discount_bps: 9000 }],
     duration_unit: 'day',
     duration_options: [{ value: 7, discount_bps: 10000 }, { value: 30, discount_bps: 9000 }],
     notice: '包月开机数决定能同时开机的实例数，多实例轮流共享。',
@@ -103,7 +102,7 @@ let runtimeCfg: any = {
   packs: [{ minutes: 600, discount_bps: 10000 }, { minutes: 3000, discount_bps: 9000 }],
   min_minutes: 60,
   daily_cap_minutes: 200,
-  recycle_retention_days: 30,
+  gift_minutes_per_seat_month: 200,
   notice: '临时开机时长无期限，用完为止；每台每天封顶 200 分钟。',
 }
 
@@ -116,13 +115,6 @@ let paymentMethods: any[] = [
 
 // 充值预设
 let rechargePresets: number[] = [1000, 5000, 10000, 50000]
-
-// 须知文案
-let notices: any = {
-  seat: { notice: '云手机为固定套餐，用完为止。', billing_note: '席位实例计费说明……' },
-  boot_slot: { notice: '包月开机数说明……', billing_note: '包月开机数计费说明……' },
-  runtime_pack: { notice: '临时开机时长无期限，用完为止；每台每天封顶 200 分钟。' },
-}
 
 export default defineFakeRoute([
   // ---- Biz Orders（新模型，无订单项随列表返回）----
@@ -335,6 +327,21 @@ export default defineFakeRoute([
     },
   },
   {
+    url: '/v1/admin/billing/trials/:id/feature',
+    method: 'post',
+    response: ({ params, body }) => {
+      const id = Number(params.id)
+      const featured = (body as any)?.featured !== false
+      // 单选：先清空全部，再置该条。
+      trials.forEach((t) => { t.marketing_featured = false })
+      if (featured) {
+        const p = trials.find(t => t.id === id)
+        if (p) p.marketing_featured = true
+      }
+      return ok(null)
+    },
+  },
+  {
     url: '/v1/admin/billing/trials/:id/grants',
     method: 'get',
     response: ({ params }) => {
@@ -399,20 +406,6 @@ export default defineFakeRoute([
       const d = body as any
       if (Array.isArray(d.presets_cents)) rechargePresets = d.presets_cents
       return ok({ presets_cents: rechargePresets })
-    },
-  },
-  // ── 配置：须知文案 ───────────────────────────────────────────
-  {
-    url: '/v1/admin/billing/notices',
-    method: 'get',
-    response: () => ok(notices),
-  },
-  {
-    url: '/v1/admin/billing/notices',
-    method: 'put',
-    response: ({ body }) => {
-      notices = { ...notices, ...(body as any) }
-      return ok(notices)
     },
   },
 ])

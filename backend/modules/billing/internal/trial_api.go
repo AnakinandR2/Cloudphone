@@ -124,6 +124,22 @@ func AdminGrantTrialEligibility(c *gin.Context) {
 	framework.OK(c)
 }
 
+// AdminFeatureTrialPolicy 后台：单选标记某策略为营销站展示（:id=policyID）
+func AdminFeatureTrialPolicy(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "无效的ID")
+		return
+	}
+	var req TrialFeatureRequest
+	_ = c.ShouldBindJSON(&req)
+	if err := TrialService.SetMarketingFeatured(id, req.Featured); err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OK(c)
+}
+
 // AdminListTrialGrants 后台：某策略发放记录（:id=policyID）
 func AdminListTrialGrants(c *gin.Context) {
 	pid, err := strconv.Atoi(c.Param("id"))

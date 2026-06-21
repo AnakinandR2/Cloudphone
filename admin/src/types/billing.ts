@@ -7,7 +7,7 @@ export interface AccountView { account: Account, ledger: LedgerEntry[], ledger_t
 
 export interface TrialPolicyItem { id: number, policy_id: number, subject: string, quantity: number, expire_days: number }
 export interface TrialPolicyItemInput { subject: string, quantity: number, expire_days: number }
-export interface TrialPolicy { id: number, code: string, name: string, enabled: boolean, per_user_limit: number, allow_new_user: boolean, invite_code: string, items: TrialPolicyItem[], created_at: string, updated_at: string }
+export interface TrialPolicy { id: number, code: string, name: string, enabled: boolean, per_user_limit: number, allow_new_user: boolean, invite_code: string, marketing_featured: boolean, items: TrialPolicyItem[], created_at: string, updated_at: string }
 export interface TrialPolicyCreate { code: string, name: string, items: TrialPolicyItemInput[], per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
 export interface TrialPolicyUpdate { name?: string, items?: TrialPolicyItemInput[], per_user_limit?: number, allow_new_user?: boolean, invite_code?: string, enabled?: boolean }
 export interface TrialGrant { id: number, claim_id: number, policy_id: number, user_id: number, subject: string, quantity: number, created_at: string }
@@ -29,12 +29,13 @@ export interface DurationOption { value: number, discount_bps: number }
 export interface KindPricing {
   unit_price_cents: number
   unit_label: string
-  qty_options: number[]
   qty_tiers: QtyTier[]
   duration_unit: 'month' | 'day'
   duration_options: DurationOption[]
   notice: string
   billing_note: string
+  /** 仅 seat 有意义：回收站保留天数 */
+  recycle_retention_days?: number
 }
 /** GET/PUT /admin/billing/pricing 整体形状：{ kinds: { seat, boot_slot } } */
 export interface PricingConfig {
@@ -45,14 +46,15 @@ export interface PricingConfig {
 export interface RuntimePack { minutes: number, discount_bps: number }
 /**
  * GET/PUT /admin/billing/runtime-config（后端 RuntimePackCfg，扁平）。
- * notice 由「须知文案」端点维护，这里透传以免 PUT 覆盖时被清空。
+ * notice 直接在定价配置「临时开机时长」tab 内编辑。
  */
 export interface RuntimeBillingConfig {
   unit_price_cents_per_minute: number
   packs: RuntimePack[]
   min_minutes: number
   daily_cap_minutes: number
-  recycle_retention_days: number
+  /** 每席位每月赠送的临时开机时长（分钟），0=关闭 */
+  gift_minutes_per_seat_month: number
   notice?: string
 }
 
@@ -72,15 +74,6 @@ export interface AdjustResourceBody {
 
 /** GET/PUT /admin/billing/recharge-presets */
 export interface RechargePresets { presets_cents: number[] }
-
-/** runtime_pack 的须知文案 */
-export interface RuntimeNotice { notice: string }
-/** GET/PUT /admin/billing/notices（各 kind 的 notice/billing_note + runtime_pack notice） */
-export interface NoticesConfig {
-  seat: { notice: string, billing_note: string }
-  boot_slot: { notice: string, billing_note: string }
-  runtime_pack: RuntimeNotice
-}
 
 /** 新订单形状（契约 §1.5）。status ∈ { unpaid | paid | expired } */
 export interface BillingOrder {

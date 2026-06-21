@@ -42,15 +42,28 @@ func GetBillingOverview(c *gin.Context) {
 		framework.FailErr(c, err)
 		return
 	}
-	// 已用席位/在用名额由占用物化推导（current_instance_id 非空数）。
+	// 已用席位由占用物化推导（current_instance_id 非空数）；包月名额不持久绑定实例，
+	// 「在用」= 当前运行中的台数（向 phone 取），封顶到持有名额数。
 	seatUsed := countOccupied(uid, KindSeat)
-	bootInUse := countOccupied(uid, KindBootSlot)
+	bootInUse := bootSlotInUse(uid, bootTotal)
 	framework.OKWithData(c, gin.H{
 		"balance_cents":             balance,
 		"seat":                      gin.H{"total": seatTotal, "used": seatUsed},
 		"boot_slot":                 gin.H{"total": bootTotal, "in_use": bootInUse},
 		"runtime_minutes_remaining": mins,
 	})
+}
+
+// bootSlotInUse 包月名额「在用」数 = min(当前运行中的台数, 持有名额数)；下限 0。
+func bootSlotInUse(userID, bootTotal int) int {
+	n := runningInstanceCount(userID)
+	if n > bootTotal {
+		n = bootTotal
+	}
+	if n < 0 {
+		n = 0
+	}
+	return n
 }
 
 func countOccupied(userID int, kind string) int {
@@ -104,6 +117,7 @@ func BizQuote(c *gin.Context) {
 		"qty_discount_bps":      q.QtyDiscountBps,
 		"duration_discount_bps": q.DurationDiscountBps,
 		"payable_cents":         q.PayableCents,
+		"gift_runtime_minutes":  q.GiftRuntimeMinutes,
 	})
 }
 
@@ -161,7 +175,14 @@ func ListBizOrders(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	list, total, err := BizOrderService.ListOrders(uid, page, size, c.Query("status"))
+	var from, to time.Time
+	if p := parseTimeQuery(c.Query("from")); p != nil {
+		from = *p
+	}
+	if p := parseTimeQuery(c.Query("to")); p != nil {
+		to = *p
+	}
+	list, total, err := BizOrderService.ListOrders(uid, page, size, c.Query("status"), from, to)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
@@ -220,12 +241,28 @@ func GetRuntimeLog(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	res, err := RuntimeEngineService.RuntimeLog(uid, page, size, nil)
+	from := parseTimeQuery(c.Query("from"))
+	to := parseTimeQuery(c.Query("to"))
+	res, err := RuntimeEngineService.RuntimeLog(uid, page, size, nil, from, to)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
 	framework.OKWithData(c, res)
+}
+
+// parseTimeQuery 解析时间段筛选参数：优先 RFC3339（前端 toISOString），兼容 datetime-local
+// 的 "2006-01-02T15:04" 与日期 "2006-01-02"；空或无法解析返回 nil（不过滤）。
+func parseTimeQuery(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return &t
+		}
+	}
+	return nil
 }
 
 // ---- 后台 ----

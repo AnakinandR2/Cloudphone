@@ -70,30 +70,73 @@ describe('useWebRTC · 状态与控制', () => {
   })
 })
 
-describe('useWebRTC · 屏幕方向自动检测', () => {
-  it('syncOrientation 按实时推流尺寸自动判定横竖屏（设备/应用自动转屏即跟随）', () => {
+describe('useWebRTC · 屏幕方向（跟随推流 + 粘性手动）', () => {
+  it('首次手动前：displayLandscape 跟随推流，cssRotation 恒 0（无需补偿）', () => {
     const videoRef = ref({ videoWidth: 720, videoHeight: 1280 } as unknown as HTMLVideoElement)
     const rtc = setup(videoRef)
-    expect(rtc.landscape.value).toBe(false) // 初始竖屏
+    rtc.syncOrientation()
+    expect(rtc.streamLandscape.value).toBe(false)
+    expect(rtc.displayLandscape.value).toBe(false) // desired=null → 跟随推流
+    expect(rtc.cssRotation.value).toBe(0)
 
-    // 应用内自动转横屏 → 推流分辨率交换（宽>高），syncOrientation 自动检测为横屏
+    // 应用自动转横屏 → 推流宽>高，display 跟随，仍不需 CSS 旋转
     videoRef.value!.videoWidth = 1280
     videoRef.value!.videoHeight = 720
     rtc.syncOrientation()
-    expect(rtc.landscape.value).toBe(true)
-
-    // 转回竖屏
-    videoRef.value!.videoWidth = 720
-    videoRef.value!.videoHeight = 1280
-    rtc.syncOrientation()
-    expect(rtc.landscape.value).toBe(false)
+    expect(rtc.streamLandscape.value).toBe(true)
+    expect(rtc.displayLandscape.value).toBe(true)
+    expect(rtc.cssRotation.value).toBe(0)
   })
 
-  it('推流尺寸缺失时 syncOrientation 不改变方向', () => {
+  it('推流尺寸缺失时 syncOrientation 不改变 streamLandscape', () => {
     const videoRef = ref({ videoWidth: 0, videoHeight: 0 } as unknown as HTMLVideoElement)
     const rtc = setup(videoRef)
     rtc.syncOrientation()
-    expect(rtc.landscape.value).toBe(false)
+    expect(rtc.streamLandscape.value).toBe(false)
+  })
+
+  it('桌面锁定竖屏手动旋转：display 转横屏、CSS 补偿 -90（前端把竖屏画面转过来）', () => {
+    const videoRef = ref({ videoWidth: 720, videoHeight: 1280 } as unknown as HTMLVideoElement)
+    const rtc = setup(videoRef)
+    rtc.syncOrientation()
+
+    expect(rtc.rotateDevice()).toBe(true) // 即使 dc 未就绪，前端方向也会变
+    expect(rtc.desiredLandscape.value).toBe(true)
+    expect(rtc.displayLandscape.value).toBe(true)
+    // 推流仍是竖屏像素、显示要横屏 → 前端 CSS 旋转补齐
+    expect(rtc.cssRotation.value).toBe(-90)
+  })
+
+  it('手动转横屏后设备真的转了：推流追上 → CSS 归 0，绝不双重旋转', () => {
+    const videoRef = ref({ videoWidth: 720, videoHeight: 1280 } as unknown as HTMLVideoElement)
+    const rtc = setup(videoRef)
+    rtc.syncOrientation()
+    rtc.rotateDevice() // desired=横屏
+    expect(rtc.cssRotation.value).toBe(-90)
+
+    // 设备/相机真的转了横屏，推流尺寸交换
+    videoRef.value!.videoWidth = 1280
+    videoRef.value!.videoHeight = 720
+    rtc.syncOrientation()
+    expect(rtc.displayLandscape.value).toBe(true) // 手动选择粘性保留
+    expect(rtc.cssRotation.value).toBe(0) // 推流已横屏，无需再 CSS 旋转
+  })
+
+  it('手动选择粘性：设备自转回竖屏，display 仍保持上次手动的横屏（按用户选择）', () => {
+    const videoRef = ref({ videoWidth: 1280, videoHeight: 720 } as unknown as HTMLVideoElement)
+    const rtc = setup(videoRef)
+    rtc.syncOrientation() // streamLandscape=true, display 跟随=true
+    rtc.rotateDevice() // desired= !true = false（手动转竖屏）
+    expect(rtc.desiredLandscape.value).toBe(false)
+    expect(rtc.displayLandscape.value).toBe(false)
+    expect(rtc.cssRotation.value).toBe(-90) // 想竖屏、推流是横屏 → CSS 补偿
+
+    // 推流自己变回竖屏
+    videoRef.value!.videoWidth = 720
+    videoRef.value!.videoHeight = 1280
+    rtc.syncOrientation()
+    expect(rtc.displayLandscape.value).toBe(false) // 粘性
+    expect(rtc.cssRotation.value).toBe(0)
   })
 })
 

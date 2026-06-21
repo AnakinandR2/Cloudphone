@@ -29,17 +29,6 @@ export interface AppMainRoute {
  */
 export const asyncRoutes: AppMainRoute[] = [
   {
-    meta: { title: 'menu.workbench', icon: 'LayoutDashboard' },
-    children: [
-      {
-        path: '/dashboard',
-        name: 'dashboard',
-        component: () => import('@/views/dashboard/DashboardView.vue'),
-        meta: { title: 'menu.dashboard', icon: 'Gauge' },
-      },
-    ],
-  },
-  {
     meta: { title: 'menu.cloud', icon: 'Smartphone' },
     children: [
       {

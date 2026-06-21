@@ -27,6 +27,9 @@ type runChargePlan struct {
 	BootSlotMin   int // 占包月名额（charged=0）
 	TempMin       int // 扣临时时长
 	CappedFreeMin int // 当天超封顶，免费
+	// 落账原因所需的决策上下文：本台按开机先后的序号（0 起）与当时的包月名额总数。
+	Rank     int
+	Capacity int
 }
 
 // planRuntimeCharges 决定本 tick 每台实例的扣费拆分。
@@ -50,7 +53,7 @@ func planRuntimeCharges(states []runInstanceState, bootSlots int, tempRemaining 
 	plans := make([]runChargePlan, 0, len(ss))
 	remaining := tempRemaining
 	for idx, s := range ss {
-		p := runChargePlan{CpID: s.CpID, RunSessionRef: s.RunSessionRef}
+		p := runChargePlan{CpID: s.CpID, RunSessionRef: s.RunSessionRef, Rank: idx, Capacity: bootSlots}
 		if s.NewMinutes <= 0 {
 			plans = append(plans, p)
 			continue
@@ -88,6 +91,24 @@ func planRuntimeCharges(states []runInstanceState, bootSlots int, tempRemaining 
 func utc8Day(t time.Time) string {
 	loc := time.FixedZone("UTC+8", 8*3600)
 	return t.In(loc).Format("2006-01-02")
+}
+
+// 计费原因文案：落账时按当时决策上下文生成「具体原因」，便于事后排查为何这样计费。
+// rank 为本台按开机先后的序号（0 起），capacity 为当时的包月名额总数。
+
+func bootReason(rank, capacity int) string {
+	return fmt.Sprintf("占用包月名额：本台按开机先后第 %d 台，落在当前 %d 个包月名额内，开机免费、不扣临时时长。", rank+1, capacity)
+}
+
+func tempReason(rank, capacity int) string {
+	if capacity <= 0 {
+		return "当前无可用包月名额（未购买或已全部到期），本台按临时时长逐分钟扣费。"
+	}
+	return fmt.Sprintf("超出包月名额：当前 %d 个包月名额已被更早开机的实例占满，本台按开机先后第 %d 台，按临时时长逐分钟扣费。", capacity, rank+1)
+}
+
+func cappedReason(dailyCap int, day string) string {
+	return fmt.Sprintf("本台当日（%s，UTC+8）临时时长已累计达封顶 %d 分钟，本段超出部分免费运行。", day, dailyCap)
 }
 
 // sessionRef 为缺失 RunSessionRef 的区间合成稳定标识（cpId@powerOnUnix）。

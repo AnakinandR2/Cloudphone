@@ -50,7 +50,27 @@ func (s *bizOrderServiceImpl) Quote(req *BizQuoteRequest) (PriceQuote, error) {
 		return PriceQuote{}, apperr.Validation("充值无需报价")
 	}
 	kind, _ := kindOf(req.BizType)
-	return s.pricing.QuoteKindDuration(kind, req.Quantity, req.DurationValue)
+	q, err := s.pricing.QuoteKindDuration(kind, req.Quantity, req.DurationValue)
+	if err != nil {
+		return q, err
+	}
+	// 席位新购/续费：附带赠送的临时开机时长（分钟），前端在订单摘要展示。
+	if kind == KindSeat {
+		q.GiftRuntimeMinutes = s.seatGiftMinutes(req.Quantity, req.DurationValue)
+	}
+	return q, nil
+}
+
+// seatGiftMinutes 计算席位赠送时长：每席位每月分钟数 × 席位数 × 月数（配置为 0 时返回 0）。
+func (s *bizOrderServiceImpl) seatGiftMinutes(seatQty, months int) int {
+	if seatQty < 1 || months < 1 {
+		return 0
+	}
+	per, err := s.pricing.GiftMinutesPerSeatMonth()
+	if err != nil || per <= 0 {
+		return 0
+	}
+	return per * seatQty * months
 }
 
 // CreateOrder 下单：组装订单项 + 计价 → 入库；余额支付即时扣款并履约，第三方返回待支付。
@@ -139,23 +159,13 @@ func (s *bizOrderServiceImpl) PayOrder(userID, id int) (*BizOrderResult, error) 
 	return &BizOrderResult{Order: *o, Pay: pay}, nil
 }
 
-// pay 执行支付：余额支付即时扣款 + 履约 + 置 paid；第三方返回待支付 + stub 参数。
+// pay 执行支付：
+//   - 余额支付：即时扣款（充值除外）→ 履约 → 置 paid。
+//   - 第三方支付：当前为桩网关，无真实对接 → 视为即时到账，直接履约 + 置 paid（不扣余额，
+//     钱由外部网关收取）。后续接入真实网关时，这里改回返回 pending + 走 MarkPaid 回调。
 func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
-	if o.PayMethod != PayBalance {
-		// 第三方支付：返回待支付 + 桩支付参数（不扣余额、不履约）。
-		return PayResult{
-			Status:    "pending",
-			PayMethod: o.PayMethod,
-			PayParams: map[string]interface{}{
-				"order_id":  o.ID,
-				"amount":    o.TotalCents,
-				"qr_stub":   "stub://pay/" + o.PayMethod + "/" + strconv.Itoa(int(o.ID)),
-				"expire_in": 900,
-			},
-		}, nil
-	}
-	// 余额支付：扣款（充值除外）→ 履约 → 置 paid。
-	if o.BizType != BizRecharge {
+	// 余额支付才从钱包扣款；第三方由外部网关收款，不动余额。
+	if o.PayMethod == PayBalance && o.BizType != BizRecharge {
 		if err := s.wallet.Charge(userID, o.TotalCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID)); err != nil {
 			return PayResult{}, err
 		}
@@ -204,13 +214,41 @@ func (s *bizOrderServiceImpl) fulfillOrder(userID int, o *BizOrder, items []BizO
 		return s.fulfill.FulfillRuntimePack(userID, items[0].Quantity, SourceOrder, ref)
 	case BizSeatNew, BizBootSlotNew:
 		kind, _ := kindOf(o.BizType)
-		return s.fulfill.FulfillNew(userID, kind, items[0].Quantity, items[0].DurationValue, SourceOrder, ref)
+		if err := s.fulfill.FulfillNew(userID, kind, items[0].Quantity, items[0].DurationValue, SourceOrder, ref); err != nil {
+			return err
+		}
+		if kind == KindSeat {
+			return s.grantSeatGift(userID, o, items[0].Quantity, items[0].DurationValue, ref)
+		}
+		return nil
 	case BizSeatRenew, BizBootSlotRenew:
 		kind, _ := kindOf(o.BizType)
 		ids := splitIDs(items[0].RenewUnitIDs)
-		return s.fulfill.FulfillRenew(userID, kind, ids, items[0].DurationValue)
+		if err := s.fulfill.FulfillRenew(userID, kind, ids, items[0].DurationValue); err != nil {
+			return err
+		}
+		if kind == KindSeat {
+			return s.grantSeatGift(userID, o, len(ids), items[0].DurationValue, ref)
+		}
+		return nil
 	}
 	return apperr.Validation("未知业务类型")
+}
+
+// grantSeatGift 席位新购/续费赠送临时开机时长：发放余量 + 记录到订单（gift_runtime_minutes）。
+func (s *bizOrderServiceImpl) grantSeatGift(userID int, o *BizOrder, seatQty, months int, ref string) error {
+	gift := s.seatGiftMinutes(seatQty, months)
+	if gift <= 0 {
+		return nil
+	}
+	if _, err := s.fulfill.GiftRuntime(userID, gift, ref); err != nil {
+		return err
+	}
+	if err := s.repo.setGift(int(o.ID), gift); err != nil {
+		return err
+	}
+	o.GiftRuntimeMinutes = gift
+	return nil
 }
 
 func (s *bizOrderServiceImpl) durationUnit(kind string) string {
@@ -220,9 +258,30 @@ func (s *bizOrderServiceImpl) durationUnit(kind string) string {
 	return "month"
 }
 
-func (s *bizOrderServiceImpl) ListOrders(userID, page, size int, status string) ([]BizOrder, int64, error) {
+// ListOrders 订单历史：按状态 + 创建时间区间过滤，随单返回订单项明细。
+func (s *bizOrderServiceImpl) ListOrders(userID, page, size int, status string, from, to time.Time) ([]BizOrderWithItems, int64, error) {
 	off, lim := pageOffset(page, size)
-	return s.repo.listOwned(userID, off, lim, status)
+	orders, total, err := s.repo.listOwned(userID, off, lim, status, from, to)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]uint, 0, len(orders))
+	for _, o := range orders {
+		ids = append(ids, o.ID)
+	}
+	itemMap, err := s.repo.itemsByOrders(ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]BizOrderWithItems, 0, len(orders))
+	for _, o := range orders {
+		items := itemMap[o.ID]
+		if items == nil {
+			items = []BizOrderItem{}
+		}
+		out = append(out, BizOrderWithItems{BizOrder: o, Items: items})
+	}
+	return out, total, nil
 }
 
 func (s *bizOrderServiceImpl) GetOrder(userID, id int) (*BizOrder, []BizOrderItem, error) {

@@ -25,6 +25,11 @@ const related = computed(() => relatedRaw.value.filter((p) => p.slug !== slug.va
 
 const fmt = (iso: string) => formatBlogDate(iso, locale.value)
 const minutes = computed(() => readingMinutes(post.value?.body_html ?? ''))
+// 更新时间：仅当与发布日期不同（按显示粒度）才另行展示，避免与发布日期重复。
+const showUpdated = computed(() => {
+  const u = post.value?.updated_at
+  return !!u && fmt(u) !== fmt(post.value?.published_at ?? '')
+})
 
 const crumbs = computed(() => [
   { label: t.value.nav.home, to: localePath('/') },
@@ -50,7 +55,7 @@ useSeoMeta({
         <Breadcrumb :items="crumbs" />
         <div class="blog-feature__meta" style="margin-top: 18px">
           <span v-if="post.group" class="blog-feature__cat">{{ post.group.name }}</span>
-          <span>{{ fmt(post.published_at) }}</span><span>·</span><span>{{ minutes }} {{ t.blog.min }}</span>
+          <span>{{ fmt(post.published_at) }}</span><span>·</span><span>{{ minutes }} {{ t.blog.min }}</span><template v-if="showUpdated"><span>·</span><span>{{ t.blog.updated }} {{ fmt(post.updated_at) }}</span></template>
         </div>
         <div class="article-cover">
           <img :src="post.cover_url" :alt="post.cover_alt" loading="eager" />

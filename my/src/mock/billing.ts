@@ -71,7 +71,6 @@ const purchaseConfig = {
     seat: {
       unit_price_cents: 3000,
       unit_label: '台',
-      qty_options: [1, 2, 5, 10, 50, 100, 500, 1000],
       qty_tiers: [
         { min_quantity: 10, discount_bps: 9000 },
         { min_quantity: 100, discount_bps: 8000 },
@@ -88,7 +87,6 @@ const purchaseConfig = {
     boot_slot: {
       unit_price_cents: 2000,
       unit_label: '个',
-      qty_options: [1, 2, 5, 10, 50, 100],
       qty_tiers: [
         { min_quantity: 10, discount_bps: 9000 },
         { min_quantity: 50, discount_bps: 8500 },
@@ -140,6 +138,9 @@ function pickRuntimeBps(minutes: number): number {
   return packs.reduce((best, p) => (p.minutes > best.minutes ? p : best)).discount_bps
 }
 
+// 每席位每月赠送的临时开机时长（分钟），与后端默认值一致（admin 可配）。
+const GIFT_MINUTES_PER_SEAT_MONTH = 200
+
 interface Quote {
   quantity: number
   duration_value: number
@@ -149,6 +150,13 @@ interface Quote {
   qty_discount_bps: number
   duration_discount_bps: number
   payable_cents: number
+  gift_runtime_minutes: number
+}
+
+// 席位赠送时长：每席位每月 × 数量 × 月数（仅 seat）。
+function seatGift(bizType: string, quantity: number, durationValue: number): number {
+  if (bizType !== 'seat_new' && bizType !== 'seat_renew') return 0
+  return GIFT_MINUTES_PER_SEAT_MONTH * quantity * durationValue
 }
 function computeQuote(body: any): Quote | null {
   const bizType: string = body?.biz_type
@@ -166,6 +174,7 @@ function computeQuote(body: any): Quote | null {
       qty_discount_bps: bps,
       duration_discount_bps: 10000,
       payable_cents: Math.round((original * bps) / 10000),
+      gift_runtime_minutes: 0,
     }
   }
   if (bizType === 'recharge') {
@@ -179,6 +188,7 @@ function computeQuote(body: any): Quote | null {
       qty_discount_bps: 10000,
       duration_discount_bps: 10000,
       payable_cents: cents,
+      gift_runtime_minutes: 0,
     }
   }
   const kind = KIND_BY_BIZ[bizType]
@@ -200,6 +210,7 @@ function computeQuote(body: any): Quote | null {
     qty_discount_bps: qtyBps,
     duration_discount_bps: durBps,
     payable_cents: payable,
+    gift_runtime_minutes: seatGift(bizType, quantity, durationValue),
   }
 }
 
@@ -214,6 +225,7 @@ interface OrderRec {
     created_at: string
     paid_at: string | null
     expired_at: string | null
+    gift_runtime_minutes: number
   }
   items: Array<{
     id: number
@@ -231,15 +243,15 @@ interface OrderRec {
 let orderSeq = 9000
 const orders: OrderRec[] = [
   {
-    order: { id: ++orderSeq, biz_type: 'seat_new', status: 'paid', total_cents: 226800, pay_method: 'balance', created_at: iso(addDays(today, -30)), paid_at: iso(addDays(today, -30)), expired_at: null },
+    order: { id: ++orderSeq, biz_type: 'seat_new', status: 'paid', total_cents: 226800, pay_method: 'balance', created_at: iso(addDays(today, -30)), paid_at: iso(addDays(today, -30)), expired_at: null, gift_runtime_minutes: 24000 },
     items: [{ id: 1, order_id: orderSeq, target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800 }],
   },
   {
-    order: { id: ++orderSeq, biz_type: 'runtime_pack', status: 'paid', total_cents: 54000, pay_method: 'wechat', created_at: iso(addDays(today, -10)), paid_at: iso(addDays(today, -10)), expired_at: null },
+    order: { id: ++orderSeq, biz_type: 'runtime_pack', status: 'paid', total_cents: 54000, pay_method: 'wechat', created_at: iso(addDays(today, -10)), paid_at: iso(addDays(today, -10)), expired_at: null, gift_runtime_minutes: 0 },
     items: [{ id: 2, order_id: orderSeq, target_kind: 'runtime_minute', quantity: 3000, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 54000 }],
   },
   {
-    order: { id: ++orderSeq, biz_type: 'boot_slot_new', status: 'unpaid', total_cents: 5400, pay_method: 'wechat', created_at: iso(addDays(today, -1)), paid_at: null, expired_at: iso(addDays(today, 1)) },
+    order: { id: ++orderSeq, biz_type: 'boot_slot_new', status: 'unpaid', total_cents: 5400, pay_method: 'wechat', created_at: iso(addDays(today, -1)), paid_at: null, expired_at: iso(addDays(today, 1)), gift_runtime_minutes: 0 },
     items: [{ id: 3, order_id: orderSeq, target_kind: 'boot_slot', quantity: 3, duration_value: 30, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 5400 }],
   },
 ]
@@ -265,6 +277,10 @@ function fulfill(rec: OrderRec) {
     else if (it.target_kind === 'runtime_minute') {
       wallet.runtime_minutes_remaining += it.quantity
     }
+  }
+  // 席位新购/续费赠送的临时开机时长。
+  if (rec.order.gift_runtime_minutes > 0) {
+    wallet.runtime_minutes_remaining += rec.order.gift_runtime_minutes
   }
 }
 
@@ -296,8 +312,8 @@ const runtimeLog = [
     temp_minutes_charged: 45,
     running: true,
     segments: [
-      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -1)), to: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)) },
-      { quota_type: 'temp', minutes: 45, from: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)), to: iso(today) },
+      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -1)), to: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)), reason: '占用包月名额：本台按开机先后第 1 台，落在当前 2 个包月名额内，开机免费、不扣临时时长。' },
+      { quota_type: 'temp', minutes: 45, from: iso(new Date(addDays(today, -1).getTime() + 90 * 60000)), to: iso(today), reason: '超出包月名额：当前 1 个包月名额已被更早开机的实例占满，本台按开机先后第 2 台，按临时时长逐分钟扣费。' },
     ],
   },
   {
@@ -309,7 +325,7 @@ const runtimeLog = [
     temp_minutes_charged: 0,
     running: false,
     segments: [
-      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -2)), to: iso(new Date(addDays(today, -2).getTime() + 30 * 60000)) },
+      { quota_type: 'boot_slot', minutes: 0, from: iso(addDays(today, -2)), to: iso(new Date(addDays(today, -2).getTime() + 30 * 60000)), reason: '占用包月名额：本台按开机先后第 1 台，落在当前 2 个包月名额内，开机免费、不扣临时时长。' },
     ],
   },
   {
@@ -321,8 +337,8 @@ const runtimeLog = [
     temp_minutes_charged: 200,
     running: false,
     segments: [
-      { quota_type: 'temp', minutes: 200, from: iso(addDays(today, -3)), to: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)) },
-      { quota_type: 'capped_free', minutes: 0, from: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)), to: iso(new Date(addDays(today, -3).getTime() + 320 * 60000)) },
+      { quota_type: 'temp', minutes: 200, from: iso(addDays(today, -3)), to: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)), reason: '当前无可用包月名额（未购买或已全部到期），本台按临时时长逐分钟扣费。' },
+      { quota_type: 'capped_free', minutes: 0, from: iso(new Date(addDays(today, -3).getTime() + 200 * 60000)), to: iso(new Date(addDays(today, -3).getTime() + 320 * 60000)), reason: '本台当日（UTC+8）临时时长已累计达封顶 200 分钟，本段超出部分免费运行。' },
     ],
   },
 ]
@@ -410,8 +426,9 @@ export default defineFakeRoute([
           amount_cents: q.payable_cents,
         }]
       }
+      const gift = seatGift(bizType, Number(body?.quantity) || (Array.isArray(body?.unit_ids) ? body.unit_ids.length : 1), Number(body?.duration_value) || 1)
       const rec: OrderRec = {
-        order: { id: orderId, biz_type: bizType, status: 'unpaid', pay_method: payMethod, total_cents: total, created_at: now(), paid_at: null, expired_at: payMethod === 'balance' ? null : iso(addDays(new Date(), 1)) },
+        order: { id: orderId, biz_type: bizType, status: 'unpaid', pay_method: payMethod, total_cents: total, created_at: now(), paid_at: null, expired_at: payMethod === 'balance' ? null : iso(addDays(new Date(), 1)), gift_runtime_minutes: gift },
         items,
       }
       orders.unshift(rec)
@@ -434,8 +451,19 @@ export default defineFakeRoute([
     response: ({ query }) => {
       const page = Number(query.page) || 1
       const size = Number(query.size) || 20
-      let list = orders.map(o => o.order)
+      const from = query.from ? new Date(String(query.from)).getTime() : null
+      const to = query.to ? new Date(String(query.to)).getTime() : null
+      // 随单返回 items（订单历史明细 + 行展开）。
+      let list = orders.map(o => ({ ...o.order, items: o.items }))
       if (query.status) list = list.filter(o => o.status === query.status)
+      if (from !== null || to !== null) {
+        list = list.filter((o) => {
+          const created = new Date(o.created_at).getTime()
+          if (from !== null && created < from) return false
+          if (to !== null && created > to) return false
+          return true
+        })
+      }
       const total = list.length
       // 后端 OKWithPage 返回 { list, total }。
       return ok({ list: list.slice((page - 1) * size, page * size), total })
@@ -467,8 +495,21 @@ export default defineFakeRoute([
     response: ({ query }) => {
       const page = Number(query.page) || 1
       const size = Number(query.size) || 20
-      const total = runtimeLog.length
-      return ok({ items: runtimeLog.slice((page - 1) * size, page * size), total, daily_cap_minutes: purchaseConfig.runtime_pack.daily_cap_minutes })
+      // 时间段筛选：会话窗口 [power_on, power_off||now] 与 [from, to] 相交。
+      const from = query.from ? new Date(String(query.from)).getTime() : null
+      const to = query.to ? new Date(String(query.to)).getTime() : null
+      let list = runtimeLog
+      if (from !== null || to !== null) {
+        list = list.filter((e) => {
+          const start = new Date(e.power_on_at).getTime()
+          const end = e.power_off_at ? new Date(e.power_off_at).getTime() : Date.now()
+          if (from !== null && end <= from) return false
+          if (to !== null && start >= to) return false
+          return true
+        })
+      }
+      const total = list.length
+      return ok({ items: list.slice((page - 1) * size, page * size), total, daily_cap_minutes: purchaseConfig.runtime_pack.daily_cap_minutes })
     },
   },
 

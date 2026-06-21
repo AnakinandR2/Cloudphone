@@ -134,12 +134,17 @@ export const asyncRoutes: AppMainRoute[] = [
         component: () => import('@/views/cloudphone/ScriptStoreView.vue'),
         meta: { title: 'menu.cpScriptStore', icon: 'FileCode', auth: 'script:view' },
       },
+    ],
+  },
+  {
+    // 合作商/推广（代理IP合作商管理）
+    meta: { title: 'menu.partnerGroup', icon: 'Handshake', auth: 'partner:view' },
+    children: [
       {
-        // 素材管理（占位，功能开发中）
-        path: '/cloudphone/materials',
-        name: 'cpMaterials',
-        component: () => import('@/views/demo/nested/BlankView.vue'),
-        meta: { title: 'menu.cpMaterials', icon: 'Images' },
+        path: '/partners',
+        name: 'partners',
+        component: () => import('@/views/partner/PartnerView.vue'),
+        meta: { title: 'menu.partners', icon: 'Handshake', auth: 'partner:view' },
       },
     ],
   },
@@ -147,28 +152,30 @@ export const asyncRoutes: AppMainRoute[] = [
     // 费用运营
     meta: { title: 'menu.billing', icon: 'CreditCard' },
     children: [
+      // ── 计费配置（购买与费用重构 · 契约 §2）──────────────────────
       {
-        path: '/billing/pricing',
-        name: 'billingPricing',
-        component: () => import('@/views/billing/PricingView.vue'),
-        meta: { title: 'menu.billingPricing', icon: 'Tags', auth: 'billing:view' },
+        path: '/billing/config/pricing',
+        name: 'billingCfgPricing',
+        component: () => import('@/views/billing/PricingConfigView.vue'),
+        meta: { title: 'menu.billingCfgPricing', icon: 'Tags', auth: 'billing:view' },
       },
       {
-        path: '/billing/discounts',
-        name: 'billingDiscounts',
-        component: () => import('@/views/billing/DiscountsView.vue'),
-        meta: { title: 'menu.billingDiscounts', icon: 'Percent', auth: 'billing:view' },
+        path: '/billing/config/payment-methods',
+        name: 'billingCfgPayment',
+        component: () => import('@/views/billing/PaymentMethodsView.vue'),
+        meta: { title: 'menu.billingCfgPayment', icon: 'CreditCard', auth: 'billing:view' },
       },
+      // ── 订单 / 账户 / 试用（新模型）────────────────────────────
       {
         path: '/billing/orders',
         name: 'billingOrders',
-        component: () => import('@/views/billing/OrdersView.vue'),
+        component: () => import('@/views/billing/BillingOrdersView.vue'),
         meta: { title: 'menu.billingOrders', icon: 'ReceiptText', auth: 'billing:view' },
       },
       {
         path: '/billing/accounts',
         name: 'billingAccounts',
-        component: () => import('@/views/billing/AccountsView.vue'),
+        component: () => import('@/views/billing/BillingAccountsView.vue'),
         meta: { title: 'menu.billingAccounts', icon: 'Wallet', auth: 'billing:view' },
       },
       {

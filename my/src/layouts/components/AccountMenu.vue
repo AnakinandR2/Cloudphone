@@ -41,7 +41,7 @@ const { t } = useI18n()
 const displayName = computed(() => userStore.displayName || 'User')
 
 function goHome() {
-  router.push(menuStore.firstPath || '/dashboard')
+  router.push(menuStore.firstPath || '/phone')
 }
 
 function openPreferences() {

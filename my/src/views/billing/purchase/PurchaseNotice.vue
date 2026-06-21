@@ -12,10 +12,10 @@ defineProps<{
   <div v-if="notice || billingNote" class="bg-muted/40 flex gap-2.5 rounded-lg border px-3.5 py-3 text-sm">
     <Info class="text-muted-foreground mt-0.5 size-4 shrink-0" />
     <div class="text-muted-foreground space-y-1 leading-relaxed">
-      <p v-if="notice">
+      <p v-if="notice" class="whitespace-pre-line">
         {{ notice }}
       </p>
-      <p v-if="billingNote" class="text-xs">
+      <p v-if="billingNote" class="whitespace-pre-line text-xs">
         {{ billingNote }}
       </p>
     </div>

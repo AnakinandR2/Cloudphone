@@ -35,6 +35,14 @@ func (m *phoneModule) Init(db *gorm.DB) error {
 		}
 		return out
 	})
+	// 注册「运行中实例计数」提供者：billing 概览算包月名额「在用」用（依赖反转）。
+	billing.SetRunningInstanceCountProvider(func(userID int) int {
+		n, err := repo.runningSessionCountByUser(userID)
+		if err != nil {
+			return 0
+		}
+		return int(n)
+	})
 	return nil
 }
 

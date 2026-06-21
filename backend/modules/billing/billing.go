@@ -41,6 +41,12 @@ func SetInstanceMetaProvider(fn func(cpIDs []string) map[string]InstanceMeta) {
 	billinginternal.SetInstanceMetaProvider(fn)
 }
 
+// SetRunningInstanceCountProvider 注册「运行中实例计数」提供者（phone 装配时调用）。
+// 概览里包月名额「在用」数 = 当前运行中的台数（封顶到名额数），依赖反转向 phone 取实时运行数。
+func SetRunningInstanceCountProvider(fn func(userID int) int) {
+	billinginternal.SetRunningInstanceCountProvider(fn)
+}
+
 // SeatCapacity 未过期 seat 授权单元数。
 func SeatCapacity(userID int) (int, error) {
 	return billinginternal.LicenseService.Capacity(userID, billinginternal.KindSeat)

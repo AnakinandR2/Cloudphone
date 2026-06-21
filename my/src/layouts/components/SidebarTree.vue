@@ -18,11 +18,14 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from '@/components/ui/sidebar'
+import { useBillingStore } from '@/stores/billing'
 
 const props = withDefaults(
   defineProps<{ nodes: AppRoute[], level?: number }>(),
   { level: 0 },
 )
+
+const billing = useBillingStore()
 
 const route = useRoute()
 const { t } = useI18n()
@@ -81,6 +84,10 @@ function containsActive(node: AppRoute): boolean {
         <RouterLink :to="node.path">
           <Icon v-if="node.meta?.icon" :name="node.meta.icon" />
           <span>{{ t(node.meta?.title ?? "") }}</span>
+          <span
+            v-if="node.path === '/billing/trials' && billing.claimableTrials > 0"
+            class="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-medium text-white"
+          >{{ t('billing.pendingClaim') }}</span>
         </RouterLink>
       </component>
     </component>

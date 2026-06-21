@@ -22,7 +22,9 @@ type RuntimeCharge struct {
 	WindowEnd      time.Time `json:"window_end"`
 	QuotaType      string    `gorm:"type:varchar(16);not null" json:"quota_type"`
 	ChargedMinutes int       `gorm:"not null;default:0" json:"charged_minutes"`
-	CreatedAt      time.Time `gorm:"autoCreateTime;index:idx_rtc_user" json:"created_at"`
+	// Reason 落账时生成的「具体原因」：含当时名额数 / 本台开机序 / 封顶值等，便于排查。
+	Reason    string    `gorm:"type:varchar(255)" json:"reason"`
+	CreatedAt time.Time `gorm:"autoCreateTime;index:idx_rtc_user" json:"created_at"`
 }
 
 func (RuntimeCharge) TableName() string { return "billing_runtime_charges" }

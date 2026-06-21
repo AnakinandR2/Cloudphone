@@ -46,6 +46,8 @@ type BizOrder struct {
 	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	PaidAt     *time.Time `json:"paid_at"`
 	ExpiredAt  *time.Time `json:"expired_at"`
+	// GiftRuntimeMinutes 履约时实际赠送的临时开机时长（分钟，仅席位新购/续费 > 0）。
+	GiftRuntimeMinutes int `gorm:"not null;default:0" json:"gift_runtime_minutes"`
 }
 
 func (BizOrder) TableName() string { return "billing_biz_orders" }
@@ -67,6 +69,12 @@ type BizOrderItem struct {
 
 func (BizOrderItem) TableName() string { return "billing_biz_order_items" }
 
+// BizOrderWithItems 订单 + 其订单项（订单历史列表随单返回明细，前端派生摘要 + 行展开）。
+type BizOrderWithItems struct {
+	BizOrder
+	Items []BizOrderItem `json:"items"`
+}
+
 // BizOrderCreate 下单请求（契约 §1.5）。
 type BizOrderCreate struct {
 	BizType       string `json:"biz_type" binding:"required"`
@@ -86,7 +94,8 @@ type BizQuoteRequest struct {
 	Minutes       int    `json:"minutes"`
 }
 
-// PayResult 支付结果（余额=即时 paid；第三方=待支付 + stub 参数）。
+// PayResult 支付结果。当前余额与第三方（桩网关）均即时 paid；接入真实网关后第三方
+// 会返回 pending + PayParams（支付二维码等），故保留这两个字段。
 type PayResult struct {
 	Status    string                 `json:"status"` // paid / pending
 	PayMethod string                 `json:"pay_method"`

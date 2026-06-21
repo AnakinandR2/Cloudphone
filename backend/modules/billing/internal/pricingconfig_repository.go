@@ -115,7 +115,6 @@ func defaultPricingConfig() *PricingConfigData {
 			KindSeat: {
 				UnitPriceCents: 3000,
 				UnitLabel:      "台",
-				QtyOptions:     []int{1, 2, 5, 10, 50, 100, 500, 1000},
 				QtyTiers: []QtyTierCfg{
 					{MinQuantity: 10, DiscountBps: 9000},
 					{MinQuantity: 100, DiscountBps: 8000},
@@ -126,13 +125,13 @@ func defaultPricingConfig() *PricingConfigData {
 					{Value: 3, DiscountBps: 8500},
 					{Value: 12, DiscountBps: 7000},
 				},
-				Notice:      "云手机实例席位为固定套餐，决定可创建的实例数量。",
-				BillingNote: "席位按月计费，自购买起生效，到期后实例进入回收站。",
+				Notice:               "云手机实例席位为固定套餐，决定可创建的实例数量。",
+				BillingNote:          "席位按月计费，自购买起生效，到期后实例进入回收站。",
+				RecycleRetentionDays: 30,
 			},
 			KindBootSlot: {
 				UnitPriceCents: 2000,
 				UnitLabel:      "个",
-				QtyOptions:     []int{1, 2, 5, 10, 50, 100},
 				QtyTiers: []QtyTierCfg{
 					{MinQuantity: 10, DiscountBps: 9000},
 				},
@@ -152,9 +151,9 @@ func defaultPricingConfig() *PricingConfigData {
 				{Minutes: 600, DiscountBps: 10000},
 				{Minutes: 3000, DiscountBps: 9000},
 			},
-			Notice:               "临时开机时长无使用期限，用完为止；每台手机每天最多扣 200 分钟。",
-			DailyCapMinutes:      200,
-			RecycleRetentionDays: 30,
+			Notice:                  "临时开机时长无使用期限，用完为止；每台手机每天最多扣 200 分钟。",
+			DailyCapMinutes:         200,
+			GiftMinutesPerSeatMonth: 200,
 		},
 	}
 }

@@ -22,8 +22,8 @@ import {
   RotateCw,
   Search,
   SignalHigh,
-  Smartphone,
   Square,
+  TabletSmartphone,
   Video,
   Volume1,
   Volume2,
@@ -81,7 +81,8 @@ const {
   connStatusText,
   connected,
   controlReady,
-  landscape,
+  displayLandscape,
+  cssRotation,
   rotateDevice,
   rttMs,
   latencyLevel,
@@ -118,7 +119,7 @@ const {
   sendDC,
 } = useWebRTC({ id, videoRef })
 
-const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, sendDC, tryAutoUnmute })
+const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
 
 // 画面比例优先用真实串流尺寸（避免与请求分辨率不一致导致 object-contain 黑边）。
 const streamW = ref(0)
@@ -128,8 +129,29 @@ const aspect = computed(() => {
     return `${streamW.value}/${streamH.value}`
   return `${deviceWidth.value}/${deviceHeight.value}`
 })
-// 横屏：实际推流宽>高（设备旋转后推流分辨率交换）。横屏时画面按可用区域等比收纳，避免撑爆窗口。
-const isLandscape = computed(() => streamW.value > 0 && streamW.value > streamH.value)
+// 显示方向（横屏宽扁/竖屏窄高）：跟随推流或用户手动旋转（见 useWebRTC.displayLandscape）。
+const isLandscape = computed(() => displayLandscape.value)
+
+// frame（画面区）实测尺寸——cssRotation≠0 时把竖屏 <video> 旋转铺满横屏画面区要用到。
+const frameW = ref(0)
+const frameH = ref(0)
+let frameRO: ResizeObserver | null = null
+
+// 画面 <video> 的样式：
+//  · cssRotation===0：常规 in-flow（object-contain + aspectRatio），由模板 class 控制。
+//  · cssRotation!==0：绝对居中，布局盒取 frame 的「交换尺寸」，object-contain 后再旋转 → 铺满画面区。
+const videoStyle = computed(() => {
+  if (cssRotation.value === 0)
+    return { aspectRatio: aspect.value }
+  return {
+    position: 'absolute' as const,
+    left: '50%',
+    top: '50%',
+    width: `${frameH.value}px`,
+    height: `${frameW.value}px`,
+    transform: `translate(-50%, -50%) rotate(${cssRotation.value}deg)`,
+  }
+})
 
 // 标题写进 html title（替代原第一行），并带上连接状态（如「控制就绪」）。
 const docTitle = computed(() => {
@@ -146,10 +168,9 @@ function onSettingChange() {
     retry()
 }
 
-// 旋转设备：发 rotate_device 指令，设备旋转后推流分辨率交换，由 onVideoReady 自动重排窗口。
+// 旋转：前端方向粘性翻转（始终生效，桌面等不可旋转场景也由前端转画面），同时尽力通知设备旋转。
 function onRotate() {
-  if (!rotateDevice())
-    toast.error(t('phone.rc.rotateFail'))
+  rotateDevice()
 }
 
 function fullscreen() {
@@ -266,21 +287,43 @@ const VIDEO_LONG = (() => {
   return Math.min(960, Math.max(560, Math.round(avail * 0.88)))
 })()
 
-// 按实时推流比例把弹窗 resize 成对应形态：竖屏=窄高、横屏=宽扁 → 实现「窗体旋转」。
-// 设备/应用自动转横屏时推流分辨率交换，由 onVideoReady(@resize) 触发本函数重排窗体。
+// 窗口装饰尺寸（标题栏/边框）。只在首次稳定态测量一次并缓存——resizeTo 后 outerWidth 立即更新、
+// innerWidth 滞后一帧，若每次都重读 outer-inner 会读到「新 outer − 旧 inner」的虚高值，逐次把窗口
+// 越撑越宽（实测 1030→1450→1870 雪崩）。装饰尺寸恒定，缓存即可彻底避免该反馈环。
+let chrome: { w: number, h: number } | null = null
+function readChrome(): { w: number, h: number } {
+  if (!chrome) {
+    chrome = {
+      w: Math.max(0, window.outerWidth - window.innerWidth),
+      h: Math.max(0, window.outerHeight - window.innerHeight),
+    }
+  }
+  return chrome
+}
+
+// 按显示方向把弹窗 resize 成对应形态：竖屏=窄高、横屏=宽扁。显示方向 = displayLandscape
+// （跟随推流或用户手动旋转）。按 (推流尺寸, 面板, 方向) 去重，避免 @resize 连发导致重复 resize。
+let lastFitKey = ''
 function fitWindowToOrientation(panel: Panel) {
   if (typeof window.resizeTo !== 'function')
     return
+  const land = displayLandscape.value
+  const key = `${streamW.value}x${streamH.value}/${panelWidth(panel)}/${land ? 'L' : 'P'}`
+  if (key === lastFitKey)
+    return
+  lastFitKey = key
+  const ch = readChrome()
   const { outerW, outerH } = computeRemoteWindowSize({
     streamW: streamW.value,
     streamH: streamH.value,
+    landscape: land,
     panelW: panelWidth(panel),
     sidebarW: SIDEBAR_W,
     longEdge: VIDEO_LONG,
     availW: window.screen?.availWidth ?? 99999,
     availH: window.screen?.availHeight ?? 99999,
-    chromeW: Math.max(0, window.outerWidth - window.innerWidth),
-    chromeH: Math.max(0, window.outerHeight - window.innerHeight),
+    chromeW: ch.w,
+    chromeH: ch.h,
   })
   window.resizeTo(outerW, outerH)
 }
@@ -372,6 +415,12 @@ async function onVideoReady() {
   fitWindow()
 }
 
+// 用户手动旋转（displayLandscape 变了但推流没变、不会触发 @resize）时，主动重排窗体。
+watch(displayLandscape, async () => {
+  await nextTick()
+  fitWindow()
+})
+
 // 网络状况：来自 WebRTC getStats() 的真实 RTT（latencyLevel 三档）。
 const netColorClass = computed(() => {
   if (!connected.value)
@@ -409,6 +458,16 @@ const elapsedText = computed(() => {
 onMounted(async () => {
   window.addEventListener('mouseup', input.onGlobalMouseUp)
   await nextTick()
+  // 观测画面区实际尺寸：cssRotation≠0 时把竖屏 <video> 旋转铺满横屏画面区要用到。
+  if (frameRef.value && typeof ResizeObserver !== 'undefined') {
+    frameRO = new ResizeObserver(() => {
+      if (frameRef.value) {
+        frameW.value = frameRef.value.clientWidth
+        frameH.value = frameRef.value.clientHeight
+      }
+    })
+    frameRO.observe(frameRef.value)
+  }
   // 初始就按画面实际宽度贴合窗口一次（不必等连接）；后续画面就绪/改分辨率时由 onVideoReady 再贴合。
   fitWindow()
   try {
@@ -436,6 +495,7 @@ onBeforeUnmount(() => {
     clearInterval(timerHandle)
   if (shotUrl.value)
     URL.revokeObjectURL(shotUrl.value)
+  frameRO?.disconnect()
   window.removeEventListener('mouseup', input.onGlobalMouseUp)
   cleanup()
 })
@@ -447,14 +507,14 @@ onBeforeUnmount(() => {
     <div class="flex min-h-0 flex-1 items-stretch">
       <div
         ref="frameRef"
-        class="relative flex h-full min-h-0 items-center justify-center"
+        class="relative flex h-full min-h-0 items-center justify-center overflow-hidden"
         :class="isLandscape ? 'min-w-0 flex-1' : 'shrink-0'"
       >
         <video
           ref="videoRef"
           class="touch-none select-none bg-black object-contain"
-          :class="isLandscape ? 'max-h-full max-w-full' : 'h-full w-auto max-w-full'"
-          :style="{ aspectRatio: aspect }"
+          :class="cssRotation === 0 ? (isLandscape ? 'max-h-full max-w-full' : 'h-full w-auto max-w-full') : ''"
+          :style="videoStyle"
           autoplay
           playsinline
           muted
@@ -508,7 +568,7 @@ onBeforeUnmount(() => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger as-child>
-              <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
+              <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5">
                 <Clock class="size-4" />
                 <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.timer') }}</span>
               </Button>
@@ -556,7 +616,7 @@ onBeforeUnmount(() => {
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.screenshot') }}</span>
         </Button>
         <Button variant="ghost" :disabled="!controlReady" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="onRotate">
-          <Smartphone class="size-4 transition-transform" :class="landscape ? '-rotate-90' : ''" />
+          <TabletSmartphone class="size-4" />
           <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.rotate') }}</span>
         </Button>
         <Button

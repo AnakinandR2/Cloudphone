@@ -25,3 +25,20 @@ func lookupInstanceMeta(cpIDs []string) map[string]InstanceMeta {
 	}
 	return instanceMetaProvider(cpIDs)
 }
+
+// runningInstanceCountProvider 由 phone 注册：返回某用户当前运行中（未关机）的台数。
+// 包月名额是「运行时按分钟动态消耗」的，不像席位持久绑定实例，故「在用」需向 phone 取实时运行数。
+var runningInstanceCountProvider func(userID int) int
+
+// SetRunningInstanceCountProvider 注册运行中实例计数提供者（phone 装配时调用）。传 nil 清除（测试用）。
+func SetRunningInstanceCountProvider(fn func(userID int) int) {
+	runningInstanceCountProvider = fn
+}
+
+// runningInstanceCount 取用户当前运行中的台数；无 provider 时回退 0。
+func runningInstanceCount(userID int) int {
+	if runningInstanceCountProvider == nil {
+		return 0
+	}
+	return runningInstanceCountProvider(userID)
+}

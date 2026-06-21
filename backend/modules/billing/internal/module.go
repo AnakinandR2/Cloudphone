@@ -67,6 +67,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.PUT("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminUpdateTrialPolicy)
 		admin.DELETE("/trials/:id", staff.PermissionMiddleware("billing:manage"), AdminDeleteTrialPolicy)
 		admin.POST("/trials/:id/eligibility", staff.PermissionMiddleware("billing:manage"), AdminGrantTrialEligibility)
+		admin.POST("/trials/:id/feature", staff.PermissionMiddleware("billing:manage"), AdminFeatureTrialPolicy)
 		admin.GET("/trials/:id/grants", staff.PermissionMiddleware("billing:view"), AdminListTrialGrants)
 		// 新模型时长配置（契约 §2）。
 		admin.GET("/runtime-config", staff.PermissionMiddleware("billing:view"), AdminGetRuntimePricing)
@@ -93,6 +94,9 @@ func (m *billingModule) OnStop() error { return nil }
 
 func init() {
 	framework.GlobalModule.Register(&billingModule{})
+
+	// 公开营销接口（免鉴权）挂引擎根 /api/open/v1/billing，供 www 价格页取数。
+	framework.RegisterRootRoutes(registerBillingPublicRoutes)
 
 	// 建表（幂等）：计费账户 + 统一流水 + 授权单元 + 试用 + 新购买/费用模型表。
 	framework.RegisterSetup(func(db *gorm.DB) error {

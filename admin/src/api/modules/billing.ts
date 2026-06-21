@@ -4,7 +4,6 @@ import type {
   AdjustResourceBody,
   BillingOrder,
   BillingOrderDetail,
-  NoticesConfig,
   PaymentMethod,
   PaymentMethodsResp,
   PricingConfig,
@@ -36,6 +35,8 @@ export default {
   updateTrial: (id: number, d: TrialPolicyUpdate) => api.put<unknown, R<TrialPolicy>>(`admin/billing/trials/${id}`, d),
   deleteTrial: (id: number) => api.delete<unknown, R<null>>(`admin/billing/trials/${id}`),
   grantEligibility: (id: number, user_id: number) => api.post<unknown, R<null>>(`admin/billing/trials/${id}/eligibility`, { user_id }),
+  // 单选标记某试用为营销站展示（后端清其它，全局至多一条）。
+  featureTrial: (id: number, featured: boolean) => api.post<unknown, R<null>>(`admin/billing/trials/${id}/feature`, { featured }),
   trialGrants: (id: number) => api.get<unknown, R<TrialGrant[]>>(`admin/billing/trials/${id}/grants`),
 
   // ── 购买与费用重构 · 配置后台（契约 §2）─────────────────────────────────
@@ -51,9 +52,6 @@ export default {
   // 充值预设（金额档位）
   getRechargePresets: () => api.get<unknown, R<RechargePresets>>('admin/billing/recharge-presets'),
   saveRechargePresets: (presets_cents: number[]) => api.put<unknown, R<RechargePresets>>('admin/billing/recharge-presets', { presets_cents }),
-  // 须知文案（各 kind 的 notice/billing_note + runtime_pack notice）。GET/PUT 均为扁平 map。
-  getNotices: () => api.get<unknown, R<NoticesConfig>>('admin/billing/notices'),
-  saveNotices: (d: NoticesConfig) => api.put<unknown, R<unknown>>('admin/billing/notices', d),
   // 新模型订单（biz-orders，status ∈ unpaid/paid/expired）。列表与 mark-paid 均不含订单项。
   billingOrders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>
     api.get<unknown, R<Page<BillingOrder>>>('admin/billing/biz-orders', { params }),

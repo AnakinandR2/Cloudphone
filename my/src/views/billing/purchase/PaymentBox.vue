@@ -68,7 +68,7 @@ const payDisabled = computed(() =>
       >
         <span class="flex size-6 items-center justify-center rounded text-xs font-bold text-white" :style="{ backgroundColor: styleOf(m.code).color }">{{ styleOf(m.code).mark }}</span>
         <span class="text-sm font-medium">{{ m.name }}</span>
-        <Check v-if="model === m.code" class="text-primary absolute top-1.5 right-1.5 size-3.5" />
+        <Check v-if="model === m.code" class="text-primary absolute top-1/2 right-2 size-3.5 -translate-y-1/2" />
       </button>
     </div>
 

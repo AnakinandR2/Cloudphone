@@ -163,6 +163,33 @@ func (s *trialServiceImpl) ListPolicies() ([]TrialPolicy, error) {
 	return s.repo.listPolicies(false)
 }
 
+// SetMarketingFeatured 单选标记某策略为营销展示：featured=true 设该条（清其它）；
+// featured=false 取消（清空标记）。id 必须存在。
+func (s *trialServiceImpl) SetMarketingFeatured(id int, featured bool) error {
+	if _, err := s.getPolicy(id); err != nil {
+		return err
+	}
+	if featured {
+		return s.repo.setFeatured(id)
+	}
+	return s.repo.setFeatured(0)
+}
+
+// FeaturedPolicy 营销展示策略（被标记且已启用）；无或被禁用则返回 (nil, nil)。
+func (s *trialServiceImpl) FeaturedPolicy() (*TrialPolicy, error) {
+	p, err := s.repo.getFeatured()
+	if err != nil {
+		if isNotFoundTrial(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !p.Enabled {
+		return nil, nil
+	}
+	return p, nil
+}
+
 func (s *trialServiceImpl) GrantEligibility(policyID, userID int, operator string) error {
 	if _, err := s.getPolicy(policyID); err != nil {
 		return err

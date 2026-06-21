@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Command, LogOut, Moon, Sun, User } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
@@ -34,6 +34,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import { useBillingStore } from '@/stores/billing'
 import { useMenuStore } from '@/stores/menu'
 import { useSettingsStore } from '@/stores/settings'
 import { useUserStore } from '@/stores/user'
@@ -43,9 +44,15 @@ import SidebarTree from './components/SidebarTree.vue'
 const menuStore = useMenuStore()
 const userStore = useUserStore()
 const settingsStore = useSettingsStore()
+const billingStore = useBillingStore()
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+
+// 进入应用后拉取「待领取」试用数，用于菜单徽标。
+onMounted(() => {
+  billingStore.refreshClaimableTrials()
+})
 
 const appTitle = import.meta.env.VITE_APP_TITLE || '管理后台'
 const isDouble = computed(() => settingsStore.settings.menuMode === 'double')

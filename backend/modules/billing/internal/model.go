@@ -39,6 +39,7 @@ const (
 	LedgerAdjustDeduct = "adjust_deduct"
 	LedgerPurchase     = "purchase" // 订单支付成功发放权益
 	LedgerTrial        = "trial"    // 试用发放
+	LedgerGift         = "gift"     // 席位购买/续费赠送临时开机时长
 )
 
 // TopupRequest 充值请求（计划1 为桩：直接入账）。

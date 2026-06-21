@@ -1,14 +1,17 @@
 // 远控弹窗「窗体旋转」尺寸计算（纯函数，便于单测）。
 //
 // 远控是 window.open 出来的独立弹窗，没有父窗口替它旋转，必须自己 resizeTo。
-// 设备/应用转横屏时推流分辨率交换（宽>高），此处把设备「长边」映射到固定的屏上长度，
-// 横竖屏时长短边互换 → 弹窗形态随之「旋转」（竖屏=窄高，横屏=宽扁），画面铺满无大黑边。
+// 显示方向由调用方决定（displayLandscape：设备自转跟随 / 用户手动强制），与推流尺寸解耦——
+// 桌面锁定竖屏时用户手动转横屏，推流仍是竖屏像素，但窗体仍应按横屏定（前端 CSS 转画面铺满）。
+// 此处把「长边」映射到固定的屏上长度，按显示方向把长短边摆成竖屏(窄高)/横屏(宽扁)。
 
 export interface RemoteWindowFitInput {
-  /** 实时推流宽（取不到时传 0，回退竖屏 9:16）。 */
+  /** 实时推流宽（取不到时传 0，回退 9:16 长短比）。 */
   streamW: number
   /** 实时推流高（取不到时传 0）。 */
   streamH: number
+  /** 显示方向：true=横屏(宽扁)、false=竖屏(窄高)。= displayLandscape。 */
+  landscape: boolean
   /** 右侧展开面板宽度（无面板传 0）。 */
   panelW: number
   /** 图标操作列宽度。 */
@@ -30,28 +33,27 @@ export interface RemoteWindowFitResult {
   outerW: number
   /** resizeTo 用的外层高。 */
   outerH: number
-  /** 是否横屏（宽>=高）。 */
-  landscape: boolean
 }
 
 /**
- * 按实时推流比例算出远控弹窗应有的外层宽高。
+ * 按显示方向 + 推流长短比算出远控弹窗应有的外层宽高。
  * 整窗（画面 + 侧栏 + 面板）等比缩放以不超出屏幕可用区。
  */
 export function computeRemoteWindowSize(i: RemoteWindowFitInput): RemoteWindowFitResult {
-  const aspect = i.streamW > 0 && i.streamH > 0 ? i.streamW / i.streamH : 9 / 16
-  const landscape = aspect >= 1
+  // 推流长短边之比（恒 ≥1，与方向无关）；取不到回退 16/9。
+  const ratio = i.streamW > 0 && i.streamH > 0 ? i.streamW / i.streamH : 9 / 16
+  const longRatio = Math.max(ratio, 1 / ratio)
 
-  // 长边固定 = longEdge，短边按比例。横屏时长边是宽、竖屏时长边是高 → 形态互换。
+  // 长边固定 = longEdge，短边 = 长边 / 长短比。横屏长边是宽、竖屏长边是高 → 形态由 landscape 决定。
   let videoW: number
   let videoH: number
-  if (landscape) {
+  if (i.landscape) {
     videoW = i.longEdge
-    videoH = i.longEdge / aspect
+    videoH = i.longEdge / longRatio
   }
   else {
     videoH = i.longEdge
-    videoW = i.longEdge * aspect
+    videoW = i.longEdge / longRatio
   }
 
   // 等比缩放使整窗不超出屏幕可用区（横屏画面很宽时尤其重要）。
@@ -66,6 +68,5 @@ export function computeRemoteWindowSize(i: RemoteWindowFitInput): RemoteWindowFi
   return {
     outerW: innerW + i.chromeW,
     outerH: innerH + i.chromeH,
-    landscape,
   }
 }

@@ -36,6 +36,7 @@ type PriceQuote struct {
 	QtyDiscountBps      int
 	DurationDiscountBps int
 	PayableCents        int64
+	GiftRuntimeMinutes  int // 席位新购/续费赠送的临时开机时长（分钟）；其它资源为 0
 }
 
 func computeQuote(cfg PriceConfig, quantity, durationValue int) (PriceQuote, error) {

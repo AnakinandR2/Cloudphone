@@ -18,8 +18,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
+import PartnerRecommendPanel from './PartnerRecommendPanel.vue'
 import ProxyFormDialog from './ProxyFormDialog.vue'
 import ProxyImportDialog from './ProxyImportDialog.vue'
 
@@ -104,89 +106,106 @@ onMounted(load)
 </script>
 
 <template>
-  <Card>
-    <CardHeader>
-      <CardTitle>{{ t('proxy.title') }}</CardTitle>
-      <CardDescription>{{ t('proxy.desc') }}</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <DataTable
-        v-model:search-value="filters.q"
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        :search-placeholder="t('proxy.searchPlaceholder')"
-        expandable
-      >
-        <template #actions>
-          <Button size="sm" variant="outline" @click="importOpen = true">
-            <Upload class="size-4" /> {{ t('proxy.import') }}
-          </Button>
-          <Button size="sm" @click="openCreate">
-            <Plus class="size-4" /> {{ t('proxy.add') }}
-          </Button>
-        </template>
+  <Tabs default-value="mine" class="space-y-4">
+    <TabsList>
+      <TabsTrigger value="mine">
+        {{ t('partner.tabMine') }}
+      </TabsTrigger>
+      <TabsTrigger value="recommend">
+        {{ t('partner.tabRecommend') }}
+      </TabsTrigger>
+    </TabsList>
 
-        <template #cell-id="{ row }">
-          <span class="text-muted-foreground">#{{ row.id }}</span>
-        </template>
-        <template #cell-name="{ row }">
-          <span class="font-medium">{{ row.name }}</span>
-        </template>
-        <template #cell-address="{ row }">
-          <span class="text-muted-foreground font-mono">{{ row.protocol }}://{{ row.host }}:{{ row.port }}</span>
-        </template>
-        <template #cell-status="{ row }">
-          <Badge :variant="statusVariant(row.status)">
-            {{ t(`proxy.status_${row.status}`, row.status) }}
-          </Badge>
-        </template>
-        <template #cell-latency="{ row }">
-          <span class="text-muted-foreground tabular-nums">{{ row.latency > 0 ? `${row.latency} ms` : '-' }}</span>
-        </template>
-        <template #cell-egress_ip="{ row }">
-          <span class="text-muted-foreground font-mono">{{ row.egress_ip || '-' }}</span>
-          <Badge v-if="row.egress_ip && row.country" variant="secondary" class="ml-1.5">
-            {{ row.country }}
-          </Badge>
-        </template>
-        <template #cell-remark="{ row }">
-          <span class="text-muted-foreground">{{ row.remark || '-' }}</span>
-        </template>
-        <template #cell-created_at="{ row }">
-          <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
-        </template>
+    <TabsContent value="mine">
+      <Card>
+        <CardHeader>
+          <CardTitle>{{ t('proxy.title') }}</CardTitle>
+          <CardDescription>{{ t('proxy.desc') }}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            v-model:search-value="filters.q"
+            :columns="columns"
+            :data="data"
+            :loading="loading"
+            :search-placeholder="t('proxy.searchPlaceholder')"
+            expandable
+          >
+            <template #actions>
+              <Button size="sm" variant="outline" @click="importOpen = true">
+                <Upload class="size-4" /> {{ t('proxy.import') }}
+              </Button>
+              <Button size="sm" @click="openCreate">
+                <Plus class="size-4" /> {{ t('proxy.add') }}
+              </Button>
+            </template>
 
-        <!-- 行展开：用户名 / 地区 / ASN / 公司 / 最近检测 / 备注 -->
-        <template #expanded="{ row }">
-          <div class="text-muted-foreground grid grid-cols-2 gap-x-10 gap-y-2 px-2 py-1 text-sm md:grid-cols-3">
-            <div><span class="text-foreground/70">{{ t('proxy.colUsername') }}：</span>{{ row.username || '-' }}</div>
-            <div><span class="text-foreground/70">{{ t('proxy.colRegion') }}：</span>{{ row.region || '-' }}</div>
-            <div><span class="text-foreground/70">{{ t('proxy.colAsn') }}：</span>{{ asnText(row) }}</div>
-            <div><span class="text-foreground/70">{{ t('proxy.colCompany') }}：</span>{{ row.company || '-' }}</div>
-            <div><span class="text-foreground/70">{{ t('proxy.lastChecked') }}：</span>{{ row.last_checked_at ? formatDateTime(row.last_checked_at) : '-' }}</div>
-          </div>
-        </template>
+            <template #cell-id="{ row }">
+              <span class="text-muted-foreground">#{{ row.id }}</span>
+            </template>
+            <template #cell-name="{ row }">
+              <span class="font-medium">{{ row.name }}</span>
+            </template>
+            <template #cell-address="{ row }">
+              <span class="text-muted-foreground font-mono">{{ row.protocol }}://{{ row.host }}:{{ row.port }}</span>
+            </template>
+            <template #cell-status="{ row }">
+              <Badge :variant="statusVariant(row.status)">
+                {{ t(`proxy.status_${row.status}`, row.status) }}
+              </Badge>
+            </template>
+            <template #cell-latency="{ row }">
+              <span class="text-muted-foreground tabular-nums">{{ row.latency > 0 ? `${row.latency} ms` : '-' }}</span>
+            </template>
+            <template #cell-egress_ip="{ row }">
+              <span class="text-muted-foreground font-mono">{{ row.egress_ip || '-' }}</span>
+              <Badge v-if="row.egress_ip && row.country" variant="secondary" class="ml-1.5">
+                {{ row.country }}
+              </Badge>
+            </template>
+            <template #cell-remark="{ row }">
+              <span class="text-muted-foreground">{{ row.remark || '-' }}</span>
+            </template>
+            <template #cell-created_at="{ row }">
+              <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
+            </template>
 
-        <template #cell-actions="{ row }">
-          <Button variant="outline" size="sm" :disabled="testingId === row.id" @click="testRow(row)">
-            <Loader2 v-if="testingId === row.id" class="size-4 animate-spin" />
-            <Activity v-else class="size-4" />
-            {{ t('proxy.test') }}
-          </Button>
-          <Button variant="outline" size="sm" @click="openEdit(row)">
-            <SquarePen class="size-4" /> {{ t('crud.edit') }}
-          </Button>
-          <Popconfirm :title="t('proxy.deleteConfirm', { name: row.name })" @confirm="deleteRow(row)">
-            <Button variant="outline" size="sm" class="text-destructive hover:text-destructive">
-              <Trash2 class="size-4" /> {{ t('crud.delete') }}
-            </Button>
-          </Popconfirm>
-        </template>
-      </DataTable>
-    </CardContent>
+            <!-- 行展开：用户名 / 地区 / ASN / 公司 / 最近检测 / 备注 -->
+            <template #expanded="{ row }">
+              <div class="text-muted-foreground grid grid-cols-2 gap-x-10 gap-y-2 px-2 py-1 text-sm md:grid-cols-3">
+                <div><span class="text-foreground/70">{{ t('proxy.colUsername') }}：</span>{{ row.username || '-' }}</div>
+                <div><span class="text-foreground/70">{{ t('proxy.colRegion') }}：</span>{{ row.region || '-' }}</div>
+                <div><span class="text-foreground/70">{{ t('proxy.colAsn') }}：</span>{{ asnText(row) }}</div>
+                <div><span class="text-foreground/70">{{ t('proxy.colCompany') }}：</span>{{ row.company || '-' }}</div>
+                <div><span class="text-foreground/70">{{ t('proxy.lastChecked') }}：</span>{{ row.last_checked_at ? formatDateTime(row.last_checked_at) : '-' }}</div>
+              </div>
+            </template>
 
-    <ProxyFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" />
-    <ProxyImportDialog v-model="importOpen" @success="load" />
-  </Card>
+            <template #cell-actions="{ row }">
+              <Button variant="outline" size="sm" :disabled="testingId === row.id" @click="testRow(row)">
+                <Loader2 v-if="testingId === row.id" class="size-4 animate-spin" />
+                <Activity v-else class="size-4" />
+                {{ t('proxy.test') }}
+              </Button>
+              <Button variant="outline" size="sm" @click="openEdit(row)">
+                <SquarePen class="size-4" /> {{ t('crud.edit') }}
+              </Button>
+              <Popconfirm :title="t('proxy.deleteConfirm', { name: row.name })" @confirm="deleteRow(row)">
+                <Button variant="outline" size="sm" class="text-destructive hover:text-destructive">
+                  <Trash2 class="size-4" /> {{ t('crud.delete') }}
+                </Button>
+              </Popconfirm>
+            </template>
+          </DataTable>
+        </CardContent>
+
+        <ProxyFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" />
+        <ProxyImportDialog v-model="importOpen" @success="load" />
+      </Card>
+    </TabsContent>
+
+    <TabsContent value="recommend">
+      <PartnerRecommendPanel />
+    </TabsContent>
+  </Tabs>
 </template>

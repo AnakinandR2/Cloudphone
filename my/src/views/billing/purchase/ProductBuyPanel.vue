@@ -21,7 +21,7 @@ const { t } = useI18n()
 
 const kindCfg = computed(() => props.config.kinds[props.kind])
 
-const quantity = ref(kindCfg.value.qty_options[0] ?? 1)
+const quantity = ref(1)
 const durationValue = ref(kindCfg.value.duration_options[0]?.value ?? 1)
 const payMethod = ref('')
 const submitting = ref(false)
@@ -69,7 +69,6 @@ async function confirm() {
 
     <QuantityPicker
       v-model="quantity"
-      :options="kindCfg.qty_options"
       :tiers="kindCfg.qty_tiers"
       :unit-label="kindCfg.unit_label"
     />

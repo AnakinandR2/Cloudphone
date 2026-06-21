@@ -5,7 +5,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fmtCents } from '@/utils/money'
 import OrderHistoryPanel from './purchase/OrderHistoryPanel.vue'
@@ -16,9 +17,10 @@ import RuntimePackPanel from './purchase/RuntimePackPanel.vue'
 
 const { t } = useI18n()
 
-// tab：内容区容器。点 KPI 按钮切 tab，默认订单历史。
-type Tab = 'orders' | 'recharge' | 'seat_new' | 'seat_renew' | 'boot_slot_new' | 'boot_slot_renew' | 'runtime'
-const tab = ref<Tab>('orders')
+// KPI 下方固定显示订单历史；充值/购买/续费等表单点 KPI 按钮后在右侧抽屉展示。
+type Panel = 'recharge' | 'seat_new' | 'seat_renew' | 'boot_slot_new' | 'boot_slot_renew' | 'runtime'
+const active = ref<Panel | null>(null)
+const open = ref(false)
 
 const loading = ref(false)
 const overview = ref<BillingOverview | null>(null)
@@ -26,6 +28,7 @@ const config = ref<PurchaseConfig | null>(null)
 const orderHistory = ref<InstanceType<typeof OrderHistoryPanel> | null>(null)
 
 const balanceCents = computed(() => overview.value?.balance_cents ?? 0)
+const panelTitle = computed(() => active.value ? t(`billing.purchase2.tab_${active.value}`) : '')
 
 async function loadOverview() {
   try {
@@ -52,19 +55,18 @@ onMounted(async () => {
   }
 })
 
-// 任一面板支付成功后：刷新 KPI + 订单列表，并切回订单历史。
+// 打开某个购买/充值面板（抽屉）。
+function openPanel(p: Panel) {
+  active.value = p
+  open.value = true
+}
+
+// 抽屉内面板支付成功后：刷新 KPI + 订单列表，并关闭抽屉。
 async function onPaid() {
   await loadOverview()
   await orderHistory.value?.reload()
-  tab.value = 'orders'
+  open.value = false
 }
-
-function go(target: Tab) {
-  tab.value = target
-}
-
-// tab 标题（内容区头部）
-const tabTitle = computed(() => t(`billing.purchase2.tab_${tab.value}`))
 </script>
 
 <template>
@@ -99,7 +101,7 @@ const tabTitle = computed(() => t(`billing.purchase2.tab_${tab.value}`))
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="go('recharge')">
+          <Button variant="outline" size="sm" @click="openPanel('recharge')">
             {{ t('billing.purchase2.kpiRecharge') }}
           </Button>
         </CardContent>
@@ -122,11 +124,38 @@ const tabTitle = computed(() => t(`billing.purchase2.tab_${tab.value}`))
             </div>
           </div>
           <div class="flex gap-2">
-            <Button variant="outline" size="sm" class="flex-1" @click="go('seat_new')">
+            <Button variant="outline" size="sm" class="flex-1" @click="openPanel('seat_new')">
               {{ t('billing.purchase2.kpiBuyInstance') }}
             </Button>
-            <Button variant="outline" size="sm" class="flex-1" @click="go('seat_renew')">
+            <Button variant="outline" size="sm" class="flex-1" @click="openPanel('seat_renew')">
               {{ t('billing.purchase2.kpiRenewInstance') }}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- 包月开机数 -->
+      <Card>
+        <CardContent class="flex flex-col gap-3 py-4">
+          <div class="flex items-center gap-3">
+            <div class="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Power class="size-5" />
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">
+                {{ t('billing.purchase2.kpiBootSlot') }}
+              </div>
+              <div class="text-xl font-semibold tabular-nums">
+                {{ overview.boot_slot.total }}<span class="text-muted-foreground text-sm font-normal"> · {{ t('billing.purchase2.kpiInUse', { n: overview.boot_slot.in_use }) }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <Button variant="outline" size="sm" class="flex-1" @click="openPanel('boot_slot_new')">
+              {{ t('billing.purchase2.kpiBuyBootSlot') }}
+            </Button>
+            <Button variant="outline" size="sm" class="flex-1" @click="openPanel('boot_slot_renew')">
+              {{ t('billing.purchase2.kpiRenewBootSlot') }}
             </Button>
           </div>
         </CardContent>
@@ -148,68 +177,43 @@ const tabTitle = computed(() => t(`billing.purchase2.tab_${tab.value}`))
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="go('runtime')">
+          <Button variant="outline" size="sm" @click="openPanel('runtime')">
             {{ t('billing.purchase2.kpiBuyRuntime') }}
           </Button>
         </CardContent>
       </Card>
-
-      <!-- 包月开机数 -->
-      <Card>
-        <CardContent class="flex flex-col gap-3 py-4">
-          <div class="flex items-center gap-3">
-            <div class="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Power class="size-5" />
-            </div>
-            <div>
-              <div class="text-muted-foreground text-xs">
-                {{ t('billing.purchase2.kpiBootSlot') }}
-              </div>
-              <div class="text-xl font-semibold tabular-nums">
-                {{ overview.boot_slot.total }}<span class="text-muted-foreground text-sm font-normal"> · {{ t('billing.purchase2.kpiInUse', { n: overview.boot_slot.in_use }) }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <Button variant="outline" size="sm" class="flex-1" @click="go('boot_slot_new')">
-              {{ t('billing.purchase2.kpiBuyBootSlot') }}
-            </Button>
-            <Button variant="outline" size="sm" class="flex-1" @click="go('boot_slot_renew')">
-              {{ t('billing.purchase2.kpiRenewBootSlot') }}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
 
-    <!-- ===== 内容区：tab 容器 ===== -->
-    <Card v-if="config">
-      <CardContent class="flex flex-col gap-5 py-5">
-        <!-- tab 头 -->
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="text-base font-semibold">
-            {{ tabTitle }}
-          </h2>
-          <Button v-if="tab !== 'orders'" variant="ghost" size="sm" @click="go('orders')">
-            {{ t('billing.purchase2.backToOrders') }}
-          </Button>
-        </div>
-
-        <OrderHistoryPanel v-if="tab === 'orders'" ref="orderHistory" @paid="loadOverview" />
-        <RechargePanel v-else-if="tab === 'recharge'" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
-        <ProductBuyPanel v-else-if="tab === 'seat_new'" kind="seat" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
-        <ProductRenewPanel v-else-if="tab === 'seat_renew'" kind="seat" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
-        <ProductBuyPanel v-else-if="tab === 'boot_slot_new'" kind="boot_slot" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
-        <ProductRenewPanel v-else-if="tab === 'boot_slot_renew'" kind="boot_slot" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
-        <RuntimePackPanel v-else-if="tab === 'runtime'" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+    <!-- ===== KPI 下方：固定显示订单历史 ===== -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('billing.purchase2.tab_orders') }}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <OrderHistoryPanel ref="orderHistory" @paid="loadOverview" />
       </CardContent>
     </Card>
 
-    <div v-else-if="loading" class="space-y-3">
-      <Skeleton class="h-96 rounded-xl" />
-    </div>
-    <div v-else class="text-muted-foreground py-12 text-center text-sm">
-      {{ t('billing.purchase2.loadFailed') }}
-    </div>
+    <!-- ===== 购买/充值/续费抽屉 ===== -->
+    <Sheet v-model:open="open">
+      <SheetContent side="right" class="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader class="border-b">
+          <SheetTitle>{{ panelTitle }}</SheetTitle>
+          <SheetDescription class="sr-only">
+            {{ panelTitle }}
+          </SheetDescription>
+        </SheetHeader>
+        <div class="min-h-0 flex-1 overflow-y-auto p-5">
+          <template v-if="config">
+            <RechargePanel v-if="active === 'recharge'" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+            <ProductBuyPanel v-else-if="active === 'seat_new'" kind="seat" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+            <ProductRenewPanel v-else-if="active === 'seat_renew'" kind="seat" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+            <ProductBuyPanel v-else-if="active === 'boot_slot_new'" kind="boot_slot" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+            <ProductRenewPanel v-else-if="active === 'boot_slot_renew'" kind="boot_slot" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+            <RuntimePackPanel v-else-if="active === 'runtime'" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
+          </template>
+        </div>
+      </SheetContent>
+    </Sheet>
   </div>
 </template>

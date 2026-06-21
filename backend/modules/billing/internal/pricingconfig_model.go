@@ -32,12 +32,13 @@ type PaymentMethod struct {
 type KindPricing struct {
 	UnitPriceCents  int64            `json:"unit_price_cents"`
 	UnitLabel       string           `json:"unit_label"`
-	QtyOptions      []int            `json:"qty_options"`
-	QtyTiers        []QtyTierCfg     `json:"qty_tiers"`
+	QtyTiers        []QtyTierCfg     `json:"qty_tiers"`     // 数量档位 = 阶梯（min_quantity 即可选档位，前端从此派生按钮）
 	DurationUnit    string           `json:"duration_unit"` // month / day
 	DurationOptions []DurationOptCfg `json:"duration_options"`
 	Notice          string           `json:"notice"`
 	BillingNote     string           `json:"billing_note"`
+	// RecycleRetentionDays 仅 seat 有意义：席位过期实例进回收站后的保留天数（默认 30）。
+	RecycleRetentionDays int `json:"recycle_retention_days"`
 }
 
 // QtyTierCfg 数量阶梯（JSON 形状贴合契约）。
@@ -59,7 +60,9 @@ type RuntimePackCfg struct {
 	Packs                   []RuntimePack `json:"packs"`
 	Notice                  string        `json:"notice"`
 	DailyCapMinutes         int           `json:"daily_cap_minutes"`
-	RecycleRetentionDays    int           `json:"recycle_retention_days"`
+	// GiftMinutesPerSeatMonth 购买/续费实例席位时，每席位每月赠送的临时开机时长（分钟）。
+	// 0 = 关闭赠送。赠送量 = 该值 × 席位数 × 月数（避免买了席位却开不了机）。
+	GiftMinutesPerSeatMonth int `json:"gift_minutes_per_seat_month"`
 }
 
 // RuntimePack 时长包预设。

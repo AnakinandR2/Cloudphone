@@ -154,31 +154,34 @@ export function useWebRTC(opts: UseWebRTCOptions) {
   // 控制通道（DataChannel）是否就绪——摄像头注入依赖它发 camera_control + binary_pcm。
   const controlReady = ref(false)
 
-  // 屏幕方向：竖屏(false)/横屏(true)。以实时推流尺寸为唯一真相——设备或应用「自动转屏」时
-  // 推流分辨率交换，syncOrientation 经 video 的 resize/loadedmetadata 自动更新本值（无需手点旋转）。
-  const landscape = ref(false)
+  // ===== 屏幕方向 =====
+  // 推流方向：由 syncOrientation 按实时推流尺寸（宽>高=横屏）判定，设备/应用自动转屏即跟随。
+  const streamLandscape = ref(false)
+  // 手动方向：null=跟随推流（默认）；旋转按钮置为固定 true/false。粘性——不随设备自转清除。
+  const desiredLandscape = ref<boolean | null>(null)
+  // 实际渲染方向：有手动选择用手动，否则跟随推流。
+  const displayLandscape = computed(() => desiredLandscape.value ?? streamLandscape.value)
+  // 前端 CSS 旋转角：仅当「想显示的方向」≠「推流给的方向」时把 <video> 转 -90° 补齐
+  // （如桌面锁定竖屏却要横屏看）；设备真的转了、推流追上后自动归 0 → 绝不双重旋转。
+  const cssRotation = computed(() => displayLandscape.value === streamLandscape.value ? 0 : -90)
 
-  // 按实时推流尺寸自动判定屏幕方向（宽>高=横屏）。在 pc.ontrack 里挂到 video 的
-  // resize/loadedmetadata 事件，设备内应用转横屏导致分辨率交换时即自动跟随。
+  // 按实时推流尺寸更新推流方向。在 pc.ontrack 里挂到 video 的 resize/loadedmetadata 事件。
   function syncOrientation() {
     const v = videoRef.value
     if (v && v.videoWidth && v.videoHeight)
-      landscape.value = v.videoWidth > v.videoHeight
+      streamLandscape.value = v.videoWidth > v.videoHeight
   }
 
+  // 旋转：① 前端方向粘性翻转（始终生效——桌面等不可旋转场景也由前端把画面转过来）；
+  //       ② 尽力通知设备旋转（能转的 App 真转，画质更好）。-90=横屏、0=竖屏（与 SDK 一致）。
   function rotateDevice(): boolean {
-    if (!dc || dc.readyState !== 'open')
-      return false
-    // 目标方向取当前实时方向的反向。-90=横屏，0=竖屏（与 SDK rotate_device 一致）。
-    // 旋转后推流分辨率交换，landscape 由 syncOrientation 自动校正，故此处不再乐观翻转。
-    const angle = landscape.value ? 0 : -90
-    try {
-      dc.send(JSON.stringify({ type: 'rotate_device', angle }))
-      return true
+    const target = !displayLandscape.value
+    desiredLandscape.value = target
+    if (dc && dc.readyState === 'open') {
+      try { dc.send(JSON.stringify({ type: 'rotate_device', angle: target ? -90 : 0 })) }
+      catch { /* 前端方向已切换，发不出去也不算失败 */ }
     }
-    catch {
-      return false
-    }
+    return true
   }
 
   // 摄像头/麦克风注入（上行）。读取本 composable 的私有 pc/dc 与串流参数。
@@ -369,7 +372,8 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     stopStats()
     camera.reset()
     controlReady.value = false
-    landscape.value = false
+    streamLandscape.value = false
+    desiredLandscape.value = null
     if (connTimeout) {
       clearTimeout(connTimeout)
       connTimeout = null
@@ -407,7 +411,10 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     connStatusText,
     connected,
     controlReady,
-    landscape,
+    streamLandscape,
+    desiredLandscape,
+    displayLandscape,
+    cssRotation,
     rotateDevice,
     syncOrientation,
     rttMs,

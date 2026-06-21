@@ -57,6 +57,10 @@ watch(() => props.kind, () => {
   load()
 })
 
+// 席位持久绑定实例，可显示「占用实例」并按实例名搜索；包月名额是运行时动态占用的共享池，
+// 不绑定具体实例，故这些维度对 boot_slot 无意义，隐藏之。
+const isSeat = computed(() => props.kind === 'seat')
+
 const allChecked = computed(() => items.value.length > 0 && selected.value.length === items.value.length)
 function toggleAll(v: boolean) {
   selected.value = v ? items.value.map(u => u.id) : []
@@ -82,9 +86,14 @@ defineExpose({ reload: load })
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- 过滤器：搜索 + 到期前 -->
+    <!-- 包月名额为共享池，开机时动态占用、不绑定具体实例。 -->
+    <p v-if="!isSeat" class="text-muted-foreground text-xs">
+      {{ t('billing.purchase2.bootSlotPoolHint') }}
+    </p>
+
+    <!-- 过滤器：搜索（仅席位按实例名）+ 到期前 -->
     <div class="flex flex-wrap items-center gap-2">
-      <div class="relative">
+      <div v-if="isSeat" class="relative">
         <Search class="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <Input
           v-model="keyword"
@@ -120,7 +129,9 @@ defineExpose({ reload: load })
             <TableHead>{{ t('billing.purchase2.colUnitId') }}</TableHead>
             <TableHead>{{ t('billing.purchase2.colCreatedAt') }}</TableHead>
             <TableHead>{{ t('billing.purchase2.colExpireAt') }}</TableHead>
-            <TableHead>{{ t('billing.purchase2.colSeatedInstance') }}</TableHead>
+            <TableHead v-if="isSeat">
+              {{ t('billing.purchase2.colSeatedInstance') }}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -143,7 +154,7 @@ defineExpose({ reload: load })
             <TableCell class="tabular-nums">
               {{ formatDate(u.expire_at) }}
             </TableCell>
-            <TableCell>
+            <TableCell v-if="isSeat">
               <div v-if="u.instance" class="flex min-w-0 items-center gap-2">
                 <span class="truncate text-sm font-medium">{{ u.instance.name }}</span>
                 <Badge :variant="statusVariant(u.instance.status)" class="shrink-0 text-[10px]">

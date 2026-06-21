@@ -11,55 +11,14 @@ export interface UseRemoteInputOptions {
   connState: Ref<ConnState>
   deviceWidth: Ref<number>
   deviceHeight: Ref<number>
+  /** 前端施加在 <video> 上的 CSS 旋转角（0 或 -90）。点击坐标需绕画面中心反旋转回推流系。 */
+  cssRotation: Ref<number>
   sendDC: (msg: Record<string, unknown>) => boolean
   tryAutoUnmute: () => void
 }
 
-// ===== 旋转坐标变换（移植自官方 SDK 的仿射矩阵，保证与设备端一致）=====
-// 仿射矩阵以数组 [a,b,c,d,e,f] 表示：x' = a·x + c·y + e，y' = b·x + d·y + f。
-type Affine = [number, number, number, number, number, number]
-function mMul(m: Affine, n: Affine): Affine {
-  return [
-    m[0] * n[0] + m[2] * n[1],
-    m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3],
-    m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4],
-    m[1] * n[4] + m[3] * n[5] + m[5],
-  ]
-}
-function rotAffine(rotation: number): Affine {
-  switch (rotation) {
-    case -90: return [0, -1, 1, 0, 0, 1]
-    case 90: return [0, 1, -1, 0, 1, 0]
-    case 180: return [-1, 0, 0, -1, 1, 1]
-    case 270: return [0, -1, 1, 0, 0, 1]
-    default: return [1, 0, 0, 1, 0, 0]
-  }
-}
-
-// mapDeviceCoords 把视频像素坐标(vx,vy) 映射到设备坐标（含分辨率缩放 + 旋转）。
-// videoW/H：当前推流分辨率；targetW/H：设备当前横竖屏分辨率；rotation：0 或 -90。
-export function mapDeviceCoords(
-  vx: number,
-  vy: number,
-  videoW: number,
-  videoH: number,
-  targetW: number,
-  targetH: number,
-  rotation: number,
-): { x: number, y: number } {
-  if (rotation === 0 && videoW === targetW && videoH === targetH)
-    return { x: Math.round(vx), y: Math.round(vy) }
-  // transform = ndcToPixels(target) · rotate · ndcFromPixels(video)
-  const ndcFrom: Affine = [1 / videoW, 0, 0, -1 / videoH, 0, 1]
-  const ndcTo: Affine = [targetW, 0, 0, -targetH, 0, targetH]
-  const t = mMul(mMul(ndcTo, rotAffine(rotation)), ndcFrom)
-  return { x: Math.round(vx * t[0] + vy * t[2] + t[4]), y: Math.round(vx * t[1] + vy * t[3] + t[5]) }
-}
-
 export function useRemoteInput(opts: UseRemoteInputOptions) {
-  const { videoRef, connState, deviceWidth, deviceHeight, sendDC, tryAutoUnmute } = opts
+  const { videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute } = opts
 
   let currentDownEventId: string | null = null
   let isDragging = false
@@ -78,42 +37,56 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
   // 上一次下发的方向元信息，供 onGlobalMouseUp 等无事件场景复用。
   let lastMeta = { width: 0, height: 0, rotation: 0 }
 
-  // 把浏览器坐标换算到「设备坐标 + 当前分辨率 + 旋转」。
-  // <video> 用 object-contain，先扣黑边得到视频像素坐标，再按横竖屏做旋转矩阵变换。
+  // 把浏览器坐标换算到「推流像素坐标」（即设备当前屏幕坐标），统一以 rotation:0 下发。
+  //
+  // ⚠️ 方向：推流分辨率「即」设备当前屏幕像素。
+  //   · 设备/应用自己转横屏：推流已是横屏像素，点到的就是设备坐标，cssRotation=0，直接换算。
+  //   · 桌面锁定竖屏、用户手动转横屏：推流仍是竖屏像素，<video> 被 CSS 旋转 cssRotation° 显示；
+  //     需绕画面中心把点击「反旋转」回布局系，再换算到推流像素。
+  // 两种情况都把结果按 width/height=当前推流分辨率、rotation=0 下发（对齐协议 §5.3「rotation 固定 0」
+  // 与官方 SDK：设备永远收到干净的推流系坐标，CSS 旋转纯属客户端显示、已在此完全补偿）。
   function resolvePos(e: MouseEvent | Touch): { x: number, y: number, width: number, height: number, rotation: number } | null {
-    if (!videoRef.value)
+    const v = videoRef.value
+    if (!v)
       return null
-    const rect = videoRef.value.getBoundingClientRect()
-    const dx = e.clientX - rect.left
-    const dy = e.clientY - rect.top
-    if (dx < 0 || dx > rect.width || dy < 0 || dy > rect.height)
+    // getBoundingClientRect 返回 CSS 变换后的外接框；其中心在绕中心旋转下保持不变。
+    const rect = v.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    // 点击相对画面中心的屏幕向量，按 -cssRotation 反旋转回元素布局系（y 向下）。
+    const sx = e.clientX - cx
+    const sy = e.clientY - cy
+    const rad = (cssRotation.value * Math.PI) / 180
+    const cos = Math.cos(rad)
+    const sin = Math.sin(rad)
+    const lx = sx * cos + sy * sin
+    const ly = -sx * sin + sy * cos
+    // 布局盒尺寸不受 transform 影响（offsetWidth/Height）；换算到盒内局部坐标。
+    const boxW = v.offsetWidth || rect.width
+    const boxH = v.offsetHeight || rect.height
+    const localX = boxW / 2 + lx
+    const localY = boxH / 2 + ly
+    if (localX < 0 || localX > boxW || localY < 0 || localY > boxH)
       return null
-    const vw = videoRef.value.videoWidth || deviceWidth.value
-    const vh = videoRef.value.videoHeight || deviceHeight.value
-    const scale = Math.max(rect.width / vw, rect.height / vh)
-    const ox = (rect.width - vw * scale) / 2
-    const oy = (rect.height - vh * scale) / 2
-    // 视频像素坐标（限定在画面内）。
-    const px = Math.max(0, Math.min((dx - ox) / scale, vw - 1))
-    const py = Math.max(0, Math.min((dy - oy) / scale, vh - 1))
-
-    // 当前横竖屏：推流宽>高即横屏。目标分辨率取所选分辨率的横/竖排列，旋转角对齐设备。
-    const landscape = vw > vh
-    const selW = deviceWidth.value
-    const selH = deviceHeight.value
-    const tw = landscape ? Math.max(selW, selH) : Math.min(selW, selH)
-    const th = landscape ? Math.min(selW, selH) : Math.max(selW, selH)
-    const rotation = landscape ? -90 : 0
-
-    const d = mapDeviceCoords(px, py, vw, vh, tw, th, rotation)
-    lastMeta = { width: tw, height: th, rotation }
-    return {
-      x: Math.max(0, Math.min(d.x, tw - 1)),
-      y: Math.max(0, Math.min(d.y, th - 1)),
-      width: tw,
-      height: th,
-      rotation,
-    }
+    // 布局盒 → 推流像素（object-contain：盒按推流比例，通常精确无黑边）。
+    const vw = v.videoWidth || deviceWidth.value
+    const vh = v.videoHeight || deviceHeight.value
+    const displayScale = Math.min(boxW / vw, boxH / vh)
+    const ox = (boxW - vw * displayScale) / 2
+    const oy = (boxH - vh * displayScale) / 2
+    // 画面内归一化位置（0..1）。
+    const fx = (localX - ox) / displayScale / vw
+    const fy = (localY - oy) / displayScale / vh
+    // 换算到「所选分辨率」空间下发——设备坐标系 = join 时声明的分辨率(= 所选分辨率)，
+    // 设备端按该分辨率的原始像素解释坐标、不按下发的 width/height 缩放；按当前推流方向摆长短边。
+    const selLong = Math.max(deviceWidth.value, deviceHeight.value)
+    const selShort = Math.min(deviceWidth.value, deviceHeight.value)
+    const devW = vw > vh ? selLong : selShort
+    const devH = vw > vh ? selShort : selLong
+    const x = Math.round(Math.max(0, Math.min(fx * devW, devW - 1)))
+    const y = Math.round(Math.max(0, Math.min(fy * devH, devH - 1)))
+    lastMeta = { width: devW, height: devH, rotation: 0 }
+    return { x, y, width: devW, height: devH, rotation: 0 }
   }
 
   function onMouseDown(e: MouseEvent) {
@@ -124,6 +97,16 @@ export function useRemoteInput(opts: UseRemoteInputOptions) {
     const p = resolvePos(e)
     if (!p)
       return
+    // [临时调试] 切换分辨率后点击错位排查：打印原始点击、视频/布局/推流尺寸、所选分辨率、下发坐标。
+    const dv = videoRef.value
+    // eslint-disable-next-line no-console
+    console.log('[RC-click]', JSON.stringify({
+      client: { x: e.clientX, y: e.clientY },
+      video: { w: dv?.videoWidth, h: dv?.videoHeight },
+      selectedRes: { w: deviceWidth.value, h: deviceHeight.value },
+      cssRotation: cssRotation.value,
+      sent: { x: p.x, y: p.y, width: p.width, height: p.height, rotation: p.rotation },
+    }))
     currentDownEventId = genId()
     isDragging = false
     dragStartX = p.x

@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -35,16 +36,32 @@ const page = ref(1)
 const size = ref(20)
 const expanded = ref<Set<string>>(new Set())
 
+// 时间段筛选：datetime-local 字符串（本地时区），查询时转 ISO 传给后端。
+const fromInput = ref('')
+const toInput = ref('')
+
 const sizeOptions = [20, 50, 100, 200]
 
 function rowKey(e: RuntimeLogEntry) {
   return `${e.cp_id}-${e.power_on_at}`
 }
 
+// "2026-06-21T23:00"（本地）→ ISO；空串返回 undefined（不传该参数）。
+function toIso(local: string): string | undefined {
+  if (!local) return undefined
+  const d = new Date(local)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+
 async function load(silent = false) {
   if (!silent) loading.value = true
   try {
-    const res = await billingApi.runtimeLog({ page: page.value, size: size.value })
+    const res = await billingApi.runtimeLog({
+      page: page.value,
+      size: size.value,
+      from: toIso(fromInput.value),
+      to: toIso(toInput.value),
+    })
     items.value = res.data.items
     total.value = res.data.total
     dailyCap.value = res.data.daily_cap_minutes
@@ -55,6 +72,21 @@ async function load(silent = false) {
 }
 
 onMounted(() => load())
+
+// 应用筛选：回到第 1 页重新拉取。
+function applyFilter() {
+  page.value = 1
+  load()
+}
+// 清空筛选条件并刷新。
+function resetFilter() {
+  fromInput.value = ''
+  toInput.value = ''
+  page.value = 1
+  load()
+}
+
+const hasFilter = computed(() => !!fromInput.value || !!toInput.value)
 
 function toggle(e: RuntimeLogEntry) {
   const k = rowKey(e)
@@ -123,6 +155,32 @@ function segMinutes(segs: RuntimeLogSegment[]) {
         <CardDescription>{{ t('billing.runtimeLog.sessionsDesc') }}</CardDescription>
       </CardHeader>
       <CardContent>
+        <!-- 时间段筛选 -->
+        <div class="mb-4 flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-muted-foreground text-xs">{{ t('billing.runtimeLog.filterFrom') }}</label>
+            <input
+              v-model="fromInput"
+              type="datetime-local"
+              class="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
+            >
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-muted-foreground text-xs">{{ t('billing.runtimeLog.filterTo') }}</label>
+            <input
+              v-model="toInput"
+              type="datetime-local"
+              class="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
+            >
+          </div>
+          <Button size="sm" class="h-9" @click="applyFilter">
+            {{ t('billing.runtimeLog.filterApply') }}
+          </Button>
+          <Button v-if="hasFilter" variant="ghost" size="sm" class="h-9" @click="resetFilter">
+            {{ t('billing.runtimeLog.filterReset') }}
+          </Button>
+        </div>
+
         <!-- 加载骨架 -->
         <div v-if="loading" class="space-y-2">
           <Skeleton v-for="i in 6" :key="i" class="h-12 w-full rounded-md" />
@@ -189,13 +247,20 @@ function segMinutes(segs: RuntimeLogSegment[]) {
                 <div
                   v-for="(seg, i) in e.segments"
                   :key="i"
-                  class="grid grid-cols-[1fr_2fr_1fr] items-center gap-2 rounded-md bg-background px-2.5 py-1.5 text-xs"
+                  class="rounded-md bg-background px-2.5 py-1.5 text-xs"
                 >
-                  <Badge :variant="quotaVariant(seg.quota_type)" class="w-fit text-[10px]">
-                    {{ t(`billing.runtimeLog.quota_${seg.quota_type}`) }}
-                  </Badge>
-                  <span class="text-muted-foreground tabular-nums">{{ formatDateTime(seg.from) }} → {{ formatDateTime(seg.to) }}</span>
-                  <span class="text-right tabular-nums">{{ seg.minutes }} {{ t('billing.purchase2.minuteUnit') }}</span>
+                  <div class="grid grid-cols-[1fr_2fr_1fr] items-center gap-2">
+                    <Badge :variant="quotaVariant(seg.quota_type)" class="w-fit text-[10px]">
+                      {{ t(`billing.runtimeLog.quota_${seg.quota_type}`) }}
+                    </Badge>
+                    <span class="text-muted-foreground tabular-nums">{{ formatDateTime(seg.from) }} → {{ formatDateTime(seg.to) }}</span>
+                    <span class="text-right tabular-nums">{{ seg.minutes }} {{ t('billing.purchase2.minuteUnit') }}</span>
+                  </div>
+                  <!-- 该段为何这样计费：优先用后端落账时生成的具体原因（含名额数/封顶值等），
+                       旧数据无 reason 时回退到按 quota_type 的通用说明。 -->
+                  <p class="text-muted-foreground/80 mt-1 leading-snug">
+                    {{ seg.reason || t(`billing.runtimeLog.reason_${seg.quota_type}`) }}
+                  </p>
                 </div>
               </div>
             </div>

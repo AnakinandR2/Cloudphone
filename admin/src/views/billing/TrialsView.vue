@@ -43,22 +43,51 @@ const granting = reactive<Record<number, boolean>>({})
 const grants = reactive<Record<number, TrialGrant[]>>({})
 const grantsLoading = reactive<Record<number, boolean>>({})
 
-// 三类资源科目（表单固定三行；数量 0 = 不发该项）。契约收敛为 seat/boot_slot/runtime_minute。
-const ITEM_SUBJECTS = ['seat', 'runtime_minute', 'boot_slot'] as const
+// ── 营销展示单选（后端清其它，全局至多一条）───────────────────
+const featuring = reactive<Record<number, boolean>>({})
+async function toggleFeature(p: TrialPolicy, val: boolean) {
+  featuring[p.id] = true
+  try {
+    await billingApi.featureTrial(p.id, val)
+    toast.success(t('trial.featureOk'))
+    await load() // 重拉：单选互斥后其它行同步关闭
+  }
+  catch {
+    toast.error(t('trial.featureFail'))
+  }
+  finally {
+    featuring[p.id] = false
+  }
+}
+
+// 三类资源科目（表单固定三行；数量 0 = 不发该项）。
+// 统一顺序：实例席位 → 包月开机数 → 临时开机时长。
+const ITEM_SUBJECTS = ['seat', 'boot_slot', 'runtime_minute'] as const
 
 function subjectLabel(s: string): string {
   return t(`billing.subject_${s}`)
 }
 
 function subjectUnit(s: string): string {
-  return s === 'runtime_minute' ? t('billing.unitMinute') : t('billing.unitSeat')
+  if (s === 'runtime_minute') return t('billing.unitMinute')
+  if (s === 'boot_slot') return t('billing.unitSlot')
+  return t('billing.unitSeat')
+}
+
+// 按统一顺序（实例席位→包月开机数→临时开机时长）排序发放项。
+function orderedItems<T extends { subject: string }>(items: T[]): T[] {
+  const rank = (s: string) => {
+    const i = (ITEM_SUBJECTS as readonly string[]).indexOf(s)
+    return i < 0 ? 99 : i
+  }
+  return [...items].sort((a, b) => rank(a.subject) - rank(b.subject))
 }
 
 function grantDesc(p: TrialPolicy): string {
   if (!p.items?.length) {
     return '—'
   }
-  return p.items.map((it) => {
+  return orderedItems(p.items).map((it) => {
     const base = `${subjectLabel(it.subject)} × ${it.quantity} ${subjectUnit(it.subject)}`
     const exp = it.expire_days > 0 ? t('trial.nDaysValid', { n: it.expire_days }) : t('trial.permanent')
     return `${base}（${exp}）`
@@ -70,6 +99,7 @@ const columns = computed<ColumnDef<TrialPolicy>[]>(() => [
   { accessorKey: 'code', id: 'code', header: t('trial.fCode'), meta: { label: 'trial.fCode' } },
   { accessorKey: 'name', id: 'name', header: t('trial.fName'), meta: { label: 'trial.fName' } },
   { accessorKey: 'enabled', id: 'enabled', header: t('trial.fEnabled'), meta: { label: 'trial.fEnabled' } },
+  { accessorKey: 'marketing_featured', id: 'marketing_featured', header: t('trial.fMarketing'), meta: { label: 'trial.fMarketing' } },
   { id: 'grant', header: t('trial.colGrant'), meta: { label: 'trial.colGrant' } },
   { accessorKey: 'per_user_limit', id: 'per_user_limit', header: t('trial.fPerUserLimit'), meta: { label: 'trial.fPerUserLimit' } },
   { accessorKey: 'allow_new_user', id: 'allow_new_user', header: t('trial.fAllowNewUser'), meta: { label: 'trial.fAllowNewUser' } },
@@ -112,8 +142,8 @@ interface FormState {
 function emptyItems(): Record<string, ItemRow> {
   return {
     seat: { quantity: 0, expire_days: 0 },
-    runtime_minute: { quantity: 0, expire_days: 0 },
     boot_slot: { quantity: 0, expire_days: 0 },
+    runtime_minute: { quantity: 0, expire_days: 0 },
   }
 }
 
@@ -160,11 +190,15 @@ function openEdit(p: TrialPolicy) {
   dialogOpen.value = true
 }
 
-// 收集数量>0 的发放项。
+// 收集数量>0 的发放项。数量/有效天数留空（''）一律按 0 处理（有效天数 0 = 永久）。
 function buildItems() {
   return ITEM_SUBJECTS
-    .filter(s => form.items[s].quantity > 0)
-    .map(s => ({ subject: s, quantity: form.items[s].quantity, expire_days: form.items[s].expire_days }))
+    .map(s => ({
+      subject: s,
+      quantity: Number(form.items[s].quantity) || 0,
+      expire_days: Number(form.items[s].expire_days) || 0,
+    }))
+    .filter(it => it.quantity > 0)
 }
 
 async function save() {
@@ -291,6 +325,14 @@ async function doGrantEligibility(p: TrialPolicy) {
               {{ row.enabled ? t('table.enabled') : t('table.disabled') }}
             </Badge>
           </template>
+          <template #cell-marketing_featured="{ row }">
+            <Switch
+              :model-value="row.marketing_featured"
+              :disabled="featuring[row.id]"
+              :title="t('trial.fMarketingHint')"
+              @update:model-value="(v) => toggleFeature(row, v === true)"
+            />
+          </template>
           <template #cell-grant="{ row }">
             <span class="text-sm">{{ grantDesc(row) }}</span>
           </template>
@@ -319,7 +361,9 @@ async function doGrantEligibility(p: TrialPolicy) {
             <div class="space-y-4 p-4">
               <!-- 授予资格 -->
               <div class="space-y-2">
-                <p class="text-sm font-medium">{{ t('trial.grantEligibilityTitle') }}</p>
+                <p class="text-sm font-medium">
+                  {{ t('trial.grantEligibilityTitle') }}
+                </p>
                 <div class="flex items-center gap-2">
                   <Input
                     v-model="grantUserIds[row.id]"
@@ -342,33 +386,53 @@ async function doGrantEligibility(p: TrialPolicy) {
               <!-- 发放记录 -->
               <div class="space-y-2">
                 <div class="flex items-center gap-2">
-                  <p class="text-sm font-medium">{{ t('trial.grantsTitle') }}</p>
+                  <p class="text-sm font-medium">
+                    {{ t('trial.grantsTitle') }}
+                  </p>
                   <Button variant="ghost" size="sm" class="h-7 text-xs" :disabled="grantsLoading[row.id]" @click="loadGrants(row)">
                     {{ t('trial.grantsRefresh') }}
                   </Button>
                 </div>
                 <template v-if="grantsLoading[row.id]">
-                  <p class="text-muted-foreground text-xs">{{ t('common.loading') }}</p>
+                  <p class="text-muted-foreground text-xs">
+                    {{ t('common.loading') }}
+                  </p>
                 </template>
                 <template v-else-if="grants[row.id]?.length">
                   <div class="overflow-auto rounded-md border">
                     <table class="w-full text-xs">
                       <thead>
                         <tr class="bg-muted/40 border-b">
-                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantUserId') }}</th>
-                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantSubject') }}</th>
-                          <th class="px-3 py-2 text-left font-medium">{{ t('trial.colGrantQty') }}</th>
-                          <th class="px-3 py-2 text-left font-medium">{{ t('table.createdAt') }}</th>
+                          <th class="px-3 py-2 text-left font-medium">
+                            {{ t('trial.colGrantUserId') }}
+                          </th>
+                          <th class="px-3 py-2 text-left font-medium">
+                            {{ t('trial.colGrantSubject') }}
+                          </th>
+                          <th class="px-3 py-2 text-left font-medium">
+                            {{ t('trial.colGrantQty') }}
+                          </th>
+                          <th class="px-3 py-2 text-left font-medium">
+                            {{ t('table.createdAt') }}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr v-for="g in grants[row.id]" :key="g.id" class="border-b last:border-0">
-                          <td class="px-3 py-1.5 tabular-nums">{{ g.user_id }}</td>
-                          <td class="px-3 py-1.5">
-                            <Badge variant="outline" class="text-xs">{{ subjectLabel(g.subject) }}</Badge>
+                          <td class="px-3 py-1.5 tabular-nums">
+                            {{ g.user_id }}
                           </td>
-                          <td class="px-3 py-1.5 tabular-nums">{{ g.quantity }} {{ subjectUnit(g.subject) }}</td>
-                          <td class="text-muted-foreground px-3 py-1.5 tabular-nums">{{ formatDateTime(g.created_at) }}</td>
+                          <td class="px-3 py-1.5">
+                            <Badge variant="outline" class="text-xs">
+                              {{ subjectLabel(g.subject) }}
+                            </Badge>
+                          </td>
+                          <td class="px-3 py-1.5 tabular-nums">
+                            {{ g.quantity }} {{ subjectUnit(g.subject) }}
+                          </td>
+                          <td class="text-muted-foreground px-3 py-1.5 tabular-nums">
+                            {{ formatDateTime(g.created_at) }}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -415,6 +479,7 @@ async function doGrantEligibility(p: TrialPolicy) {
                 <div class="flex items-center gap-1.5">
                   <span class="text-muted-foreground text-xs">{{ t('trial.fGrantQty') }}</span>
                   <Input v-model.number="form.items[s].quantity" type="number" min="0" step="1" class="h-8 w-20" />
+                  <span class="text-muted-foreground text-xs">{{ subjectUnit(s) }}</span>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <span class="text-muted-foreground text-xs">{{ t('trial.fGrantExpireDays') }}</span>
@@ -422,7 +487,9 @@ async function doGrantEligibility(p: TrialPolicy) {
                 </div>
               </div>
             </div>
-            <p class="text-muted-foreground text-xs">{{ t('trial.fGrantItemsHint') }}</p>
+            <p class="text-muted-foreground text-xs">
+              {{ t('trial.fGrantItemsHint') }}
+            </p>
           </div>
           <!-- 每用户限量 -->
           <div class="flex flex-col gap-1.5">
@@ -447,8 +514,12 @@ async function doGrantEligibility(p: TrialPolicy) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="dialogOpen = false">{{ t('crud.cancel') }}</Button>
-          <Button :disabled="saving" @click="save">{{ t('crud.confirm') }}</Button>
+          <Button variant="outline" @click="dialogOpen = false">
+            {{ t('crud.cancel') }}
+          </Button>
+          <Button :disabled="saving" @click="save">
+            {{ t('crud.confirm') }}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

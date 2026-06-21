@@ -212,6 +212,10 @@ p { margin: 0; text-wrap: pretty; }
 
 .btn-sm { height: 36px; padding: 0 14px; font-size: 13.5px; }
 .btn-lg { height: 52px; padding: 0 26px; font-size: 15.5px; }
+/* 行内按钮 / 文字链里的图标无内联尺寸时给个默认大小（GpIcon 的 svg 仅有 viewBox）。 */
+.btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.btn-sm svg { width: 16px; height: 16px; }
+.blog-card__more svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 /* ============ Card ============ */
 .card {

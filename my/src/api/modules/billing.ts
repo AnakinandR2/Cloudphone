@@ -43,14 +43,15 @@ export default {
     api.get<unknown, R<{ items: LicenseUnit[] }>>('billing/license-units', { params }),
   // 创建订单（含 recharge / 新购 / 续费 / 时长包）
   createOrder2: (req: OrderCreateReq2) => api.post<unknown, R<OrderCreateResult>>('billing/orders', req),
-  // 订单列表（新形状）。后端 OKWithPage 返回 { list, total }。
-  orders2: (params: { page?: number, size?: number, status?: string }) =>
+  // 订单列表（新形状）。后端 OKWithPage 返回 { list, total }，每单随附 items + gift。
+  // 支持按状态与创建时间区间（from/to，ISO 串）过滤。
+  orders2: (params: { page?: number, size?: number, status?: string, from?: string, to?: string }) =>
     api.get<unknown, R<Page<Order2>>>('billing/orders', { params }),
   // 订单详情（含 items）
   orderDetail2: (id: number) => api.get<unknown, R<OrderDetail2>>(`billing/orders/${id}`),
   // 继续支付未支付订单
   payOrder2: (id: number) => api.post<unknown, R<OrderCreateResult>>(`billing/orders/${id}/pay`),
   // 费用日志（聚合到开机会话）
-  runtimeLog: (params: { page?: number, size?: number }) =>
+  runtimeLog: (params: { page?: number, size?: number, from?: string, to?: string }) =>
     api.get<unknown, R<RuntimeLogResult>>('billing/runtime/log', { params }),
 }
