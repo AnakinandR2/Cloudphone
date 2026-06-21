@@ -96,6 +96,11 @@ func ReleaseInstanceOccupancy(userID int, cpIDs []string) error {
 	return billinginternal.RuntimeEngineService.ReleaseInstanceOccupancy(userID, cpIDs)
 }
 
+// RecycleRetentionDays 回收站保留天数（admin 定价配置 recycle_retention_days，默认 30）。
+func RecycleRetentionDays() (int, error) {
+	return billinginternal.PricingConfigService.RecycleRetentionDays()
+}
+
 // InitForTest 测试用：供其他模块装配 billing。
 func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }
 
@@ -108,6 +113,21 @@ func SetDunningForTest(userID int, state string) error {
 func GrantInstanceSeatsForTest(userID, n int) error {
 	_, err := billinginternal.EntitlementService.Grant(userID, billinginternal.SubjectInstanceSeat, int64(n), nil, billinginternal.SourceAdjust, "test", billinginternal.LedgerAdjustGrant, "staff:1")
 	return err
+}
+
+// GrantSeatLicensesForTest 测试用：给用户发放 n 个 seat 授权单元（新模型 license_units，30 天到期）。
+func GrantSeatLicensesForTest(userID, n int) error {
+	return billinginternal.FulfillService.FulfillNew(userID, billinginternal.KindSeat, n, 30, billinginternal.SourceGrant, "test")
+}
+
+// GrantBootSlotLicensesForTest 测试用：给用户发放 n 个 boot_slot 授权单元（新模型 license_units，30 天到期）。
+func GrantBootSlotLicensesForTest(userID, n int) error {
+	return billinginternal.FulfillService.FulfillNew(userID, billinginternal.KindBootSlot, n, 30, billinginternal.SourceGrant, "test")
+}
+
+// GrantRuntimeMinutesWalletForTest 测试用：给用户的新临时时长钱包加 n 分钟（CanBoot/结算用）。
+func GrantRuntimeMinutesWalletForTest(userID, n int) error {
+	return billinginternal.FulfillService.FulfillRuntimePack(userID, n, billinginternal.SourceGrant, "test")
 }
 
 // GrantBootSeatsForTest 测试用：给用户发放 n 个开机席位（并发免时长费）。

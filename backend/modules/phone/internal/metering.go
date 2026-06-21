@@ -20,7 +20,8 @@ func (s *serviceImpl) runSettlement(ctx context.Context) {
 	}
 	byUser := map[uint][]billing.RuntimeInterval{}
 	for _, ss := range sessions {
-		iv := billing.RuntimeInterval{Start: ss.PowerOnAt}
+		// 填充 CpID/RunSessionRef：新引擎据此按台封顶、按会话幂等结算 + 费用日志聚合。
+		iv := billing.RuntimeInterval{Start: ss.PowerOnAt, CpID: ss.CpID, RunSessionRef: ss.LogNo}
 		if ss.PowerOffAt != nil {
 			iv.End = ss.PowerOffAt
 		}

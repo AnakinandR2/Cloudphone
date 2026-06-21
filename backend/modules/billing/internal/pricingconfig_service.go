@@ -119,3 +119,15 @@ func (s *pricingConfigServiceImpl) DailyCapMinutes() (int, error) {
 	}
 	return d.Runtime.DailyCapMinutes, nil
 }
+
+// RecycleRetentionDays 回收站保留天数（admin 可配，默认 30）。
+func (s *pricingConfigServiceImpl) RecycleRetentionDays() (int, error) {
+	d, err := s.Get()
+	if err != nil {
+		return 0, err
+	}
+	if d.Runtime.RecycleRetentionDays <= 0 {
+		return 30, nil
+	}
+	return d.Runtime.RecycleRetentionDays, nil
+}

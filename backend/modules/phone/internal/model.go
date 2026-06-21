@@ -27,6 +27,9 @@ const (
 	StatusStopping     = "STOPPING"
 	StatusStopped      = "STOPPED"
 	StatusDestroying   = "DESTROYING"
+	// StatusRecycled 回收态：席位不足导致超额实例进回收站（强制关机 + 释放席位占用），
+	// 保留数据待清理。回收态实例不参与 reconcile、不占席位、不可开机；超保留天数后清理硬删。
+	StatusRecycled = "RECYCLED"
 	// StatusUnknown 展示态：中台不可用/查不到该 cp 时的实时状态，不回退本地档案值。
 	StatusUnknown = "UNKNOWN"
 )
@@ -84,9 +87,13 @@ type CloudPhone struct {
 	// AdbEnabled 由列表富化从中台 §2.6 实时判定（adbToken 非空），不入库；仅列表/卡片标记用。
 	AdbEnabled bool `gorm:"-" json:"adb_enabled"`
 	// Rooted 由列表富化从中台 §2.6 实时判定（isRooted），不入库；供列表标记 + 前端选对的 root 开关动作。
-	Rooted    bool      `gorm:"-" json:"rooted"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	Rooted bool `gorm:"-" json:"rooted"`
+	// RecycledAt 进回收站时间（status=RECYCLED 时有值），用于计算剩余清理天数。
+	RecycledAt *time.Time `gorm:"index:idx_cloud_phone_recycled" json:"recycled_at,omitempty"`
+	// RecycleReason 进回收站原因（如「席位不足，超额回收」）。
+	RecycleReason string    `gorm:"type:varchar(255)" json:"recycle_reason,omitempty"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (CloudPhone) TableName() string { return "cloud_phones" }

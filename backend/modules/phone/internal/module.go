@@ -32,6 +32,9 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 		g.GET("/list", GetCloudPhoneList)
 		g.GET("/tags", ListPhoneTags) // 已有标签去重列表
 		g.POST("/tags", SetPhoneTags) // 批量设置标签
+		// 回收站（静态路径需在 /:id 之前声明，避免被当作 id）
+		g.GET("/recycle-bin", RecycleBinList)
+		g.POST("/recycle-bin/:id/restore", RecycleBinRestore)
 		g.GET("/:id", GetCloudPhone)
 		g.POST("/create", CreateCloudPhone)
 		g.PUT("/update/:id", UpdateCloudPhone)
@@ -92,6 +95,12 @@ var meterRunner *framework.PeriodicRunner
 // guardRunner 准实时护栏 runner（30 秒）：余额/时长不足时关停超额运行中实例。
 var guardRunner *framework.PeriodicRunner
 
+// reconcileRunner 席位池巡检 runner（5 分钟）：席位过期/热迁移/溢出回收的兜底。
+var reconcileRunner *framework.PeriodicRunner
+
+// recycleCleanupRunner 回收站清理 runner（每日）：回收超保留天数的实例销毁 + 硬删本地记录。
+var recycleCleanupRunner *framework.PeriodicRunner
+
 func (m *phoneModule) OnStart() error {
 	if PhoneService != nil && PhoneService.ops != nil {
 		phoneWorker = newTaskWorker(PhoneService, m.db)
@@ -123,6 +132,24 @@ func (m *phoneModule) OnStart() error {
 			return nil
 		})
 		guardRunner.Start()
+
+		// 席位池巡检：每 5 分钟兜底 reconcile（席位过期/热迁移/溢出回收）。
+		reconcileRunner = framework.NewPeriodicRunner(m.db, "phone:seat-reconcile", 5*time.Minute, 4*time.Minute, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+			defer cancel()
+			PhoneService.runReconcilePatrol(ctx)
+			return nil
+		})
+		reconcileRunner.Start()
+
+		// 回收站清理：每日销毁超保留天数的回收实例并硬删本地记录。
+		recycleCleanupRunner = framework.NewPeriodicRunner(m.db, "phone:recycle-cleanup", 24*time.Hour, 23*time.Hour, func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			PhoneService.runRecycleCleanup(ctx)
+			return nil
+		})
+		recycleCleanupRunner.Start()
 	}
 	return nil
 }
@@ -143,6 +170,14 @@ func (m *phoneModule) OnStop() error {
 	if guardRunner != nil {
 		guardRunner.Stop()
 		guardRunner = nil
+	}
+	if reconcileRunner != nil {
+		reconcileRunner.Stop()
+		reconcileRunner = nil
+	}
+	if recycleCleanupRunner != nil {
+		recycleCleanupRunner.Stop()
+		recycleCleanupRunner = nil
 	}
 	return nil
 }

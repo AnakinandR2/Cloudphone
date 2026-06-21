@@ -252,7 +252,8 @@ func (s *serviceImpl) liveStatus(ctx context.Context, cpID string) string {
 //   - 已配置中台：调中台异步创建 → 落 CREATING + 创建任务，worker 轮询收敛到 CREATED/CREATE_FAILED。
 //   - 未配置中台（本地/测试降级）：仅落本地档案，直接置 CREATED，不触达中台、不建任务。
 func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, error) {
-	if err := billing.TryOccupyInstanceSeat(userID); err != nil {
+	// 席位前置校验（新模型）：当前非回收实例数 < 未过期 seat 容量才允许创建，保证不超额。
+	if err := s.checkSeatAvailable(userID); err != nil {
 		return nil, err
 	}
 	item := CloudPhone{
@@ -266,7 +267,6 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	if s.ops == nil {
 		item.Status = StatusCreated
 		if err := s.repo.create(&item); err != nil {
-			_ = billing.ReleaseInstanceSeat(userID)
 			return nil, err
 		}
 		return &item, nil
@@ -276,7 +276,6 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	defer cancel()
 	res, err := s.ops.Create(ctx, CreateArgs{Region: req.Region, ImageID: req.ImageID})
 	if err != nil {
-		_ = billing.ReleaseInstanceSeat(userID)
 		return nil, apperr.Internal("创建云手机失败：" + err.Error())
 	}
 	item.Status = StatusCreating
@@ -289,9 +288,10 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 		item.Region = res.Region
 	}
 	if err := s.repo.create(&item); err != nil {
-		_ = billing.ReleaseInstanceSeat(userID)
 		return nil, err
 	}
+	// 创建后触发席位 reconcile：物化新实例的席位占用（best-effort，巡检兜底）。
+	_ = s.reconcileSeats(ctx, userID)
 	// 入库创建任务：needStart=false，worker 轮询中台直到 cpId = STOPPED（已创建未开机）→ CREATED；超时 → CREATE_FAILED。
 	_ = s.repo.createTask(&CpTask{
 		UserID:        uint(userID),
@@ -343,7 +343,13 @@ func (s *serviceImpl) Delete(userID, id int) error {
 		if err := s.repo.delete(userID, id); err != nil {
 			return err
 		}
-		_ = billing.ReleaseInstanceSeat(userID)
+		if p.CpID != "" {
+			_ = billing.ReleaseInstanceOccupancy(userID, []string{p.CpID})
+		}
+		// 删除后触发 reconcile：席位释放后池中可能有溢出实例可被重新覆盖。
+		ctx, cancel := opCtx()
+		_ = s.reconcileSeats(ctx, userID)
+		cancel()
 		return nil
 	}
 
@@ -471,22 +477,13 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}
-		// 时长费已启用（单价>0）时，开机需有可用开机席位或剩余时长包（余额按分钟付费不计入开机门禁）。
-		// 与护栏 runRuntimeGuard 同源判并发：开机后并发台数若超出席位且无时长包则拒绝，避免开机即被护栏关停。
-		cov, err := billing.GetRuntimeCoverage(userID)
+		// 开机前置校验（新模型 §3.3）：必须有空闲包月名额或临时时长>0，否则禁止开机。
+		canBoot, err := billing.CanBoot(userID)
 		if err != nil {
 			return err
 		}
-		if cov.UnitPriceCents > 0 {
-			running, err := s.repo.runningSessionCountByUser(userID)
-			if err != nil {
-				return err
-			}
-			hasSeat := running < cov.AvailableBootSeats // 开机后仍在并发席位内
-			hasPack := cov.RemainingPackMinutes > 0
-			if !hasSeat && !hasPack {
-				return apperr.Forbidden("没有可用的开机席位或时长包，无法开机，请购买包月开机包或时长包")
-			}
+		if !canBoot {
+			return apperr.Forbidden("没有可用的包月开机名额或临时开机时长，无法开机，请购买包月开机数或临时时长")
 		}
 		if err := s.ops.StartOrShutdown(ctx, p.CpID, "开机"); err != nil {
 			return err
@@ -570,7 +567,14 @@ func (s *serviceImpl) Destroy(userID, id int) error {
 	if err := s.ops.Destroy(ctx, p.CpID); err != nil {
 		return err
 	}
-	return s.repo.delete(userID, id)
+	if err := s.repo.delete(userID, id); err != nil {
+		return err
+	}
+	if p.CpID != "" {
+		_ = billing.ReleaseInstanceOccupancy(userID, []string{p.CpID})
+	}
+	_ = s.reconcileSeats(ctx, userID)
+	return nil
 }
 
 func (s *serviceImpl) WebRTCAuth(userID, id int) (*midplat.WebRTCAuthInfo, error) {
@@ -1032,10 +1036,15 @@ func midplatTarget(taskType string) string {
 	return MidplatReady
 }
 
-// settleDestroy 销毁任务收敛：删本地档案 + 释放席位 + 标记任务终态。
+// settleDestroy 销毁任务收敛：删本地档案 + 释放席位占用 + reconcile + 标记任务终态。
 func (s *serviceImpl) settleDestroy(t CpTask, taskStatus, lastErr string) {
 	if err := s.repo.delete(int(t.UserID), int(t.CloudPhoneID)); err == nil {
-		_ = billing.ReleaseInstanceSeat(int(t.UserID))
+		if t.CpID != "" {
+			_ = billing.ReleaseInstanceOccupancy(int(t.UserID), []string{t.CpID})
+		}
+		ctx, cancel := opCtx()
+		_ = s.reconcileSeats(ctx, int(t.UserID))
+		cancel()
 	}
 	_ = s.repo.updateTask(t.ID, taskStatus, lastErr)
 }

@@ -8,6 +8,7 @@ import (
 
 	"manager-backend/framework"
 	"manager-backend/framework/midplat"
+	"manager-backend/modules/billing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -242,8 +243,11 @@ func provisionedPhone(t *testing.T, userID int, cpID string) int {
 }
 
 func TestOpPassesCpIDAndChecksOwnership(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
-	f := &fakePort{statuses: map[string]string{"cp-aaa": "STOPPED"}} // 实时态：可开机
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(userA, 1000)) // 开机前置校验放行
+	f := &fakePort{statuses: map[string]string{"cp-aaa": "STOPPED"}}          // 实时态：可开机
 	withFakeOps(t, f)
 
 	id := provisionedPhone(t, userA, "cp-aaa")

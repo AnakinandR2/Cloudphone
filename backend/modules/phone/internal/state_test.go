@@ -39,9 +39,9 @@ func statusOf(t *testing.T, id uint) string {
 // 创建：调中台受理 → 落 CREATING + cpId + 创建任务。
 func TestCreateProvisionsViaMidplat(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
-	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
+	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, &fakePort{createCpID: "cp-123"})
 
 	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "新机", Region: "上海"})
@@ -59,9 +59,9 @@ func TestCreateProvisionsViaMidplat(t *testing.T) {
 // 无中台（降级）：仅落本地档案，直接 CREATED，不建任务。
 func TestCreateDegradedWithoutMidplat(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries")
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
-	require.NoError(t, billing.GrantInstanceSeatsForTest(userA, 5))
+	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, nil)
 
 	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "本地机"})
@@ -136,7 +136,11 @@ func TestWorkerStopSuccess(t *testing.T) {
 
 // 开机门禁：按中台实时态判（STOPPED 可开机 → STARTING；关机仅 NORMAL/运行中）。
 func TestPowerGating(t *testing.T) {
-	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries")
+	})
+	// 开机前置校验（CanBoot）：给 userA 备一份临时时长，使开机门禁放行，专注测状态机门禁。
+	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(userA, 1000))
 	// fake 中台实时态：开关机门禁现按此判（与 UI 显示同源）。
 	f := &fakePort{statuses: map[string]string{
 		"cp-a": "STOPPED",      // 已停止 → 可开机
@@ -172,36 +176,32 @@ func TestPowerGating(t *testing.T) {
 	assert.Error(t, PhoneService.Power(userA, int(u.ID), "关机"), "实时态未知应拒绝")
 }
 
-// 开机门禁（时长费）：单价>0 时需有可用开机席位或剩余时长包（余额不计入）；单价=0（未启用）不拦截。
+// 开机前置校验（CanBoot，新模型 §3.3）：无空闲包月名额且无临时时长 → 拒绝；
+// 有临时时长 或 有包月开机数 → 放行。
 func TestPowerRuntimeGate(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "run_sessions")
-		_ = billing.SetRuntimeUnitPriceForTest(0) // 复位全局单价，避免影响其它用例
+		framework.CleanTable("cloud_phones", "cp_tasks", "run_sessions",
+			"billing_license_units", "billing_runtime_minute_wallets", "billing_ledger_entries")
 	})
 	f := &fakePort{statuses: map[string]string{
-		"cp-rt1": "STOPPED", "cp-rt2": "STOPPED", "cp-rt3": "STOPPED",
+		"cp-rt1": "STOPPED", "cp-rt2": "STOPPED",
 	}}
 	withFakeOps(t, f)
-	require.NoError(t, billing.SetRuntimeUnitPriceForTest(10)) // 启用时长费
 
-	// 用户1：无席位无时长包 → 拒绝；发放时长包后 → 放行。
+	// 用户1：无包月名额无临时时长 → 拒绝；发放临时时长后 → 放行。
 	const u1 = 970201
 	p1 := insertPhone(t, u1, StatusStopped, "cp-rt1")
-	assert.Error(t, PhoneService.Power(u1, int(p1.ID), "开机"), "无席位无时长包应拒绝开机")
-	require.NoError(t, billing.GrantRuntimeMinutesForTest(u1, 60))
+	assert.Error(t, PhoneService.Power(u1, int(p1.ID), "开机"), "无名额无时长应拒绝开机")
+	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(u1, 60))
 	require.NoError(t, PhoneService.Power(u1, int(p1.ID), "开机"))
 	assert.Equal(t, StatusStarting, statusOf(t, p1.ID))
 
-	// 用户2：仅 1 个开机席位。席位空 → 第 1 台放行；占满唯一席位后无时长包的第 2 台 → 拒绝。
+	// 用户2：仅有包月开机数（boot_slot）→ 放行。
 	const u2 = 970202
-	require.NoError(t, billing.GrantBootSeatsForTest(u2, 1))
+	require.NoError(t, billing.GrantBootSlotLicensesForTest(u2, 1))
 	p2 := insertPhone(t, u2, StatusStopped, "cp-rt2")
-	require.NoError(t, PhoneService.Power(u2, int(p2.ID), "开机"), "席位内应可开机")
-	require.NoError(t, framework.DB.Create(&RunSession{ // 模拟该台已在运行，占满唯一席位
-		LogNo: "RT-S1", CpID: "cp-rt2", UserID: uint(u2), PowerOnAt: time.Now(), SessionStatus: "RUNNING",
-	}).Error)
-	p3 := insertPhone(t, u2, StatusStopped, "cp-rt3")
-	assert.Error(t, PhoneService.Power(u2, int(p3.ID), "开机"), "席位占满且无时长包应拒绝")
+	require.NoError(t, PhoneService.Power(u2, int(p2.ID), "开机"), "有包月开机数应可开机")
+	assert.Equal(t, StatusStarting, statusOf(t, p2.ID))
 }
 
 // 销毁门禁（按中台实时态）：过渡/运行态不可销毁；INIT_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。

@@ -169,6 +169,54 @@ func DeleteCloudPhone(c *gin.Context) {
 	framework.OK(c)
 }
 
+// --- 前台：回收站 ---
+
+// RecycleBinList 回收站列表（仅本人，含剩余清理天数）
+// @Summary 回收站列表
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} framework.Response{data=[]RecycleBinItem}
+// @Router /phone/recycle-bin [get]
+func RecycleBinList(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	items, err := PhoneService.RecycleBinList(uid)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, items)
+}
+
+// RecycleBinRestore 手动恢复一台回收站实例（仅本人；席位不足 → 422）
+// @Summary 恢复回收站实例
+// @Tags 我的云手机
+// @Produce json
+// @Security Bearer
+// @Param id path int true "ID"
+// @Success 200 {object} framework.Response
+// @Router /phone/recycle-bin/{id}/restore [post]
+func RecycleBinRestore(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if err := PhoneService.RecycleBinRestore(c.Request.Context(), uid, id); err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OK(c)
+}
+
 // --- 管理侧：实例管理（全量）---
 
 // AdminListCloudPhones 云手机实例列表（全量，管理侧）

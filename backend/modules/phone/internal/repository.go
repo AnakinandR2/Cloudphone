@@ -23,6 +23,22 @@ type repository interface {
 	listByUser(userID int) ([]CloudPhone, error)
 	// deleteByID 按主键删除（enforcement worker 销毁超量实例用，不带属主约束）。
 	deleteByID(id uint) error
+	// listNonRecycledByUser 按 created_at 正序列出某用户「非回收态」实例（席位 reconcile 用）。
+	listNonRecycledByUser(userID int) ([]CloudPhone, error)
+	// listRecycledByUser 按 recycled_at 倒序列出某用户回收站实例（回收站列表用）。
+	listRecycledByUser(userID int) ([]CloudPhone, error)
+	// findRecycledByID 按属主取一台回收态实例（恢复用，IDOR 防护）。
+	findRecycledByID(userID, id int) (*CloudPhone, error)
+	// markRecycled 置某实例为回收态（recycled_at=now + reason）。
+	markRecycled(phoneID uint, reason string, at time.Time) error
+	// restoreRecycled 把回收态实例置回 STOPPED（清空 recycled_at/reason，限本人 + 限回收态）。
+	restoreRecycled(userID, id int) error
+	// listExpiredRecycled 列出 recycled_at 早于 before 的回收态实例（清理 cron 用，不限属主）。
+	listExpiredRecycled(before time.Time) ([]CloudPhone, error)
+	// recycledUserIDs 返回当前有回收态实例的去重用户 id（清理巡检范围）。
+	recycledUserIDs() ([]int, error)
+	// activeOwnerIDs 返回当前有「非回收态」实例的去重用户 id（席位 reconcile 巡检范围）。
+	activeOwnerIDs() ([]int, error)
 	// 管理侧（不限属主）
 	adminCount(kw, status, tag string, userID int) (int64, error)
 	adminList(offset, limit int, kw, status, tag string, userID int, orderClause string) ([]CloudPhone, error)
@@ -189,6 +205,70 @@ func (r *gormRepository) listByUser(userID int) ([]CloudPhone, error) {
 
 func (r *gormRepository) deleteByID(id uint) error {
 	return r.db.Where("id = ?", id).Delete(&CloudPhone{}).Error
+}
+
+// --- 回收站 + 席位 reconcile ---
+
+func (r *gormRepository) listNonRecycledByUser(userID int) ([]CloudPhone, error) {
+	var items []CloudPhone
+	err := r.db.Where("user_id = ? AND status <> ?", userID, StatusRecycled).
+		Order("created_at ASC, id ASC").Find(&items).Error
+	return items, err
+}
+
+func (r *gormRepository) listRecycledByUser(userID int) ([]CloudPhone, error) {
+	var items []CloudPhone
+	err := r.db.Where("user_id = ? AND status = ?", userID, StatusRecycled).
+		Order("recycled_at DESC, id DESC").Find(&items).Error
+	return items, err
+}
+
+func (r *gormRepository) findRecycledByID(userID, id int) (*CloudPhone, error) {
+	var item CloudPhone
+	if err := r.db.Where("user_id = ? AND id = ? AND status = ?", userID, id, StatusRecycled).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *gormRepository) markRecycled(phoneID uint, reason string, at time.Time) error {
+	return r.db.Model(&CloudPhone{}).Where("id = ?", phoneID).Updates(map[string]interface{}{
+		"status":         StatusRecycled,
+		"recycled_at":    at,
+		"recycle_reason": reason,
+	}).Error
+}
+
+func (r *gormRepository) restoreRecycled(userID, id int) error {
+	return r.db.Model(&CloudPhone{}).
+		Where("user_id = ? AND id = ? AND status = ?", userID, id, StatusRecycled).
+		Updates(map[string]interface{}{
+			"status":         StatusStopped,
+			"recycled_at":    nil,
+			"recycle_reason": "",
+		}).Error
+}
+
+func (r *gormRepository) listExpiredRecycled(before time.Time) ([]CloudPhone, error) {
+	var items []CloudPhone
+	err := r.db.Where("status = ? AND recycled_at IS NOT NULL AND recycled_at < ?", StatusRecycled, before).
+		Order("id ASC").Find(&items).Error
+	return items, err
+}
+
+func (r *gormRepository) recycledUserIDs() ([]int, error) {
+	var ids []int
+	err := r.db.Model(&CloudPhone{}).Where("status = ?", StatusRecycled).
+		Distinct().Pluck("user_id", &ids).Error
+	return ids, err
+}
+
+func (r *gormRepository) activeOwnerIDs() ([]int, error) {
+	var ids []int
+	err := r.db.Model(&CloudPhone{}).Where("status <> ?", StatusRecycled).
+		Distinct().Pluck("user_id", &ids).Error
+	return ids, err
 }
 
 // --- 异步任务追踪 ---
