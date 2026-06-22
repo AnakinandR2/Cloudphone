@@ -101,8 +101,16 @@ watch(open, async (v) => {
       const res = await phoneApi.detail(props.id)
       Object.assign(form, res.data)
     }
-    // 已绑代理则默认打开开关并回显选中；未绑则关闭并提示。
-    bindProxy.value = form.proxy_id > 0
+    if (isCreate.value) {
+      // 新建：默认打开「绑定代理」开关；有可选代理时默认选中第一个。
+      bindProxy.value = true
+      if (form.proxy_id === 0 && proxies.value.length)
+        form.proxy_id = proxies.value[0].id
+    }
+    else {
+      // 编辑/查看：已绑代理则打开开关并回显选中，未绑则关闭并提示。
+      bindProxy.value = form.proxy_id > 0
+    }
   }
 })
 
