@@ -101,7 +101,6 @@ type RecycleBinItem struct {
 	ID            uint       `json:"id"`
 	CpID          string     `json:"cp_id"`
 	Name          string     `json:"name"`
-	Region        string     `json:"region"`
 	RecycledAt    *time.Time `json:"recycled_at"`
 	RecycleReason string     `json:"recycle_reason"`
 	DaysRemaining int        `json:"days_remaining"` // 距清理还剩天数（0 表示今日内将清理）
@@ -130,7 +129,7 @@ func (s *serviceImpl) RecycleBinList(userID int) ([]RecycleBinItem, error) {
 			}
 		}
 		out = append(out, RecycleBinItem{
-			ID: p.ID, CpID: p.CpID, Name: p.Name, Region: p.Region,
+			ID: p.ID, CpID: p.CpID, Name: p.Name,
 			RecycledAt: p.RecycledAt, RecycleReason: p.RecycleReason,
 			DaysRemaining: days,
 		})

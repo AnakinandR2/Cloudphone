@@ -12,17 +12,15 @@ import (
 
 // CreateArgs 是「异步创建一台云手机」的入参（业务侧已知信息；vmId/imageId 可留空由适配层调度）。
 type CreateArgs struct {
-	Region  string
 	ImageID string
 	VmID    string
 }
 
-// CreateResult 是创建受理结果：中台分配的 cpId + 适配层最终选定的 vmId/imageId/region（回填本地档案）。
+// CreateResult 是创建受理结果：中台分配的 cpId + 适配层最终选定的 vmId/imageId（回填本地档案）。
 type CreateResult struct {
 	CpID    string
 	VmID    string
 	ImageID string
-	Region  string
 }
 
 // midplatPort 是 phone 模块对「云手机中台」的依赖端口（六边形架构里的出站端口）。
@@ -31,7 +29,7 @@ type CreateResult struct {
 // ② 单测可注入假实现，无需真打中台 / mock HTTP 即可验证「归属校验 + 透传正确 cpId」。
 // 所有方法都按「单台云手机」语义封装（SDK 多为批量接口，这里只传一台）。
 type midplatPort interface {
-	// Create 异步创建一台云手机，返回中台分配的 cpId 与最终选定的资源信息（vmId/imageId/region）。
+	// Create 异步创建一台云手机，返回中台分配的 cpId 与最终选定的资源信息（vmId/imageId）。
 	Create(ctx context.Context, args CreateArgs) (*CreateResult, error)
 
 	StartOrShutdown(ctx context.Context, cpID, operation string) error
@@ -174,7 +172,6 @@ func (a *sdkAdapter) Create(ctx context.Context, args CreateArgs) (*CreateResult
 		RegionOption:        "CUSTOM",
 		TimezoneOption:      "CUSTOM",
 		LanguageOption:      "CUSTOM",
-		Region:              args.Region,
 	})
 	if err != nil {
 		return nil, err
@@ -183,7 +180,7 @@ func (a *sdkAdapter) Create(ctx context.Context, args CreateArgs) (*CreateResult
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("中台未返回云手机 ID")
 	}
-	return &CreateResult{CpID: ids[0], VmID: srv.VmID, ImageID: imageID, Region: args.Region}, nil
+	return &CreateResult{CpID: ids[0], VmID: srv.VmID, ImageID: imageID}, nil
 }
 
 // pickServer 选一台「在线、非维护、有空闲云手机容量」的服务器用于创建。

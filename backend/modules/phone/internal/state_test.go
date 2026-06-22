@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// insertPhone 直接落一台指定状态/ cpId 的云手机。
+// insertPhone 直接落一台指定状态/ cpId 的云手机（默认带 ProxyID=1，满足开机门禁「必须绑代理」）。
 func insertPhone(t *testing.T, userID int, status, cpID string) *CloudPhone {
 	t.Helper()
-	p := CloudPhone{UserID: uint(userID), Name: "st机", Status: status, CpID: cpID}
+	p := CloudPhone{UserID: uint(userID), Name: "st机", Status: status, CpID: cpID, ProxyID: 1}
 	require.NoError(t, framework.DB.Create(&p).Error)
 	return &p
 }
@@ -44,7 +44,7 @@ func TestCreateProvisionsViaMidplat(t *testing.T) {
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, &fakePort{createCpID: "cp-123"})
 
-	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "新机", Region: "上海"})
+	p, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "新机"})
 	require.NoError(t, err)
 	assert.Equal(t, StatusCreating, p.Status)
 	assert.Equal(t, "cp-123", p.CpID)
@@ -202,6 +202,32 @@ func TestPowerRuntimeGate(t *testing.T) {
 	p2 := insertPhone(t, u2, StatusStopped, "cp-rt2")
 	require.NoError(t, PhoneService.Power(u2, int(p2.ID), "开机"), "有包月开机数应可开机")
 	assert.Equal(t, StatusStarting, statusOf(t, p2.ID))
+}
+
+// 开机硬约束：必须已绑定代理（proxy_id>0）才能开机；未绑代理一律拒绝，且不触达中台。
+// 绑定代理后即可开机。代理门禁排在 CanBoot 之前，这里备足时长以证明唯一拦截原因是「未绑代理」。
+func TestPowerOnRequiresProxy(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries")
+	})
+	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(userA, 1000))
+	f := &fakePort{statuses: map[string]string{"cp-noproxy": "STOPPED"}} // 实时态可开机
+	withFakeOps(t, f)
+
+	// 未绑代理（proxy_id=0）的已开通云手机。
+	p := CloudPhone{UserID: userA, Name: "未绑代理机", Status: StatusStopped, CpID: "cp-noproxy", ProxyID: 0}
+	require.NoError(t, framework.DB.Create(&p).Error)
+
+	err := PhoneService.Power(userA, int(p.ID), "开机")
+	require.Error(t, err, "未绑代理应拒绝开机")
+	assert.Contains(t, err.Error(), "代理")
+	assert.Equal(t, 0, f.calls, "被代理门禁拦下，不应触达中台")
+
+	// 绑定代理后可开机。
+	_, err = PhoneService.Update(userA, int(p.ID), &CloudPhoneUpdate{ProxyID: 7})
+	require.NoError(t, err)
+	require.NoError(t, PhoneService.Power(userA, int(p.ID), "开机"))
+	assert.Equal(t, StatusStarting, statusOf(t, p.ID))
 }
 
 // 销毁门禁（按中台实时态）：过渡/运行态不可销毁；INIT_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。

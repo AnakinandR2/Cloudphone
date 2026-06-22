@@ -48,9 +48,9 @@ func GetDisplay(userID, id int) (*CloudPhone, error) {
 }
 
 // Create 创建一台云手机。
-func Create(userID int, name, region, imageID string, proxyID uint) (*CloudPhone, error) {
+func Create(userID int, name, imageID string, proxyID uint) (*CloudPhone, error) {
 	return phoneinternal.PhoneService.Create(userID, &phoneinternal.CloudPhoneCreate{
-		Name: name, Region: region, ImageID: imageID, ProxyID: proxyID,
+		Name: name, ImageID: imageID, ProxyID: proxyID,
 	})
 }
 

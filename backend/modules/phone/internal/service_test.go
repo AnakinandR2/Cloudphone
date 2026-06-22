@@ -21,7 +21,7 @@ func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 
-	created, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "甲机", Region: "上海", ProxyID: 5})
+	created, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "甲机", ProxyID: 5})
 	require.NoError(t, err)
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, uint(userA), created.UserID)

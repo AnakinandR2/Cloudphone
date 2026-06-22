@@ -259,7 +259,6 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	item := CloudPhone{
 		UserID:  uint(userID),
 		Name:    req.Name,
-		Region:  req.Region,
 		ImageID: req.ImageID,
 		ProxyID: req.ProxyID,
 		Remark:  req.Remark,
@@ -274,7 +273,7 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 
 	ctx, cancel := opCtx()
 	defer cancel()
-	res, err := s.ops.Create(ctx, CreateArgs{Region: req.Region, ImageID: req.ImageID})
+	res, err := s.ops.Create(ctx, CreateArgs{ImageID: req.ImageID})
 	if err != nil {
 		return nil, apperr.Internal("创建云手机失败：" + err.Error())
 	}
@@ -283,9 +282,6 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	item.VmID = res.VmID
 	if res.ImageID != "" {
 		item.ImageID = res.ImageID
-	}
-	if res.Region != "" {
-		item.Region = res.Region
 	}
 	if err := s.repo.create(&item); err != nil {
 		return nil, err
@@ -382,9 +378,6 @@ func updateFields(req *CloudPhoneUpdate) map[string]interface{} {
 	if req.Status != "" {
 		fields["status"] = req.Status
 	}
-	if req.Region != "" {
-		fields["region"] = req.Region
-	}
 	if req.ImageID != "" {
 		fields["image_id"] = req.ImageID
 	}
@@ -470,7 +463,11 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		if live != StatusCreated && live != StatusStopped {
 			return apperr.Validation("当前状态不可开机")
 		}
-		// 开机前置校验（新模型 §3.3）：必须有空闲包月名额或临时时长>0，否则禁止开机。
+		// 开机前置校验①：必须已绑定代理（proxy_id>0）。未绑代理一律禁止开机（业务硬约束）。
+		if p.ProxyID == 0 {
+			return apperr.Validation("未绑定代理，无法开机，请先绑定代理")
+		}
+		// 开机前置校验②（新模型 §3.3）：必须有空闲包月名额或临时时长>0，否则禁止开机。
 		canBoot, err := billing.CanBoot(userID)
 		if err != nil {
 			return err

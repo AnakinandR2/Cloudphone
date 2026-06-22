@@ -43,7 +43,7 @@ func (f *fakePort) Create(_ context.Context, args CreateArgs) (*CreateResult, er
 	if cp == "" {
 		cp = "cp-new"
 	}
-	return &CreateResult{CpID: cp, VmID: "vm-1", ImageID: "img-1", Region: args.Region}, nil
+	return &CreateResult{CpID: cp, VmID: "vm-1", ImageID: "img-1"}, nil
 }
 
 func (f *fakePort) note(cpID, op string) error {
@@ -234,10 +234,11 @@ func withFakeOps(t *testing.T, f midplatPort) {
 }
 
 // provisionedPhone 造一台「本人拥有且已开通（cpId 非空）」的云手机，状态置 STOPPED（可开机）。
-// 直接落库，绕过 service.Create 的中台创建流程，避免污染 fakePort 的调用计数。
+// 默认带 ProxyID=1（已绑代理），满足开机门禁「必须绑定代理」；直接落库，绕过 service.Create
+// 的中台创建流程，避免污染 fakePort 的调用计数。
 func provisionedPhone(t *testing.T, userID int, cpID string) int {
 	t.Helper()
-	p := CloudPhone{UserID: uint(userID), Name: "op机", Status: StatusStopped, CpID: cpID}
+	p := CloudPhone{UserID: uint(userID), Name: "op机", Status: StatusStopped, CpID: cpID, ProxyID: 1}
 	require.NoError(t, framework.DB.Create(&p).Error)
 	return int(p.ID)
 }

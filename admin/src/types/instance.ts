@@ -10,7 +10,6 @@ export interface CloudPhone {
   cp_id: string
   name: string
   status: 'CREATING' | 'CREATE_FAILED' | 'CREATED' | 'STARTING' | 'RUNNING' | 'STOPPING' | 'STOPPED' | 'DESTROYING'
-  region: string
   vm_id: string
   image_id: string
   proxy_id: number

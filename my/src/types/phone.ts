@@ -10,7 +10,6 @@ export interface CloudPhone {
   cp_id: string
   name: string
   status: string
-  region: string
   vm_id: string
   image_id: string
   proxy_id: number
@@ -24,7 +23,6 @@ export interface CloudPhone {
 
 export interface CloudPhoneCreate {
   name: string
-  region: string
   image_id: string
   proxy_id: number
   remark: string
@@ -33,7 +31,6 @@ export interface CloudPhoneCreate {
 export interface CloudPhoneUpdate {
   name?: string
   status?: string
-  region?: string
   image_id?: string
   proxy_id?: number
   remark?: string

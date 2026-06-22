@@ -130,7 +130,6 @@ const filteredData = computed(() => {
   return data.value.filter(p =>
     p.name.toLowerCase().includes(q)
     || (p.cp_id || '').toLowerCase().includes(q)
-    || (p.region || '').toLowerCase().includes(q)
     || (p.tags ?? []).some(tg => tg.name.toLowerCase().includes(q)),
   )
 })
@@ -187,7 +186,6 @@ const columns = computed<ColumnDef<CloudPhone>[]>(() => [
   { accessorKey: 'name', id: 'name', header: t('phone.colName'), meta: { label: 'phone.colName' } },
   { accessorKey: 'cp_id', id: 'cp_id', header: t('phone.colCpId'), meta: { label: 'phone.colCpId' } },
   { accessorKey: 'status', id: 'status', header: t('phone.colStatus'), meta: { label: 'phone.colStatus' } },
-  { accessorKey: 'region', id: 'region', header: t('phone.colRegion'), meta: { label: 'phone.colRegion' } },
   { accessorKey: 'proxy_id', id: 'proxy_id', header: t('phone.colProxy'), meta: { label: 'phone.colProxy' } },
   { id: 'tags', header: t('phone.tag.col'), enableHiding: true, meta: { label: 'phone.tag.col' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('table.createdAt'), meta: { label: 'table.createdAt' } },
@@ -357,6 +355,12 @@ async function runOp(fn: () => Promise<unknown>, okMsg: string, refresh = true) 
 }
 
 function powerOn(row: CloudPhone) {
+  // 业务硬约束：未绑定代理不可开机。前端提前拦截并引导去编辑里绑定代理（后端亦兜底）。
+  if (!row.proxy_id || row.proxy_id <= 0) {
+    toast.error(t('phone.op.needProxy'))
+    openEdit(row)
+    return
+  }
   runOp(() => phoneApi.power(row.id, '开机'), t('phone.op.powerOnOk'))
 }
 function powerOff(row: CloudPhone) {
@@ -475,9 +479,6 @@ onUnmounted(() => {
             {{ t(`phone.status_${row.status}`, row.status) }}
           </Badge>
         </template>
-        <template #cell-region="{ row }">
-          <span class="text-muted-foreground">{{ row.region || '-' }}</span>
-        </template>
         <template #cell-proxy_id="{ row }">
           <span class="text-muted-foreground" :class="row.proxy_id > 0 && 'font-mono'">{{ proxyLabel(row.proxy_id) }}</span>
         </template>
@@ -584,7 +585,6 @@ onUnmounted(() => {
                 {{ t(`phone.status_${row.status}`, row.status) }}
               </Badge>
             </div>
-            <div><span class="text-muted-foreground">{{ t('phone.colRegion') }}：</span>{{ row.region || '-' }}</div>
             <div><span class="text-muted-foreground">{{ t('phone.detailVmId') }}：</span><span class="font-mono text-xs">{{ row.vm_id || '-' }}</span></div>
             <div><span class="text-muted-foreground">{{ t('phone.fImageId') }}：</span><span class="font-mono text-xs">{{ row.image_id || '-' }}</span></div>
             <div><span class="text-muted-foreground">{{ t('phone.colProxy') }}：</span>{{ proxyLabel(row.proxy_id) }}</div>
@@ -650,10 +650,6 @@ onUnmounted(() => {
               </CardDescription>
             </CardHeader>
             <CardContent class="flex-1 space-y-1 px-4 text-xs">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-muted-foreground">{{ t('phone.colRegion') }}</span>
-                <span class="truncate">{{ row.region || '-' }}</span>
-              </div>
               <div class="flex items-center justify-between gap-2">
                 <span class="shrink-0 text-muted-foreground">{{ t('phone.colProxy') }}</span>
                 <span class="truncate" :class="row.proxy_id > 0 && 'font-mono text-xs'">{{ proxyLabel(row.proxy_id) }}</span>
@@ -750,7 +746,7 @@ onUnmounted(() => {
       </div>
     </CardContent>
 
-    <PhoneFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" />
+    <PhoneFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" :phones="data" @success="load" />
     <PhoneTagsDialog v-model="tagDialog.open" :ids="tagDialog.ids" :initial="tagDialog.initial" @success="refreshAfterTag" />
     <AppManagerDialog v-model="appDialog.open" :phone="appDialog.phone" />
     <AdbDrawer v-model="adbDrawer.open" :phone="adbDrawer.phone" @changed="load(true)" />

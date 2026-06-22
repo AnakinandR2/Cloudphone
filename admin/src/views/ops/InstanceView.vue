@@ -49,7 +49,6 @@ const columns = computed<ColumnDef<CloudPhone>[]>(() => [
   { accessorKey: 'name', id: 'name', header: t('instance.colName'), meta: { label: 'instance.colName' } },
   { accessorKey: 'cp_id', id: 'cp_id', header: t('instance.colCpId'), meta: { label: 'instance.colCpId' } },
   { accessorKey: 'status', id: 'status', header: t('table.status'), meta: { label: 'table.status' } },
-  { accessorKey: 'region', id: 'region', header: t('instance.colRegion'), meta: { label: 'instance.colRegion' } },
   { accessorKey: 'vm_id', id: 'vm_id', header: t('instance.colVmId'), meta: { label: 'instance.colVmId' } },
   { accessorKey: 'image_id', id: 'image_id', header: t('instance.colImageId'), meta: { label: 'instance.colImageId' } },
   { accessorKey: 'proxy_id', id: 'proxy_id', header: t('instance.colProxyId'), meta: { label: 'instance.colProxyId' } },
@@ -167,9 +166,6 @@ onMounted(() => {
           <Badge :variant="statusVariant(row.status)" :class="statusClass(row.status)">
             {{ t(`instance.status_${row.status}`, row.status) }}
           </Badge>
-        </template>
-        <template #cell-region="{ row }">
-          {{ row.region?.trim() || '-' }}
         </template>
         <template #cell-vm_id="{ row }">
           <span class="font-mono text-xs">{{ row.vm_id?.trim() || '-' }}</span>

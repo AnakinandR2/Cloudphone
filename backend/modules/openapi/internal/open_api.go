@@ -179,8 +179,8 @@ func OpenCreatePhone(c *gin.Context) {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
 		return
 	}
-	// region / imageId 由后端自动选择（按可用服务器/套餐），不对外暴露。
-	item, err := phone.Create(uid, body.Name, "", "", body.ProxyID)
+	// imageId 由后端自动选择（按可用服务器/套餐），不对外暴露。
+	item, err := phone.Create(uid, body.Name, "", body.ProxyID)
 	if err != nil {
 		framework.FailErr(c, err)
 		return

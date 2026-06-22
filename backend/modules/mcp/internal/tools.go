@@ -179,7 +179,7 @@ func phoneTools() []regTool {
 					return fail(apperr.Validation("name 必填"))
 				}
 				proxyID := uint(req.GetInt("proxyId", 0))
-				item, err := phone.Create(uid, name, "", "", proxyID)
+				item, err := phone.Create(uid, name, "", proxyID)
 				if err != nil {
 					return fail(err)
 				}

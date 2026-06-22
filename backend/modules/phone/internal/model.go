@@ -75,7 +75,6 @@ type CloudPhone struct {
 	CpID    string `gorm:"type:varchar(64);index:idx_cloud_phone_cpid" json:"cp_id"`
 	Name    string `gorm:"type:varchar(100);not null" json:"name"`
 	Status  string `gorm:"type:varchar(20);not null;default:'CREATED'" json:"status"`
-	Region  string `gorm:"type:varchar(100)" json:"region"`
 	VmID    string `gorm:"type:varchar(64)" json:"vm_id"`
 	ImageID string `gorm:"type:varchar(64)" json:"image_id"`
 	// ProxyID 绑定的代理 ID（0 = 未绑定；未绑代理不可开机，校验属后续阶段）。
@@ -120,7 +119,6 @@ func (CpTask) TableName() string { return "cp_tasks" }
 // CloudPhoneCreate 创建请求（前台用户为自己新增云手机档案）。
 type CloudPhoneCreate struct {
 	Name    string `json:"name" binding:"required" example:"我的云手机1"`
-	Region  string `json:"region" example:"华东-上海"`
 	ImageID string `json:"image_id" example:"img-android13"`
 	ProxyID uint   `json:"proxy_id" example:"0"`
 	Remark  string `json:"remark"`
@@ -130,7 +128,6 @@ type CloudPhoneCreate struct {
 type CloudPhoneUpdate struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
-	Region  string `json:"region"`
 	ImageID string `json:"image_id"`
 	ProxyID uint   `json:"proxy_id"`
 	Remark  string `json:"remark"`

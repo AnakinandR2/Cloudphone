@@ -15,9 +15,6 @@ export default {
   list: (params: ProxyListParams) =>
     api.get<unknown, R<ProxyListResult>>('proxy/list', { params }),
 
-  // 可用代理（不分页），供「绑定代理」下拉选择
-  options: () => api.get<unknown, R<Proxy[]>>('proxy/options'),
-
   // 测试代理：经 SOCKS5 实测连通性/延迟/出口IP + 自动识别归属，返回更新后的记录
   test: (id: number) => api.post<unknown, R<Proxy>>(`proxy/${id}/test`),
 

@@ -88,11 +88,6 @@ export default defineFakeRoute([
     },
   },
   {
-    url: '/v1/proxy/options',
-    method: 'get',
-    response: () => ok(proxies.filter(p => p.status !== 'fail').map(view)),
-  },
-  {
     url: '/v1/proxy/:id',
     method: 'get',
     response: ({ params }) => {

@@ -16,7 +16,6 @@ interface PhoneRec {
   cp_id: string
   name: string
   status: string
-  region: string
   vm_id: string
   image_id: string
   proxy_id: number
@@ -32,7 +31,6 @@ const phones: PhoneRec[] = Array.from({ length: 4 }).map((_, i) => ({
   cp_id: `CP-${1000 + (4 - i)}`,
   name: `云手机 ${4 - i}`,
   status: ['RUNNING', 'STOPPED', 'CREATED', 'CREATE_FAILED'][i % 4],
-  region: ['HK', 'US', 'JP', 'SG'][i % 4],
   vm_id: `vm-${4 - i}`,
   image_id: `img-android13`,
   proxy_id: i % 2 === 0 ? (4 - i) : 0,
@@ -116,7 +114,6 @@ export default defineFakeRoute([
         cp_id: `CP-${id}`,
         name: body.name,
         status: 'CREATING',
-        region: body.region || '',
         vm_id: `vm-${id}`,
         image_id: body.image_id || 'img-android13',
         proxy_id: Number(body.proxy_id) || 0,
@@ -142,7 +139,6 @@ export default defineFakeRoute([
       if (!p) return fail('云手机不存在')
       if (body?.name !== undefined && body.name !== '') p.name = body.name
       if (body?.status !== undefined && body.status !== '') p.status = body.status
-      if (body?.region !== undefined) p.region = body.region
       if (body?.image_id !== undefined) p.image_id = body.image_id
       if (body?.proxy_id !== undefined) p.proxy_id = Number(body.proxy_id) || 0
       if (body?.remark !== undefined) p.remark = body.remark

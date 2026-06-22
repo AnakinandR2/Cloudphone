@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 import phoneApi from '@/api/modules/phone'
 import proxyApi from '@/api/modules/proxy'
+import type { CloudPhone } from '@/types/phone'
 import type { Proxy } from '@/types/proxy'
 import { formatDateTime } from '@/utils/date'
+import { countBoundProxies, formatProxyAddress, formatProxyIp } from './proxyBind'
 import {
   Dialog,
   DialogContent,
@@ -18,9 +21,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 
-const props = defineProps<{ id: number, mode: 'create' | 'edit' | 'view' }>()
+const props = withDefaults(
+  defineProps<{ id: number, mode: 'create' | 'edit' | 'view', phones?: CloudPhone[] }>(),
+  { phones: () => [] },
+)
 const open = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ success: [] }>()
 
@@ -30,15 +35,16 @@ const isCreate = computed(() => props.mode === 'create')
 const submitting = ref(false)
 const nameError = ref('')
 
-// 可绑定的代理（不分页，来自后端 /proxy/options）
-const proxyOptions = ref<Proxy[]>([])
+// 可选代理（不分页，含未测试/失败态，便于在表格里完整展示与选择）。
+const proxies = ref<Proxy[]>([])
+// 每个代理「已绑定数量」：从本人云手机列表聚合（父组件传入），无需额外请求。
+const boundCounts = computed(() => countBoundProxies(props.phones))
 
 function emptyForm() {
   return {
     name: '',
     status: 'CREATED',
-    // 地区/镜像暂不开放选择，创建时留空透传
-    region: '',
+    // 镜像暂不开放选择，创建时留空透传
     image_id: '',
     proxy_id: 0 as number,
     remark: '',
@@ -56,17 +62,24 @@ const dialogTitle = computed(() =>
       : t('phone.editTitle'),
 )
 
+// 选中代理（行点击）。view 态只读，不可改。
+function pickProxy(id: number) {
+  if (readonly.value)
+    return
+  form.proxy_id = id
+}
+
 watch(open, async (v) => {
   if (v) {
     Object.assign(form, emptyForm())
     nameError.value = ''
-    // 拉取可绑定代理供下拉选择（查看态也加载以便回显名称）
+    // 拉取全部代理供表格选择（查看态也加载以便回显）。
     try {
-      const opt = await proxyApi.options()
-      proxyOptions.value = opt.data
+      const res = await proxyApi.list({ page: 1, size: 999 })
+      proxies.value = res.data.list
     }
     catch {
-      proxyOptions.value = []
+      proxies.value = []
     }
     if (props.id !== 0) {
       const res = await phoneApi.detail(props.id)
@@ -87,7 +100,6 @@ async function submit() {
     if (isCreate.value) {
       await phoneApi.create({
         name: form.name,
-        region: form.region,
         image_id: form.image_id,
         proxy_id: proxyId,
         remark: form.remark,
@@ -97,7 +109,6 @@ async function submit() {
     else {
       await phoneApi.update(props.id, {
         name: form.name,
-        region: form.region,
         image_id: form.image_id,
         proxy_id: proxyId,
         remark: form.remark,
@@ -115,7 +126,7 @@ async function submit() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-lg">
+    <DialogContent class="sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>{{ dialogTitle }}</DialogTitle>
         <DialogDescription class="sr-only">{{ dialogTitle }}</DialogDescription>
@@ -131,18 +142,59 @@ async function submit() {
           <Label>{{ t('phone.fStatus') }}</Label>
           <p class="text-muted-foreground text-sm">{{ t(`phone.status_${form.status}`, form.status) }}</p>
         </div>
+
+        <!-- 绑定代理：表格选择（代理 ID / 地址 / IP 信息 / 已绑定数量），并提示跳转到代理管理 -->
         <div class="space-y-2">
-          <Label for="ph-proxy">{{ t('phone.fProxyId') }}</Label>
-          <NativeSelect id="ph-proxy" v-model.number="form.proxy_id" class="w-full" :disabled="readonly">
-            <NativeSelectOption :value="0">
-              {{ t('phone.proxyNone', '未绑定') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="p in proxyOptions" :key="p.id" :value="p.id">
-              {{ p.name }}（{{ p.protocol }}://{{ p.host }}:{{ p.port }}）
-            </NativeSelectOption>
-          </NativeSelect>
-          <p class="text-muted-foreground text-xs">{{ t('phone.fProxyIdHint') }}</p>
+          <div class="flex items-center justify-between gap-2">
+            <Label>{{ t('phone.fProxy') }}</Label>
+            <RouterLink to="/proxy" class="text-primary text-xs hover:underline" @click="open = false">
+              {{ t('phone.proxyGotoManage') }} →
+            </RouterLink>
+          </div>
+          <div class="max-h-56 overflow-y-auto rounded-md border">
+            <table class="w-full text-xs">
+              <thead class="bg-muted/50 text-muted-foreground sticky top-0">
+                <tr>
+                  <th class="w-8 p-2" />
+                  <th class="p-2 text-left font-medium">{{ t('phone.proxyColId') }}</th>
+                  <th class="p-2 text-left font-medium">{{ t('phone.proxyColAddress') }}</th>
+                  <th class="p-2 text-left font-medium">{{ t('phone.proxyColIp') }}</th>
+                  <th class="p-2 text-right font-medium">{{ t('phone.proxyColBound') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- 不绑定 -->
+                <tr class="hover:bg-muted/40 cursor-pointer border-t" @click="pickProxy(0)">
+                  <td class="p-2 text-center">
+                    <input type="radio" name="ph-proxy" class="accent-primary" :checked="form.proxy_id === 0" :disabled="readonly">
+                  </td>
+                  <td class="text-muted-foreground p-2" colspan="4">{{ t('phone.proxyPickNone') }}</td>
+                </tr>
+                <tr v-for="p in proxies" :key="p.id" class="hover:bg-muted/40 cursor-pointer border-t" @click="pickProxy(p.id)">
+                  <td class="p-2 text-center">
+                    <input type="radio" name="ph-proxy" class="accent-primary" :checked="form.proxy_id === p.id" :disabled="readonly">
+                  </td>
+                  <td class="p-2 tabular-nums">#{{ p.id }}</td>
+                  <td class="p-2 font-mono">{{ formatProxyAddress(p) }}</td>
+                  <td class="p-2">{{ formatProxyIp(p) || t('phone.proxyNotTested') }}</td>
+                  <td class="p-2 text-right tabular-nums">{{ boundCounts.get(p.id) ?? 0 }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!proxies.length" class="text-muted-foreground p-4 text-center text-xs">
+              {{ t('phone.proxyEmpty') }} ·
+              <RouterLink to="/proxy" class="text-primary hover:underline" @click="open = false">
+                {{ t('phone.proxyGotoManage') }}
+              </RouterLink>
+            </div>
+          </div>
+          <p class="text-muted-foreground text-xs">{{ t('phone.proxyManageHint') }}</p>
+          <!-- 创建态：未绑代理提醒（允许暂不绑，但开机前必须绑） -->
+          <p v-if="isCreate && (Number(form.proxy_id) || 0) === 0" class="text-xs text-amber-600 dark:text-amber-400">
+            {{ t('phone.proxyCreateReminder') }}
+          </p>
         </div>
+
         <div class="space-y-2">
           <Label for="ph-remark">{{ t('phone.fRemark') }}</Label>
           <Input id="ph-remark" v-model="form.remark" :disabled="readonly" :placeholder="t('phone.fRemarkPlaceholder')" />
