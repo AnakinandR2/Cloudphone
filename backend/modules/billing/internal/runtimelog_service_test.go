@@ -107,6 +107,34 @@ func TestRuntimeLog_SegmentReasonIsSpecific_NoAllowance(t *testing.T) {
 	assert.Contains(t, pg.Items[0].Segments[0].Reason, "无可用包月名额")
 }
 
+// 总名额数变化、但本台一直占着开机位（quota 没变）时，不应因此拆成多段——
+// 段边界只看本台自身的计费结果（包月/临时/封顶），不看全局名额总数。
+func TestRuntimeLog_GlobalCapacityChangeDoesNotSplit(t *testing.T) {
+	t.Cleanup(cleanRuntime)
+	uid := 960007
+	require.NoError(t, FulfillService.FulfillNew(uid, KindBootSlot, 2, 30, SourceOrder, "boot1"))
+	base := time.Date(2026, 6, 22, 8, 0, 0, 0, time.UTC)
+	ref, cp := "s1", "cp1"
+	// tick1：3 分钟，名额=2 → 包月。
+	_, err := RuntimeEngineService.Settle(uid, base.Add(3*time.Minute),
+		[]RuntimeInterval{{Start: base, CpID: cp, RunSessionRef: ref}})
+	require.NoError(t, err)
+	// 期间总名额变多（再买 1 个 → 3），本台仍占着同一个开机位。
+	require.NoError(t, FulfillService.FulfillNew(uid, KindBootSlot, 1, 30, SourceOrder, "boot2"))
+	// tick2：再 2 分钟，名额=3 → 仍包月。
+	_, err = RuntimeEngineService.Settle(uid, base.Add(5*time.Minute),
+		[]RuntimeInterval{{Start: base, CpID: cp, RunSessionRef: ref}})
+	require.NoError(t, err)
+
+	pg, err := RuntimeEngineService.RuntimeLog(uid, 1, 20, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, pg.Items, 1)
+	require.Len(t, pg.Items[0].Segments, 1, "本台 quota 未变，不应因总名额数变化而拆段")
+	assert.Equal(t, QuotaBootSlot, pg.Items[0].Segments[0].QuotaType)
+	assert.True(t, pg.Items[0].Segments[0].From.Equal(base))
+	assert.True(t, pg.Items[0].Segments[0].To.Equal(base.Add(5*time.Minute)))
+}
+
 // 同一开机会话的各 charge 时间窗口必须首尾相接、互不重叠：单 tick 内若同时产生
 // 临时段与封顶免费段（撞当日封顶），两段窗口不能共用同一区间，否则会重复计 1 分钟。
 func TestRuntimeLog_ChargeWindowsTileWithoutOverlap(t *testing.T) {

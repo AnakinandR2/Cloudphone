@@ -95,12 +95,12 @@ func aggregateSession(ref string, cs []RuntimeCharge, runningRefs map[string]boo
 	powerOff := cs[0].WindowEnd
 	seen := map[string]bool{}
 	for _, c := range cs {
-		// 合并「连续同 quota_type 且同原因」的分钟级 charge 为一段：同类型、同原因、时间相接则
-		// 累加分钟、延伸到 To，否则另起一段。原因不同（如名额数变化）即另起一段，把转折点显式呈现，
-		// 同时避免周期结算的逐分钟记录铺成几十行。
+		// 合并「连续同 quota_type」的分钟级 charge 为一段：段边界只看本台自身的计费结果
+		// （包月/临时/封顶），不看全局名额总数——本台一直占着开机位时，总名额数从 2 变 3
+		// 不该把它的记录拆成两条。同类型且时间相接则累加分钟、延伸 To；quota 变了才另起一段。
+		// 合并段保留首条 charge 的 reason（代表该段开始时的具体情形）。
 		n := len(item.Segments)
-		if n > 0 && item.Segments[n-1].QuotaType == c.QuotaType &&
-			item.Segments[n-1].Reason == c.Reason && item.Segments[n-1].To.Equal(c.WindowStart) {
+		if n > 0 && item.Segments[n-1].QuotaType == c.QuotaType && item.Segments[n-1].To.Equal(c.WindowStart) {
 			item.Segments[n-1].Minutes += c.ChargedMinutes
 			item.Segments[n-1].To = c.WindowEnd
 		} else {
