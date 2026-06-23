@@ -16,6 +16,7 @@ import (
 	_ "manager-backend/modules/mcp"
 	_ "manager-backend/modules/note"
 	_ "manager-backend/modules/openapi"
+	_ "manager-backend/modules/partner"
 	_ "manager-backend/modules/phone"
 	_ "manager-backend/modules/proxy"
 	_ "manager-backend/modules/staff"

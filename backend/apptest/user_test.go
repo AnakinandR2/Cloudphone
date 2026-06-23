@@ -65,6 +65,53 @@ func TestAdminUserForbiddenForNormalStaff(t *testing.T) {
 		doJSON(r, "GET", "/api/v1/admin/users/list", token, nil).Code)
 }
 
+// 无 user:manage 权限的普通 staff 不能改前台用户状态（写操作）→ 403。
+func TestAdminUserManageForbiddenForNormalStaff(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("users") })
+	r := setupRouter()
+	admin := adminToken(t, r)
+
+	// 造一个前台用户作为被操作对象
+	reg := decode(t, doJSON(r, "POST", "/api/v1/user/auth/register", "", map[string]string{
+		"phone": "13700009999", "password": "pass123",
+	})).Data.(map[string]interface{})
+	userID := int(reg["id"].(float64))
+
+	// 造一个无任何权限的普通 staff
+	createUser(t, r, admin, "staff_noperm_w", "pass123", false)
+	token := login(t, r, "staff_noperm_w", "pass123")
+
+	// 列表（需 user:view）→ 403
+	assert.Equal(t, http.StatusForbidden,
+		doJSON(r, "GET", "/api/v1/admin/users/list", token, nil).Code)
+	// 改状态（需 user:manage）→ 403
+	assert.Equal(t, http.StatusForbidden,
+		doJSON(r, "PUT", fmt.Sprintf("/api/v1/admin/users/%d/status", userID), token, map[string]bool{"is_active": false}).Code)
+}
+
+// 身份域混淆（两个方向都断言）：
+//   - 前台令牌打后台 admin/users → 401
+//   - 后台令牌打前台 admin/users 之外的前台路由（如 /user/me）→ 401
+func TestIdentityDomainConfusionBothWays(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("users") })
+	r := setupRouter()
+
+	staff := adminToken(t, r)
+	userToken := registerUser(t, r, "13700001234")
+
+	// 前台令牌 → 后台路由：401
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "GET", "/api/v1/admin/users/list", userToken, nil).Code)
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "GET", "/api/v1/staff/list", userToken, nil).Code)
+
+	// 后台令牌 → 前台路由：401
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "GET", "/api/v1/user/me", staff, nil).Code)
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "GET", "/api/v1/note/list", staff, nil).Code)
+}
+
 func TestUserRegisterAndLogin(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("users") })
 	r := setupRouter()
