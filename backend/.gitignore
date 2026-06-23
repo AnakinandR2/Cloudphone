@@ -44,8 +44,10 @@ manager-backend
 # air 实时重载构建产物（tmp/main 等，几十 MB，不入库）
 tmp/
 
-# SQLite 数据库文件
+# SQLite 数据库文件（含 WAL 模式下的 -wal / -shm 运行时文件）
 *.db
+*.db-wal
+*.db-shm
 
 # scaffold 生成器误编译产物
 /scaffold
