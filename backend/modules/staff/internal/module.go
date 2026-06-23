@@ -171,10 +171,14 @@ func seedReadonlyUser(db *gorm.DB) error {
 		log.Printf("修正角色 %s 为内置角色", roleName)
 	}
 
-	// 确保权限正确：清空后重建
+	// 确保权限正确：清空后批量重建
 	db.Where("role_id = ?", roleDB.ID).Delete(&RolePermissionDB{})
+	perms := make([]RolePermissionDB, 0, len(wantPerms))
 	for _, p := range wantPerms {
-		db.Create(&RolePermissionDB{RoleID: roleDB.ID, Permission: p})
+		perms = append(perms, RolePermissionDB{RoleID: roleDB.ID, Permission: p})
+	}
+	if len(perms) > 0 {
+		db.Create(&perms)
 	}
 
 	// 确保用户存在
