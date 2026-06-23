@@ -2,8 +2,10 @@ package phone
 
 import (
 	"context"
+	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"manager-backend/framework/apperr"
 	"manager-backend/framework/midplat"
 	"manager-backend/framework/query"
@@ -45,9 +47,7 @@ func (s *serviceImpl) GetList(userID, page, size int, kw, status, tag, order, so
 	if err != nil {
 		return nil, 0, err
 	}
-	s.resolveLiveStatuses(items)
-	s.enrichAdb(items)
-	s.enrichRoot(items)
+	s.enrichParallel(items)
 	return items, total, nil
 }
 
@@ -209,6 +209,85 @@ func (s *serviceImpl) enrichRoot(items []CloudPhone) {
 	for i := range items {
 		if items[i].CpID != "" && rooted[items[i].CpID] {
 			items[i].Rooted = true
+		}
+	}
+}
+
+// enrichParallel 并行拉取三个中台 enrichment（状态/ADB/Root），串行 apply 到 items。
+// 各 goroutine 仅写各自局部变量，wg.Wait() 后统一写 items，无数据竞争。
+func (s *serviceImpl) enrichParallel(items []CloudPhone) {
+	if s.ops == nil {
+		return
+	}
+	cpIDs := make([]string, 0, len(items))
+	for i := range items {
+		if items[i].CpID != "" {
+			cpIDs = append(cpIDs, items[i].CpID)
+		}
+	}
+	if len(cpIDs) == 0 {
+		return
+	}
+
+	var (
+		statuses     map[string]string
+		statusFailed bool
+		adbMap       map[string]bool
+		rootMap      map[string]bool
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := opCtx()
+		defer cancel()
+		m, err := s.ops.Statuses(ctx, cpIDs)
+		if err != nil {
+			statusFailed = true
+			return
+		}
+		statuses = m
+	}()
+	go func() {
+		defer wg.Done()
+		ctx, cancel := opCtx()
+		defer cancel()
+		m, err := s.ops.AdbEnabledMap(ctx, cpIDs)
+		if err != nil {
+			return
+		}
+		adbMap = m
+	}()
+	go func() {
+		defer wg.Done()
+		ctx, cancel := opCtx()
+		defer cancel()
+		m, err := s.ops.RootEnabledMap(ctx, cpIDs)
+		if err != nil {
+			return
+		}
+		rootMap = m
+	}()
+	wg.Wait()
+
+	for i := range items {
+		cp := &items[i]
+		if cp.CpID == "" {
+			continue // 未开通：保留本地态
+		}
+		if statusFailed {
+			cp.Status = StatusUnknown
+		} else if raw, ok := statuses[cp.CpID]; !ok || raw == "" {
+			cp.Status = StatusUnknown
+		} else {
+			cp.Status = mapMidplatStatus(raw)
+		}
+		if adbMap != nil && adbMap[cp.CpID] {
+			cp.AdbEnabled = true
+		}
+		if rootMap != nil && rootMap[cp.CpID] {
+			cp.Rooted = true
 		}
 	}
 }
@@ -599,7 +678,7 @@ func (s *serviceImpl) FileDownload(userID, id int, path string) ([]byte, error) 
 	return s.ops.FileDownload(ctx, p.VmID, p.CpID, path)
 }
 
-// FileDelete 删除云手机上的一个或多个文件（逐个透传中台 file-delete）。
+// FileDelete 删除云手机上的一个或多个文件（并行透传中台 file-delete，返回首个错误）。
 func (s *serviceImpl) FileDelete(userID, id int, paths []string) error {
 	if len(paths) == 0 {
 		return apperr.BadRequest("未选择文件")
@@ -610,15 +689,17 @@ func (s *serviceImpl) FileDelete(userID, id int, paths []string) error {
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
+	eg, ctx := errgroup.WithContext(ctx)
 	for _, path := range paths {
 		if path == "" {
 			continue
 		}
-		if err := s.ops.FileDelete(ctx, p.VmID, p.CpID, path); err != nil {
-			return err
-		}
+		path := path
+		eg.Go(func() error {
+			return s.ops.FileDelete(ctx, p.VmID, p.CpID, path)
+		})
 	}
-	return nil
+	return eg.Wait()
 }
 
 // FileUpload 把一个或多个本地文件上传到云手机的 folderPath（文件管理面板上传）。
