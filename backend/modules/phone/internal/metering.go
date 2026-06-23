@@ -3,8 +3,10 @@ package phone
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"manager-backend/modules/billing"
 )
 
@@ -27,11 +29,17 @@ func (s *serviceImpl) runSettlement(ctx context.Context) {
 		}
 		byUser[ss.UserID] = append(byUser[ss.UserID], iv)
 	}
+	eg := &errgroup.Group{}
 	for uid, ivs := range byUser {
-		if _, err := billing.SettleRuntime(int(uid), now, ivs); err != nil {
-			log.Printf("[metering] 结算失败 user=%d: %v", uid, err)
-		}
+		uid, ivs := uid, ivs
+		eg.Go(func() error {
+			if _, err := billing.SettleRuntime(int(uid), now, ivs); err != nil {
+				log.Printf("[metering] 结算失败 user=%d: %v", uid, err)
+			}
+			return nil // best-effort：单用户失败不中断整批
+		})
 	}
+	_ = eg.Wait()
 	_ = ctx
 }
 
@@ -54,25 +62,40 @@ func (s *serviceImpl) runRuntimeGuard(ctx context.Context) {
 		byUser[rs.UserID] = append(byUser[rs.UserID], rs)
 	}
 
+	eg := &errgroup.Group{}
 	for _, uid := range order {
-		sess := byUser[uid] // power_on_at 升序：越靠后越晚开机
-		// 新模型：包月开机名额(boot_slot)免费，超出名额的台靠临时时长支撑下一分钟。
-		bootCap, _ := billing.BootSlotCapacity(int(uid))
-		remain, _ := billing.RuntimeMinutesRemaining(int(uid))
-		over := int64(len(sess)) - int64(bootCap) // 超出包月名额的运行中台数
-		if over <= 0 {
-			continue // 全在名额内，免费
-		}
-		// 下一分钟可支撑的超额台数 = 剩余临时时长分钟（每台·分钟）。新模型不再用余额折算分钟。
-		budget := remain
-		unfundable := over - budget
-		if unfundable <= 0 {
-			continue // 下一分钟付得起，暂不关
-		}
-		// 关最后开机的 unfundable 台（后开先关）。
-		toClose := sess[int64(len(sess))-unfundable:]
-		s.shutdownSessions(ctx, int(uid), toClose)
+		uid := uid
+		sess := byUser[uid]
+		eg.Go(func() error {
+			// 用户内并行：包月名额与临时时长余量两个查询独立，可同时发出。
+			var bootCap int
+			var remain int64
+			var innerWg sync.WaitGroup
+			innerWg.Add(2)
+			go func() {
+				defer innerWg.Done()
+				bootCap, _ = billing.BootSlotCapacity(int(uid))
+			}()
+			go func() {
+				defer innerWg.Done()
+				remain, _ = billing.RuntimeMinutesRemaining(int(uid))
+			}()
+			innerWg.Wait()
+
+			over := int64(len(sess)) - int64(bootCap)
+			if over <= 0 {
+				return nil
+			}
+			unfundable := over - remain
+			if unfundable <= 0 {
+				return nil
+			}
+			toClose := sess[int64(len(sess))-unfundable:]
+			s.shutdownSessions(ctx, int(uid), toClose)
+			return nil
+		})
 	}
+	_ = eg.Wait()
 }
 
 // shutdownSessions 关停给定运行中会话对应的实例（幂等：跳过过渡态/已关）。
