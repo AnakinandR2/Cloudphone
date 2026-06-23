@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"manager-backend/framework/apperr"
 	"manager-backend/modules/billing"
 )
@@ -89,11 +90,17 @@ func (s *serviceImpl) runReconcilePatrol(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	eg := &errgroup.Group{}
 	for _, uid := range ids {
-		if err := s.reconcileSeats(ctx, uid); err != nil {
-			log.Printf("[reconcile-patrol] user=%d 失败: %v", uid, err)
-		}
+		uid := uid
+		eg.Go(func() error {
+			if err := s.reconcileSeats(ctx, uid); err != nil {
+				log.Printf("[reconcile-patrol] user=%d 失败: %v", uid, err)
+			}
+			return nil // best-effort
+		})
 	}
+	_ = eg.Wait()
 }
 
 // RecycleBinItem 回收站列表项：实例信息 + 回收时间 + 剩余清理天数。
@@ -168,7 +175,7 @@ func (s *serviceImpl) RecycleBinRestore(ctx context.Context, userID, id int) err
 }
 
 // runRecycleCleanup 回收站清理（每日 cron §3）：回收超保留天数的实例 → 调中台销毁 + 硬删本地记录。
-// best-effort：中台销毁失败则保留本地记录留待下轮重试，避免中台孤儿。
+// 中台销毁并行执行；本地清理串行（保一致性）。
 func (s *serviceImpl) runRecycleCleanup(ctx context.Context) {
 	retention, err := billing.RecycleRetentionDays()
 	if err != nil || retention <= 0 {
@@ -179,15 +186,38 @@ func (s *serviceImpl) runRecycleCleanup(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	for _, p := range phones {
-		if p.CpID != "" && s.ops != nil {
-			log.Printf("[recycle-cleanup] 销毁过期回收实例 user=%d cp=%s phoneID=%d", p.UserID, p.CpID, p.ID)
-			if err := s.ops.Destroy(ctx, p.CpID); err != nil {
-				continue // 中台销毁失败：保留本地，下轮重试
+	if len(phones) == 0 {
+		return
+	}
+
+	// 并行销毁中台实例；results[i].err != nil 表示销毁失败，保留本地记录待下轮重试。
+	type destroyResult struct {
+		phone CloudPhone
+		err   error
+	}
+	results := make([]destroyResult, len(phones))
+	eg, ctx2 := errgroup.WithContext(ctx)
+	for i := range phones {
+		i, p := i, phones[i]
+		eg.Go(func() error {
+			if p.CpID == "" || s.ops == nil {
+				results[i] = destroyResult{phone: p}
+				return nil
 			}
+			log.Printf("[recycle-cleanup] 销毁过期回收实例 user=%d cp=%s phoneID=%d", p.UserID, p.CpID, p.ID)
+			results[i] = destroyResult{phone: p, err: s.ops.Destroy(ctx2, p.CpID)}
+			return nil // best-effort：销毁失败不取消其他
+		})
+	}
+	_ = eg.Wait()
+
+	// 串行本地清理：只处理中台销毁成功（或无需销毁）的实例。
+	for _, r := range results {
+		if r.err != nil {
+			continue // 中台销毁失败：保留本地，下轮重试
 		}
-		if err := s.repo.deleteByID(p.ID); err == nil && p.CpID != "" {
-			_ = billing.ReleaseInstanceOccupancy(int(p.UserID), []string{p.CpID})
+		if err := s.repo.deleteByID(r.phone.ID); err == nil && r.phone.CpID != "" {
+			_ = billing.ReleaseInstanceOccupancy(int(r.phone.UserID), []string{r.phone.CpID})
 		}
 	}
 }
