@@ -3,6 +3,7 @@ import { Crown, RefreshCw } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useWebRTC } from '@/composables/useWebRTC'
+import { displayFractionToDevice } from './groupPointerMap'
 
 const props = defineProps<{ phoneId: number, name: string, master: boolean, selected: boolean }>()
 const emit = defineEmits<{
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const idRef = computed(() => props.phoneId)
 const videoRef = ref<HTMLVideoElement | null>(null)
+const boxRef = ref<HTMLElement | null>(null)
 
 const {
   connState,
@@ -25,6 +27,10 @@ const {
   isMuted,
   deviceWidth,
   deviceHeight,
+  streamLandscape,
+  displayLandscape,
+  cssRotation,
+  rotateDevice,
   connect,
   retry,
   cleanup,
@@ -35,7 +41,29 @@ const {
   selectedFps,
 } = useWebRTC({ id: idRef, videoRef })
 
-const aspect = computed(() => `${deviceWidth.value}/${deviceHeight.value}`)
+// 画面盒比例随显示方向（横屏宽扁 / 竖屏窄高），用所选分辨率长短边。
+const aspect = computed(() => {
+  const long = Math.max(deviceWidth.value, deviceHeight.value)
+  const short = Math.min(deviceWidth.value, deviceHeight.value)
+  return displayLandscape.value ? `${long}/${short}` : `${short}/${long}`
+})
+
+// 画面盒实测尺寸——cssRotation≠0 时把竖屏 <video> 旋转铺满横屏画面盒要用到。
+const boxW = ref(0)
+const boxH = ref(0)
+let boxRO: ResizeObserver | null = null
+const videoStyle = computed(() => {
+  if (cssRotation.value === 0)
+    return {}
+  return {
+    position: 'absolute' as const,
+    left: '50%',
+    top: '50%',
+    width: `${boxH.value}px`,
+    height: `${boxW.value}px`,
+    transform: `translate(-50%, -50%) rotate(${cssRotation.value}deg)`,
+  }
+})
 
 // 每格自己的网络延迟指示：标题栏小圆点按档位变色。
 const rttDotClass = computed(() => {
@@ -57,15 +85,15 @@ function genId(): string {
   return `${uuid}-${n.getFullYear()}${p2(n.getMonth() + 1)}${p2(n.getDate())} ${p2(n.getHours())}:${p2(n.getMinutes())}:${p2(n.getSeconds())}:${String(n.getMilliseconds()).padStart(3, '0')}`
 }
 
-// ---- 被父调用：把归一化坐标(0..1)还原到本机设备像素并下发 ----
+// ---- 被父调用：把「显示画面归一化坐标」按本格方向/分辨率还原到设备像素并下发 ----
+// 设备坐标系 = 所选分辨率(按设备实际方向摆长短边)；cssRotation≠0 时把显示系坐标反算回推流系。
 let downId: string | null = null
 function applyPointer(kind: 'down' | 'move' | 'up', nx: number, ny: number, button: number) {
   if (connState.value !== 'connected')
     return
-  const x = Math.round(nx * (deviceWidth.value - 1))
-  const y = Math.round(ny * (deviceHeight.value - 1))
-  const w = deviceWidth.value
-  const h = deviceHeight.value
+  const long = Math.max(deviceWidth.value, deviceHeight.value)
+  const short = Math.min(deviceWidth.value, deviceHeight.value)
+  const { x, y, width: w, height: h } = displayFractionToDevice(nx, ny, cssRotation.value, streamLandscape.value, short, long)
   if (kind === 'down') {
     downId = genId()
     sendDC({ type: 'mouse_down', x, y, button, rotation: 0, width: w, height: h, downEventId: downId, messageId: downId })
@@ -81,6 +109,11 @@ function applyPointer(kind: 'down' | 'move' | 'up', nx: number, ny: number, butt
     sendDC({ type: 'mouse_up', x, y, button, rotation: 0, width: w, height: h, downEventId: downId, messageId: genId() })
     downId = null
   }
+}
+
+// 旋转：前端方向粘性翻转（始终生效）+ 尽力发 rotate_device。群控由父广播到各格。
+function rotate() {
+  rotateDevice()
 }
 
 function sendButton(btn: string) {
@@ -121,25 +154,22 @@ function setStream(res: string, quality: number, fps: number) {
   retry()
 }
 
-defineExpose({ applyPointer, sendButton, setMute, retry, captureShot, setStream })
+defineExpose({ applyPointer, sendButton, setMute, retry, captureShot, setStream, rotate })
 
-// ---- 主控台本地输入 → 归一化 → 通知父 ----
+// ---- 主控台本地输入 → 显示画面归一化坐标(0..1) → 通知父 ----
+// 取「画面盒」（非旋转的外层 div）的相对位置即可——盒比例已随显示方向、<video> 铺满盒无黑边，
+// 故盒内归一化就是用户所见画面的归一化；各格的 cssRotation 反算在 applyPointer 里做。
 function localNorm(clientX: number, clientY: number): { nx: number, ny: number } | null {
-  const v = videoRef.value
-  if (!v)
+  const box = boxRef.value
+  if (!box)
     return null
-  const rect = v.getBoundingClientRect()
+  const rect = box.getBoundingClientRect()
   const dx = clientX - rect.left
   const dy = clientY - rect.top
   if (dx < 0 || dx > rect.width || dy < 0 || dy > rect.height)
     return null
-  const vw = v.videoWidth || deviceWidth.value
-  const vh = v.videoHeight || deviceHeight.value
-  const scale = Math.max(rect.width / vw, rect.height / vh)
-  const ox = (rect.width - vw * scale) / 2
-  const oy = (rect.height - vh * scale) / 2
-  const nx = Math.min(1, Math.max(0, (dx - ox) / scale / vw))
-  const ny = Math.min(1, Math.max(0, (dy - oy) / scale / vh))
+  const nx = Math.min(1, Math.max(0, dx / rect.width))
+  const ny = Math.min(1, Math.max(0, dy / rect.height))
   return { nx, ny }
 }
 
@@ -212,9 +242,19 @@ function onWinUp() {
 onMounted(() => {
   connect()
   window.addEventListener('mouseup', onWinUp)
+  if (boxRef.value && typeof ResizeObserver !== 'undefined') {
+    boxRO = new ResizeObserver(() => {
+      if (boxRef.value) {
+        boxW.value = boxRef.value.clientWidth
+        boxH.value = boxRef.value.clientHeight
+      }
+    })
+    boxRO.observe(boxRef.value)
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('mouseup', onWinUp)
+  boxRO?.disconnect()
   cleanup()
 })
 </script>
@@ -242,11 +282,12 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <div class="relative w-full" :style="{ aspectRatio: aspect }">
+    <div ref="boxRef" class="relative w-full overflow-hidden" :style="{ aspectRatio: aspect }">
       <video
         ref="videoRef"
-        class="absolute inset-0 size-full touch-none select-none bg-black object-contain"
-        :class="master ? '' : 'pointer-events-none'"
+        class="touch-none select-none bg-black object-contain"
+        :class="[cssRotation === 0 ? 'absolute inset-0 size-full' : '', master ? '' : 'pointer-events-none']"
+        :style="videoStyle"
         autoplay
         playsinline
         muted

@@ -12,8 +12,8 @@ import {
   Monitor,
   MoreHorizontal,
   Power,
-  RotateCw,
   Square,
+  TabletSmartphone,
   Video,
   Volume1,
   Volume2,
@@ -109,6 +109,10 @@ function onPointer(p: { kind: 'down' | 'move' | 'up', nx: number, ny: number, bu
 }
 function groupButton(btn: string) {
   eachCell(c => c.sendButton(btn))
+}
+// 旋转：广播到选中各格——每格前端粘性转画面 + 尽力发 rotate_device（与单控一致）。
+function groupRotate() {
+  eachCell(c => c.rotate())
 }
 function groupMute() {
   groupMuted.value = !groupMuted.value
@@ -381,8 +385,8 @@ onMounted(async () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
-            <RotateCw class="size-4" />
+          <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="groupRotate">
+            <TabletSmartphone class="size-4" />
             <span class="text-center text-[10px] leading-tight">{{ t('phone.rc.rotate') }}</span>
           </Button>
           <Button variant="ghost" class="h-auto flex-col gap-1 px-0.5 py-1.5" @click="comingSoon">
