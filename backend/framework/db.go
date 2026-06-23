@@ -76,11 +76,18 @@ func InitDB() error {
 		return fmt.Errorf("打开数据库连接失败: %v", err)
 	}
 
-	if dbType != "sqlite" {
-		sqlDB, err := DB.DB()
-		if err != nil {
-			return fmt.Errorf("获取数据库实例失败: %v", err)
-		}
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return fmt.Errorf("获取数据库实例失败: %v", err)
+	}
+	if dbType == "sqlite" {
+		// WAL 模式：允许并发读（多读一写），写等待最多 5 秒再报 BUSY。
+		DB.Exec("PRAGMA journal_mode=WAL")
+		DB.Exec("PRAGMA busy_timeout=5000")
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+	} else {
 		sqlDB.SetMaxOpenConns(100)
 		sqlDB.SetMaxIdleConns(10)
 		sqlDB.SetConnMaxLifetime(time.Hour)
