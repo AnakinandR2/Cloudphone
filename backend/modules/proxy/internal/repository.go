@@ -11,6 +11,7 @@ type repository interface {
 	listAllOwned(userID int) ([]Proxy, error)
 	findByID(userID, id int) (*Proxy, error)
 	create(item *Proxy) error
+	createBatch(items []Proxy) error
 	update(userID, id int, fields map[string]interface{}) error
 	delete(userID, id int) error
 	// 管理侧（不限属主）
@@ -66,6 +67,8 @@ func (r *gormRepository) findByID(userID, id int) (*Proxy, error) {
 }
 
 func (r *gormRepository) create(item *Proxy) error { return r.db.Create(item).Error }
+
+func (r *gormRepository) createBatch(items []Proxy) error { return r.db.Create(&items).Error }
 
 func (r *gormRepository) update(userID, id int, fields map[string]interface{}) error {
 	return r.owned(userID).Where("id = ?", id).Updates(fields).Error

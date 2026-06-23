@@ -160,20 +160,34 @@ func (s *serviceImpl) Probe(req *ProxyProbeRequest) (*ProbeOutcome, error) {
 	}, nil
 }
 
-// BatchCreate 批量为当前用户新增代理：跳过缺 host/port 的无效条目，返回成功条数。
+// BatchCreate 批量为当前用户新增代理：跳过缺 host/port 的无效条目，一次性 INSERT，返回成功条数。
 func (s *serviceImpl) BatchCreate(userID int, items []ProxyCreate) (int, error) {
-	created := 0
+	toCreate := make([]Proxy, 0, len(items))
 	for i := range items {
 		it := items[i]
 		if it.Host == "" || it.Port == 0 {
 			continue
 		}
-		if _, err := s.Create(userID, &it); err != nil {
-			return created, err
-		}
-		created++
+		toCreate = append(toCreate, Proxy{
+			UserID:   uint(userID),
+			Name:     it.Name,
+			Protocol: normalizeProtocol(it.Protocol),
+			Host:     it.Host,
+			Port:     it.Port,
+			Username: it.Username,
+			Password: it.Password,
+			Region:   it.Region,
+			Status:   StatusUnknown,
+			Remark:   it.Remark,
+		})
 	}
-	return created, nil
+	if len(toCreate) == 0 {
+		return 0, nil
+	}
+	if err := s.repo.createBatch(toCreate); err != nil {
+		return 0, err
+	}
+	return len(toCreate), nil
 }
 
 func (s *serviceImpl) Update(userID, id int, req *ProxyUpdate) (*Proxy, error) {
