@@ -3,6 +3,7 @@ import type {
   AutomationScript,
   AutomationTask,
   PlanInput,
+  RunTaskInput,
   ScriptInput,
   TaskReportDetail,
 } from '@/types/automation'
@@ -30,8 +31,8 @@ export default {
   deletePlan: (id: number) => api.delete<unknown, R<null>>(`automation/plans/${id}`),
 
   // ---- 任务 ----
-  runTask: (scriptId: number, cpIds: string[], taskName?: string) =>
-    api.post<unknown, R<AutomationTask[]>>('automation/tasks/run', { scriptId, cpIds, taskName }),
+  runTask: (body: RunTaskInput) =>
+    api.post<unknown, R<AutomationTask[]>>('automation/tasks/run', body),
   listTasks: (params: { page: number, size: number, status?: string }) =>
     api.get<unknown, R<Page<AutomationTask>>>('automation/tasks', { params }),
   taskDetail: (midTaskId: number | string) =>

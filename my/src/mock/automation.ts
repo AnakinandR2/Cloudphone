@@ -15,6 +15,7 @@ interface ScriptRec {
   description: string
   version: string
   luaContent: string
+  paramsSchema: string
   fileName: string
   status: string
   createTime: string
@@ -23,8 +24,8 @@ interface ScriptRec {
 
 let scriptSeq = 10
 const scripts: ScriptRec[] = [
-  { id: 1, store: false, scriptId: 100, name: '每日签到', description: '自动签到', version: '1.0.0', luaContent: 'log("hi")\nreport_result(\'{"ok":true}\')', fileName: 'checkin.lua', status: 'enabled', createTime: '2026-06-10 10:00:00', updateTime: '2026-06-10 10:00:00' },
-  { id: 2, store: true, scriptId: 200, name: 'Hello World', description: '连通性测试脚本', version: '1.0.0', luaContent: 'log("hello world from glory")', fileName: 'hello.lua', status: 'enabled', createTime: '2026-06-01 09:00:00', updateTime: '2026-06-01 09:00:00' },
+  { id: 1, store: false, scriptId: 100, name: '每日签到', description: '自动签到', version: '1.0.0', luaContent: 'log("hi")\nreport_result(\'{"ok":true}\')', paramsSchema: '', fileName: 'checkin.lua', status: 'enabled', createTime: '2026-06-10 10:00:00', updateTime: '2026-06-10 10:00:00' },
+  { id: 2, store: true, scriptId: 200, name: 'Hello World', description: '连通性测试脚本', version: '1.0.0', luaContent: 'log("hello " .. params.name)', paramsSchema: '[{"key":"name","label":"名字","type":"string","required":true,"default":"world"}]', fileName: 'hello.lua', status: 'enabled', createTime: '2026-06-01 09:00:00', updateTime: '2026-06-01 09:00:00' },
 ]
 
 interface PlanRec {
@@ -80,7 +81,8 @@ export default defineFakeRoute([
       const rec: ScriptRec = {
         id: ++scriptSeq, store: false, scriptId: 300 + scriptSeq,
         name: body?.name ?? '脚本', description: body?.description ?? '', version: '1.0.0',
-        luaContent: body?.luaContent ?? '', fileName: body?.fileName ?? '', status: 'enabled',
+        luaContent: body?.luaContent ?? '', paramsSchema: body?.paramsSchema ?? '',
+        fileName: body?.fileName ?? '', status: 'enabled',
         createTime: now(), updateTime: now(),
       }
       scripts.unshift(rec)
@@ -93,7 +95,7 @@ export default defineFakeRoute([
     response: ({ params, body }) => {
       const s = scripts.find(x => x.id === Number(params.id))
       if (s) {
-        Object.assign(s, { name: body?.name, description: body?.description, luaContent: body?.luaContent, updateTime: now() })
+        Object.assign(s, { name: body?.name, description: body?.description, luaContent: body?.luaContent, paramsSchema: body?.paramsSchema ?? '', updateTime: now() })
       }
       return ok(s)
     },

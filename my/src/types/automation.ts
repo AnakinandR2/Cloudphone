@@ -1,3 +1,17 @@
+/** 参数类型（覆盖全 JSON 类型 + enum 下拉） */
+export type ParamType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'object'
+
+/** 单个参数定义（脚本 params_schema 数组项） */
+export interface ParamSpec {
+  key: string
+  label?: string
+  type: ParamType
+  required?: boolean
+  default?: unknown
+  description?: string
+  options?: string[] // 仅 enum：候选值
+}
+
 /** 脚本（我的脚本 / 商店脚本，仅 Lua） */
 export interface AutomationScript {
   id: number
@@ -7,6 +21,7 @@ export interface AutomationScript {
   description: string
   version: string
   luaContent: string
+  paramsSchema: string // 参数定义 JSON 数组（空=无参数）
   fileName: string
   status: string // enabled / disabled
   createTime: string
@@ -24,6 +39,7 @@ export interface ScriptInput {
   description: string
   luaContent: string
   fileName?: string
+  paramsSchema?: string
 }
 
 /** 周期计划 */
@@ -55,6 +71,16 @@ export interface PlanInput {
   startTime?: string
   endTime?: string
   cpIds: string[]
+  params?: Record<string, unknown> // 计划级共用参数（无逐台）
+}
+
+/** 一次性运行入参 */
+export interface RunTaskInput {
+  scriptId: number
+  cpIds: string[]
+  taskName?: string
+  params?: Record<string, unknown> // 共用参数
+  perPhoneParams?: Record<string, Record<string, unknown>> // 逐台覆盖：cpId → 覆盖值
 }
 
 /** 任务索引（任务日志列表行） */

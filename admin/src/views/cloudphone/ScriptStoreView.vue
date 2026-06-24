@@ -30,6 +30,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
+import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
 
 const { t } = useI18n()
 
@@ -39,7 +40,7 @@ const filters = reactive({ q: '' })
 useQuerySync(filters, { q: '' })
 const dialog = ref(false)
 const editing = ref<AutomationScript | null>(null)
-const form = ref({ name: '', description: '', luaContent: '', fileName: '' })
+const form = ref({ name: '', description: '', luaContent: '', paramsSchema: '', fileName: '' })
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -66,12 +67,12 @@ onMounted(load)
 
 function openNew() {
   editing.value = null
-  form.value = { name: '', description: '', luaContent: '', fileName: '' }
+  form.value = { name: '', description: '', luaContent: '', paramsSchema: '', fileName: '' }
   dialog.value = true
 }
 function openEdit(s: AutomationScript) {
   editing.value = s
-  form.value = { name: s.name, description: s.description, luaContent: s.luaContent, fileName: s.fileName }
+  form.value = { name: s.name, description: s.description, luaContent: s.luaContent, paramsSchema: s.paramsSchema ?? '', fileName: s.fileName }
   dialog.value = true
 }
 function pickFile() {
@@ -197,6 +198,10 @@ async function remove(s: AutomationScript) {
               <input ref="fileInput" type="file" accept=".lua,text/*" class="hidden" @change="onFile">
             </div>
             <Textarea v-model="form.luaContent" :rows="12" class="font-mono text-xs" spellcheck="false" />
+          </div>
+          <div class="grid gap-2">
+            <Label>{{ t('scriptStore.params.title') }} <span class="text-xs text-muted-foreground">{{ t('scriptStore.params.hint') }}</span></Label>
+            <ParamsSchemaEditor v-model="form.paramsSchema" />
           </div>
         </div>
         <DialogFooter class="border-t p-3">

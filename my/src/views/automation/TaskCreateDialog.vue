@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import ParamsForm from './ParamsForm.vue'
 
 const props = defineProps<{
   presetScriptId?: number
@@ -44,7 +45,34 @@ const startTime = ref('')
 const endTime = ref('')
 const submitting = ref(false)
 
+// 参数：共用 + 逐台覆盖。
+const sharedParams = ref<Record<string, unknown>>({})
+const perPhone = ref<Record<string, Record<string, unknown>>>({})
+const showOverride = ref(false)
+const sharedFormRef = ref<InstanceType<typeof ParamsForm> | null>(null)
+
 const runnablePhones = computed(() => phones.value.filter(p => p.cp_id))
+const selectedScript = computed(() => scripts.value.find(s => s.id === scriptId.value))
+const schema = computed(() => selectedScript.value?.paramsSchema ?? '')
+const hasParams = computed(() => {
+  try {
+    return Array.isArray(JSON.parse(schema.value || '[]')) && JSON.parse(schema.value).length > 0
+  }
+  catch {
+    return false
+  }
+})
+
+// 切换脚本时清空已填参数（schema 不同）。
+watch(scriptId, () => {
+  sharedParams.value = {}
+  perPhone.value = {}
+  showOverride.value = false
+})
+
+function setPhoneParams(cp: string, v: Record<string, unknown>) {
+  perPhone.value = { ...perPhone.value, [cp]: v }
+}
 
 // 把 Date 格式化为 <input type="datetime-local"> 需要的「本地 YYYY-MM-DDTHH:mm」。
 function toLocalInput(d: Date) {
@@ -129,10 +157,35 @@ async function submit() {
     toast.error(t('taskSchedule.errTargets'))
     return
   }
+  // 参数校验（共用表单）。
+  if (hasParams.value && sharedFormRef.value) {
+    const err = sharedFormRef.value.validate()
+    if (err) {
+      toast.error(err)
+      return
+    }
+  }
+  // 收集逐台覆盖（仅一次性、仅非空）。
+  const perPhoneParams: Record<string, Record<string, unknown>> = {}
+  if (mode.value === 'once' && hasParams.value) {
+    for (const cp of cpIds) {
+      const ov = perPhone.value[cp]
+      if (ov && Object.keys(ov).length)
+        perPhoneParams[cp] = ov
+    }
+  }
+  const params = hasParams.value ? sharedParams.value : undefined
+
   submitting.value = true
   try {
     if (mode.value === 'once') {
-      const { data } = await automationApi.runTask(scriptId.value, cpIds, name.value)
+      const { data } = await automationApi.runTask({
+        scriptId: scriptId.value,
+        cpIds,
+        taskName: name.value,
+        params,
+        perPhoneParams: Object.keys(perPhoneParams).length ? perPhoneParams : undefined,
+      })
       toast.success(t('taskSchedule.runOk', { n: data.length }))
       open.value = false
       emit('created', data[0]?.midTaskId ?? null)
@@ -160,6 +213,7 @@ async function submit() {
         startTime: `${startTime.value}:00`,
         endTime: `${endTime.value}:00`,
         cpIds,
+        params,
       })
       toast.success(t('taskSchedule.planOk'))
       open.value = false
@@ -262,6 +316,36 @@ async function submit() {
               <code class="ml-auto font-mono text-xs text-muted-foreground">{{ p.cp_id }}</code>
             </label>
           </div>
+        </div>
+
+        <!-- 脚本参数 -->
+        <div v-if="hasParams" class="grid gap-2 rounded-md border p-3">
+          <Label class="text-sm font-semibold">{{ t('taskSchedule.paramsTitle') }}</Label>
+          <ParamsForm ref="sharedFormRef" v-model="sharedParams" :schema="schema" />
+
+          <!-- 逐台覆盖（仅一次性） -->
+          <template v-if="mode === 'once' && selected.size > 0">
+            <button
+              type="button"
+              class="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              @click="showOverride = !showOverride"
+            >
+              <span>{{ showOverride ? '▾' : '▸' }}</span> {{ t('taskSchedule.overrideToggle') }}
+            </button>
+            <div v-if="showOverride" class="space-y-3">
+              <div v-for="cp in [...selected]" :key="cp" class="rounded-md border border-dashed p-2">
+                <p class="mb-2 font-mono text-xs text-muted-foreground">
+                  {{ cp }}
+                </p>
+                <ParamsForm
+                  :schema="schema"
+                  :seed-defaults="false"
+                  :model-value="perPhone[cp] ?? {}"
+                  @update:model-value="(v) => setPhoneParams(cp, v)"
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 

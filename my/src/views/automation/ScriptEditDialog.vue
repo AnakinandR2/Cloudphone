@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import LuaEditor from './LuaEditor.vue'
+import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
 
 const props = defineProps<{
   script: AutomationScript | null // 非空=编辑
@@ -31,6 +32,7 @@ const { t } = useI18n()
 const name = ref('')
 const description = ref('')
 const luaContent = ref('')
+const paramsSchema = ref('')
 const fileName = ref('')
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -41,6 +43,7 @@ watch(open, (v) => {
   name.value = props.script?.name ?? ''
   description.value = props.script?.description ?? ''
   luaContent.value = props.script?.luaContent ?? ''
+  paramsSchema.value = props.script?.paramsSchema ?? ''
   fileName.value = props.script?.fileName ?? ''
 })
 
@@ -68,7 +71,7 @@ async function save() {
   }
   saving.value = true
   try {
-    const body = { name: name.value, description: description.value, luaContent: luaContent.value, fileName: fileName.value }
+    const body = { name: name.value, description: description.value, luaContent: luaContent.value, paramsSchema: paramsSchema.value, fileName: fileName.value }
     if (props.script)
       await automationApi.updateScript(props.script.id, body)
     else
@@ -109,6 +112,10 @@ async function save() {
             <input ref="fileInput" type="file" accept=".lua,text/*" class="hidden" @change="onFile">
           </div>
           <LuaEditor v-model="luaContent" />
+        </div>
+        <div class="grid gap-2">
+          <Label>{{ t('script.params.title') }} <span class="text-xs text-muted-foreground">{{ t('script.params.hint') }}</span></Label>
+          <ParamsSchemaEditor v-model="paramsSchema" />
         </div>
       </div>
 
