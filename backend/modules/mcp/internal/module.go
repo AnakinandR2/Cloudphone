@@ -18,8 +18,13 @@ func (m *mcpModule) Name() string { return "mcp" }
 
 func (m *mcpModule) Init(_ *gorm.DB) error { return nil }
 
-// RegisterRoutes 无 /api/v1 下的路由（MCP 端点挂在引擎根，见 registerMCPRoutes）。
-func (m *mcpModule) RegisterRoutes(_ *gin.RouterGroup, _ ...gin.HandlerFunc) {}
+// RegisterRoutes 注册 /api/v1 下的公开路由：工具清单（免鉴权，仅暴露工具 code 等公开元数据，供 my 前台列出）。
+// MCP Streamable 端点仍挂在引擎根 /api/mcp（见 registerMCPRoutes），与此无关。
+func (m *mcpModule) RegisterRoutes(r *gin.RouterGroup, _ ...gin.HandlerFunc) {
+	r.GET("/mcp/tools", func(c *gin.Context) {
+		framework.OKWithData(c, toolCatalog())
+	})
+}
 
 func (m *mcpModule) OnStart() error { return nil }
 func (m *mcpModule) OnStop() error  { return nil }

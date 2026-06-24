@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_APP_TITLE: string
   readonly VITE_APP_MOCK: string
   readonly VITE_APP_STORAGE_PREFIX: string
+  readonly VITE_DOCS_URL: string
 }
 
 interface ImportMeta {

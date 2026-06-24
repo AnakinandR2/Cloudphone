@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { ApiKey } from '@/types/apikey'
-import { Copy, Eye, KeyRound, Plug, Plus, TriangleAlert } from 'lucide-vue-next'
+import type { McpToolGroup } from '@/types/mcp'
+import { ArrowUpRight, Copy, Eye, KeyRound, Plug, Plus, TriangleAlert } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import apikeyApi from '@/api/modules/apikey'
+import mcpApi from '@/api/modules/mcp'
 import Popconfirm from '@/components/Popconfirm.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,6 +52,14 @@ const curlExample = computed(() =>
   `curl ${baseUrl.value}/phones \\\n  -H "Authorization: Bearer gp_live_xxxxxxxx"`,
 )
 
+// www 完整 API 文档（Scalar）地址：同源默认 /api-docs，跨域部署经 VITE_DOCS_URL 填完整地址。
+const docsUrl = import.meta.env.VITE_DOCS_URL || '/api-docs'
+
+// MCP 工具清单（按领域分组，仅工具 code），从后端 /mcp/tools 动态拉取。
+const toolGroups = ref<McpToolGroup[]>([])
+const toolsError = ref(false)
+const toolCount = computed(() => toolGroups.value.reduce((n, g) => n + g.tools.length, 0))
+
 const mcpUrl = computed(() => `${window.location.origin}/api/mcp`)
 const mcpConfig = computed(() =>
   JSON.stringify(
@@ -77,7 +87,24 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+
+// 失败不阻塞页面其余功能：清单区不渲染，仅留一行降级提示（保留「与开放 API 一致」这条信息）。
+async function loadTools() {
+  toolsError.value = false
+  try {
+    const { data } = await mcpApi.getTools()
+    toolGroups.value = data ?? []
+  }
+  catch {
+    toolGroups.value = []
+    toolsError.value = true
+  }
+}
+
+onMounted(() => {
+  load()
+  loadTools()
+})
 
 function openCreate() {
   newName.value = ''
@@ -203,8 +230,12 @@ async function copy(text: string) {
             </Button>
           </div>
           <pre class="bg-muted/50 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed">{{ curlExample }}</pre>
-          <p class="text-muted-foreground text-xs">{{ t('apimcp.baseUrl') }}：<code class="font-mono">{{ baseUrl }}</code></p>
-          <p class="text-muted-foreground text-xs">{{ t('apimcp.howToHint') }}</p>
+          <a
+            :href="docsUrl" target="_blank" rel="noopener noreferrer"
+            class="text-primary inline-flex w-fit items-center gap-1 text-xs hover:underline"
+          >
+            {{ t('apimcp.apiDocs') }} <ArrowUpRight class="size-3.5" />
+          </a>
         </div>
       </CardContent>
     </Card>
@@ -231,6 +262,23 @@ async function copy(text: string) {
           <pre class="bg-muted/50 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed">{{ mcpConfig }}</pre>
         </div>
         <p class="text-muted-foreground text-xs">{{ t('apimcp.mcpHint') }}</p>
+
+        <!-- 可用工具：按领域分组，从后端动态拉取（仅工具 code，详情见 API 文档） -->
+        <div v-if="toolGroups.length" class="flex flex-col gap-2">
+          <span class="text-muted-foreground text-sm">{{ t('apimcp.toolsTitle', { count: toolCount }) }}</span>
+          <div class="flex flex-col gap-2.5">
+            <div v-for="g in toolGroups" :key="g.group" class="flex flex-col gap-1.5">
+              <span class="text-muted-foreground text-xs font-medium">{{ t(`apimcp.group.${g.group}`) }}</span>
+              <div class="flex flex-wrap gap-1.5">
+                <code
+                  v-for="name in g.tools" :key="name"
+                  class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
+                >{{ name }}</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p v-else-if="toolsError" class="text-muted-foreground text-xs">{{ t('apimcp.toolsLoadFail') }}</p>
       </CardContent>
     </Card>
 
