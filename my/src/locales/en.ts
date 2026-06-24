@@ -1166,6 +1166,8 @@ export default {
       sumDiscount: 'Discount',
       sumExpireAt: 'Expires at',
       sumTotal: 'Total payable',
+      sumFee: 'Fee',
+      sumPayActual: 'Payable',
       quoting: 'Quoting…',
       selectToQuote: 'Select options to get a quote',
       // payment
@@ -1176,6 +1178,7 @@ export default {
       balanceShort: '(insufficient)',
       // recharge
       rechargeAmount: 'Recharge amount',
+      rechargeFaceAmount: 'Recharge amount',
       custom: 'Custom',
       customAmount: 'Custom amount',
       rechargePayable: 'Payable',

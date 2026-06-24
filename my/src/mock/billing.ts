@@ -62,9 +62,9 @@ function inUse(kind: 'seat' | 'boot_slot') {
 // ---------- 定价配置 ----------
 const purchaseConfig = {
   payment_methods: [
-    { code: 'balance', name: '余额支付', enabled: true, sort: 0 },
-    { code: 'wechat', name: '微信支付', enabled: true, sort: 1 },
-    { code: 'alipay', name: '支付宝', enabled: true, sort: 2 },
+    { code: 'balance', name: '余额支付', enabled: true, sort: 0, fee_percent_bps: 0, fee_fixed_cents: 0 },
+    { code: 'wechat', name: '微信支付', enabled: true, sort: 1, fee_percent_bps: 200, fee_fixed_cents: 100 },
+    { code: 'alipay', name: '支付宝', enabled: true, sort: 2, fee_percent_bps: 200, fee_fixed_cents: 100 },
   ],
   recharge_presets_cents: [1000, 5000, 10000, 50000, 100000],
   kinds: {
@@ -120,6 +120,17 @@ const KIND_BY_BIZ: Record<string, Kind> = {
   seat_renew: 'seat',
   boot_slot_new: 'boot_slot',
   boot_slot_renew: 'boot_slot',
+}
+
+// 外加手续费（与后端 computeFee 同公式同舍入）：基数<=0 返回 0；否则 比例(四舍五入到分)+固定。
+function computeFeeCents(baseCents: number, percentBps: number, fixedCents: number): number {
+  if (baseCents <= 0) return 0
+  return Math.round((baseCents * percentBps) / 10000) + fixedCents
+}
+// 按 code 反查支付方式 fee 配置（向后兼容：缺失视为 0）。
+function feeConfigOf(code: string): { fee_percent_bps: number, fee_fixed_cents: number } {
+  const pm = purchaseConfig.payment_methods.find(m => m.code === code)
+  return { fee_percent_bps: pm?.fee_percent_bps ?? 0, fee_fixed_cents: pm?.fee_fixed_cents ?? 0 }
 }
 
 // ---------- 计价（与契约 §1.3 一致：数量阶梯 × 时长折扣，相乘）----------
@@ -221,6 +232,9 @@ interface OrderRec {
     biz_type: string
     status: string
     total_cents: number
+    fee_cents: number
+    fee_percent_bps: number
+    fee_fixed_cents: number
     pay_method: string
     created_at: string
     paid_at: string | null
@@ -243,15 +257,15 @@ interface OrderRec {
 let orderSeq = 9000
 const orders: OrderRec[] = [
   {
-    order: { id: ++orderSeq, biz_type: 'seat_new', status: 'paid', total_cents: 226800, pay_method: 'balance', created_at: iso(addDays(today, -30)), paid_at: iso(addDays(today, -30)), expired_at: null, gift_runtime_minutes: 24000 },
+    order: { id: ++orderSeq, biz_type: 'seat_new', status: 'paid', total_cents: 226800, fee_cents: 0, fee_percent_bps: 0, fee_fixed_cents: 0, pay_method: 'balance', created_at: iso(addDays(today, -30)), paid_at: iso(addDays(today, -30)), expired_at: null, gift_runtime_minutes: 24000 },
     items: [{ id: 1, order_id: orderSeq, target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800 }],
   },
   {
-    order: { id: ++orderSeq, biz_type: 'runtime_pack', status: 'paid', total_cents: 54000, pay_method: 'wechat', created_at: iso(addDays(today, -10)), paid_at: iso(addDays(today, -10)), expired_at: null, gift_runtime_minutes: 0 },
+    order: { id: ++orderSeq, biz_type: 'runtime_pack', status: 'paid', total_cents: 54000, fee_cents: 1180, fee_percent_bps: 200, fee_fixed_cents: 100, pay_method: 'wechat', created_at: iso(addDays(today, -10)), paid_at: iso(addDays(today, -10)), expired_at: null, gift_runtime_minutes: 0 },
     items: [{ id: 2, order_id: orderSeq, target_kind: 'runtime_minute', quantity: 3000, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 54000 }],
   },
   {
-    order: { id: ++orderSeq, biz_type: 'boot_slot_new', status: 'unpaid', total_cents: 5400, pay_method: 'wechat', created_at: iso(addDays(today, -1)), paid_at: null, expired_at: iso(addDays(today, 1)), gift_runtime_minutes: 0 },
+    order: { id: ++orderSeq, biz_type: 'boot_slot_new', status: 'unpaid', total_cents: 5400, fee_cents: 208, fee_percent_bps: 200, fee_fixed_cents: 100, pay_method: 'wechat', created_at: iso(addDays(today, -1)), paid_at: null, expired_at: iso(addDays(today, 1)), gift_runtime_minutes: 0 },
     items: [{ id: 3, order_id: orderSeq, target_kind: 'boot_slot', quantity: 3, duration_value: 30, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 5400 }],
   },
 ]
@@ -287,8 +301,10 @@ function fulfill(rec: OrderRec) {
 function settlePay(rec: OrderRec): { ok: boolean, msg?: string } {
   if (rec.order.status === 'paid') return { ok: false, msg: '订单已支付' }
   if (rec.order.pay_method === 'balance') {
-    if (wallet.balance_cents < rec.order.total_cents) return { ok: false, msg: '余额不足' }
-    wallet.balance_cents -= rec.order.total_cents
+    // 实付 = 应付 + 手续费（余额方式 fee 恒 0，等价于扣 total）。
+    const pay = rec.order.total_cents + rec.order.fee_cents
+    if (wallet.balance_cents < pay) return { ok: false, msg: '余额不足' }
+    wallet.balance_cents -= pay
   }
   rec.order.status = 'paid'
   rec.order.paid_at = now()
@@ -427,8 +443,11 @@ export default defineFakeRoute([
         }]
       }
       const gift = seatGift(bizType, Number(body?.quantity) || (Array.isArray(body?.unit_ids) ? body.unit_ids.length : 1), Number(body?.duration_value) || 1)
+      // 后端权威重算：按所选支付方式的 fee 配置固化手续费（余额方式恒为 0）。
+      const fee = feeConfigOf(payMethod)
+      const feeCents = computeFeeCents(total, fee.fee_percent_bps, fee.fee_fixed_cents)
       const rec: OrderRec = {
-        order: { id: orderId, biz_type: bizType, status: 'unpaid', pay_method: payMethod, total_cents: total, created_at: now(), paid_at: null, expired_at: payMethod === 'balance' ? null : iso(addDays(new Date(), 1)), gift_runtime_minutes: gift },
+        order: { id: orderId, biz_type: bizType, status: 'unpaid', pay_method: payMethod, total_cents: total, fee_cents: feeCents, fee_percent_bps: fee.fee_percent_bps, fee_fixed_cents: fee.fee_fixed_cents, created_at: now(), paid_at: null, expired_at: payMethod === 'balance' ? null : iso(addDays(new Date(), 1)), gift_runtime_minutes: gift },
         items,
       }
       orders.unshift(rec)

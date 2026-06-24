@@ -59,7 +59,16 @@ export interface RuntimeBillingConfig {
 }
 
 /** 支付方式（GET/PUT /admin/billing/payment-methods 的单项） */
-export interface PaymentMethod { code: string, name: string, enabled: boolean, sort: number }
+export interface PaymentMethod {
+  code: string
+  name: string
+  enabled: boolean
+  sort: number
+  /** 比例手续费，基点(200=2%)；0=无 */
+  fee_percent_bps: number
+  /** 固定手续费，分(100=¥1)；0=无 */
+  fee_fixed_cents: number
+}
 /** GET/PUT /admin/billing/payment-methods 整体形状：{ payment_methods } */
 export interface PaymentMethodsResp { payment_methods: PaymentMethod[] }
 
@@ -86,6 +95,12 @@ export interface BillingOrder {
   created_at: string
   paid_at: string | null
   expired_at: string | null
+  /** 实收手续费（分）；实付 = total_cents + fee_cents */
+  fee_cents: number
+  /** 下单时配置快照：比例手续费基点 */
+  fee_percent_bps: number
+  /** 下单时配置快照：固定手续费（分） */
+  fee_fixed_cents: number
 }
 export interface BillingOrderItem {
   id: number

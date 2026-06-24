@@ -209,7 +209,9 @@ func GetBizOrder(c *gin.Context) {
 	}
 	framework.OKWithData(c, gin.H{"id": o.ID, "biz_type": o.BizType, "status": o.Status,
 		"total_cents": o.TotalCents, "pay_method": o.PayMethod, "created_at": o.CreatedAt,
-		"paid_at": o.PaidAt, "expired_at": o.ExpiredAt, "items": items})
+		"paid_at": o.PaidAt, "expired_at": o.ExpiredAt,
+		"fee_cents": o.FeeCents, "fee_percent_bps": o.FeePercentBps, "fee_fixed_cents": o.FeeFixedCents,
+		"items": items})
 }
 
 // PayBizOrder POST /billing/orders/:id/pay —— 继续支付。
@@ -344,6 +346,21 @@ func AdminSavePaymentMethods(c *gin.Context) {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
 		return
 	}
+	// 手续费配置校验：比例 ∈ [0,10000]、固定 ≥ 0；余额方式（balance）两项必须都为 0。
+	for _, pm := range body.PaymentMethods {
+		if pm.FeePercentBps < 0 || pm.FeePercentBps > 10000 {
+			framework.Fail(c, http.StatusBadRequest, "比例手续费需在 0-10000 基点（0-100%）之间")
+			return
+		}
+		if pm.FeeFixedCents < 0 {
+			framework.Fail(c, http.StatusBadRequest, "固定手续费不能为负")
+			return
+		}
+		if pm.Code == PayBalance && (pm.FeePercentBps != 0 || pm.FeeFixedCents != 0) {
+			framework.Fail(c, http.StatusBadRequest, "余额支付不可配置手续费")
+			return
+		}
+	}
 	cfg, err := PricingConfigService.SavePartial(func(d *PricingConfigData) { d.PaymentMethods = body.PaymentMethods })
 	if err != nil {
 		framework.FailErr(c, err)
@@ -466,7 +483,9 @@ func AdminGetBizOrder(c *gin.Context) {
 	}
 	framework.OKWithData(c, gin.H{"id": o.ID, "user_id": o.UserID, "biz_type": o.BizType, "status": o.Status,
 		"total_cents": o.TotalCents, "pay_method": o.PayMethod, "created_at": o.CreatedAt,
-		"paid_at": o.PaidAt, "expired_at": o.ExpiredAt, "items": items})
+		"paid_at": o.PaidAt, "expired_at": o.ExpiredAt,
+		"fee_cents": o.FeeCents, "fee_percent_bps": o.FeePercentBps, "fee_fixed_cents": o.FeeFixedCents,
+		"items": items})
 }
 
 // AdminAdjustResourceV2 POST /admin/billing/accounts/:userId/adjust-resource —— 走统一履约（source=grant）。

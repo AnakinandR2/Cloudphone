@@ -48,6 +48,11 @@ type BizOrder struct {
 	ExpiredAt  *time.Time `json:"expired_at"`
 	// GiftRuntimeMinutes 履约时实际赠送的临时开机时长（分钟，仅席位新购/续费 > 0）。
 	GiftRuntimeMinutes int `gorm:"not null;default:0" json:"gift_runtime_minutes"`
+	// FeeCents 实收手续费（分）；total_cents 语义不变，实付 = total_cents + fee_cents。
+	FeeCents int64 `gorm:"not null;default:0" json:"fee_cents"`
+	// FeePercentBps / FeeFixedCents 下单时支付方式手续费配置快照，保证日后改配置不影响历史对账。
+	FeePercentBps int   `gorm:"not null;default:0" json:"fee_percent_bps"`
+	FeeFixedCents int64 `gorm:"not null;default:0" json:"fee_fixed_cents"`
 }
 
 func (BizOrder) TableName() string { return "billing_biz_orders" }

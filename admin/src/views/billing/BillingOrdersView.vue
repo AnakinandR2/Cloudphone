@@ -72,6 +72,8 @@ const columns = computed<ColumnDef<BillingOrder>[]>(() => [
   { accessorKey: 'biz_type', id: 'biz_type', header: t('billing.colBizType'), meta: { label: 'billing.colBizType' } },
   { accessorKey: 'pay_method', id: 'pay_method', header: t('billing.colPay'), meta: { label: 'billing.colPay' } },
   { accessorKey: 'total_cents', id: 'total_cents', header: t('billing.colAmount'), meta: { label: 'billing.colAmount' } },
+  { accessorKey: 'fee_cents', id: 'fee_cents', header: t('billing.colFee'), meta: { label: 'billing.colFee' } },
+  { id: 'pay_actual', header: t('billing.colPayActual'), meta: { label: 'billing.colPayActual' } },
   { accessorKey: 'status', id: 'status', header: t('billing.colStatus'), meta: { label: 'billing.colStatus' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('billing.colCreatedAt'), meta: { label: 'billing.colCreatedAt' } },
   { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
@@ -118,6 +120,14 @@ function statusVariant(s: string): 'default' | 'secondary' | 'destructive' | 'ou
 
 function bizLabel(b: string): string {
   return t(`billing.biz_${b}`)
+}
+
+// 手续费构成提示，如「2% + ¥1」「2%」「¥1」（仅展示已配置的部分）。
+function feeHint(row: BillingOrder): string {
+  const parts: string[] = []
+  if (row.fee_percent_bps > 0) parts.push(`${row.fee_percent_bps / 100}%`)
+  if (row.fee_fixed_cents > 0) parts.push(`¥${fmtCents(row.fee_fixed_cents)}`)
+  return parts.join(' + ')
 }
 
 function onFilter() {
@@ -190,6 +200,13 @@ onMounted(load)
         <template #cell-total_cents="{ row }">
           <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
         </template>
+        <template #cell-fee_cents="{ row }">
+          <span v-if="row.fee_cents > 0" class="tabular-nums text-muted-foreground">¥{{ fmtCents(row.fee_cents) }}</span>
+          <span v-else class="text-muted-foreground">-</span>
+        </template>
+        <template #cell-pay_actual="{ row }">
+          <span class="tabular-nums font-medium">¥{{ fmtCents(row.total_cents + row.fee_cents) }}</span>
+        </template>
         <template #cell-status="{ row }">
           <Badge :variant="statusVariant(row.status)">
             {{ t(`billing.status_${row.status}`) }}
@@ -213,6 +230,19 @@ onMounted(load)
         <!-- 展开行：订单项明细（懒加载 biz-orders/:id） -->
         <template #expanded="{ row }">
           <div class="p-4">
+            <!-- 费用小结：商品/充值金额、手续费、实付（实付 = total + fee） -->
+            <div class="mb-3 flex flex-wrap gap-x-8 gap-y-1 text-sm">
+              <span class="text-muted-foreground">
+                {{ t('billing.colAmount') }}：<span class="tabular-nums text-foreground">¥{{ fmtCents(row.total_cents) }}</span>
+              </span>
+              <span class="text-muted-foreground">
+                {{ t('billing.colFee') }}：<span class="tabular-nums text-foreground">¥{{ fmtCents(row.fee_cents) }}</span>
+                <span v-if="row.fee_percent_bps || row.fee_fixed_cents" class="ml-1 text-xs text-muted-foreground">({{ feeHint(row) }})</span>
+              </span>
+              <span class="text-muted-foreground">
+                {{ t('billing.colPayActual') }}：<span class="tabular-nums font-medium text-foreground">¥{{ fmtCents(row.total_cents + row.fee_cents) }}</span>
+              </span>
+            </div>
             <p class="mb-2 text-sm font-medium">
               {{ t('billing.orderItemsTitle') }}
             </p>

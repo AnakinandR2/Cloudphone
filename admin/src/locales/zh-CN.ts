@@ -515,6 +515,8 @@ export default {
     colType: '类型',
     colDetail: '明细',
     colAmount: '金额',
+    colFee: '手续费',
+    colPayActual: '实付',
     colPay: '支付方式',
     colCreatedAt: '下单时间',
     filterUserId: '用户 ID',
@@ -632,6 +634,8 @@ export default {
     payEnabled: '启用',
     payDisabled: '停用',
     payEmpty: '暂无支付方式。',
+    payFeePercent: '比例手续费(%)',
+    payFeeFixed: '固定手续费(¥)',
     // 充值预设
     rechargeTitle: '充值预设',
     rechargeDesc: '配置充值页的金额快捷档位（元）。',

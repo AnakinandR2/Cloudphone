@@ -105,3 +105,33 @@ func TestComputeQuote_RejectsNonPositiveInputs(t *testing.T) {
 		t.Errorf("expected error for durationValue 0")
 	}
 }
+
+// computeFee 外加手续费 = 比例(基数×bps，四舍五入到分) + 固定；基数<=0 一律 0。
+func TestComputeFee(t *testing.T) {
+	cases := []struct {
+		name       string
+		base       int64
+		percentBps int
+		fixed      int64
+		want       int64
+	}{
+		{"全0无费", 5000, 0, 0, 0},
+		{"纯比例2%", 5000, 200, 0, 100},
+		{"纯固定¥1", 5000, 0, 100, 100},
+		{"叠加2%+¥1", 5000, 200, 100, 200},
+		{"舍入向上(奇数分四舍五入)", 50, 200, 0, 1},   // 50×200/10000 = 1.0 → 1
+		{"舍入边界_round_half_up", 25, 200, 0, 1}, // 25×200/10000 = 0.5 → 1（half-up）
+		{"舍入向下", 24, 200, 0, 0},               // 24×200/10000 = 0.48 → 0
+		{"100%比例", 5000, 10000, 0, 5000},
+		{"base为0不收任何费(含固定)", 0, 200, 100, 0},
+		{"base为负不收任何费", -100, 200, 100, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := computeFee(tc.base, tc.percentBps, tc.fixed)
+			if got != tc.want {
+				t.Errorf("computeFee(%d, %d, %d) = %d, want %d", tc.base, tc.percentBps, tc.fixed, got, tc.want)
+			}
+		})
+	}
+}

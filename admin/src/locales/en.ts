@@ -513,6 +513,8 @@ export default {
     colType: 'Type',
     colDetail: 'Detail',
     colAmount: 'Amount',
+    colFee: 'Fee',
+    colPayActual: 'Payable',
     colPay: 'Payment',
     colCreatedAt: 'Created',
     filterUserId: 'User ID',
@@ -629,6 +631,8 @@ export default {
     payEnabled: 'Enabled',
     payDisabled: 'Disabled',
     payEmpty: 'No payment methods.',
+    payFeePercent: 'Percentage fee (%)',
+    payFeeFixed: 'Fixed fee (¥)',
     // Recharge presets
     rechargeTitle: 'Recharge Presets',
     rechargeDesc: 'Configure quick recharge amount presets (¥).',

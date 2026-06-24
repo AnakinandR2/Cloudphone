@@ -6,8 +6,9 @@ import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { fmtCents } from '@/utils/money'
+import { computeFeeCents, fmtCents, fmtFeeHint } from '@/utils/money'
 import PaymentBox from './PaymentBox.vue'
+import { feeOf } from './useQuote'
 
 // 充值面板：预设金额 + 手输 + PaymentBox(allowBalance=false)。
 const props = defineProps<{
@@ -33,6 +34,16 @@ const amountCents = computed(() => {
   return presetCents.value
 })
 const customInvalid = computed(() => presetCents.value === 'custom' && amountCents.value <= 0)
+
+// 选中支付方式的手续费配置（充值不允许余额方式；缺省视为无手续费）。
+const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
+// 手续费基数 = 充值面额（amountCents）；实付 = 面额 + 手续费。
+const feeCents = computed(() =>
+  computeFeeCents(amountCents.value, selectedFee.value?.fee_percent_bps ?? 0, selectedFee.value?.fee_fixed_cents ?? 0))
+const hasFee = computed(() => feeCents.value > 0)
+const payActualCents = computed(() => amountCents.value + feeCents.value)
+// 手续费构成标注，如「2% + ¥1」。
+const feeHint = computed(() => fmtFeeHint(selectedFee.value?.fee_percent_bps ?? 0, selectedFee.value?.fee_fixed_cents ?? 0))
 
 async function confirm() {
   if (amountCents.value <= 0) {
@@ -104,9 +115,25 @@ async function confirm() {
     </div>
 
     <Separator />
-    <div class="flex items-baseline justify-between">
-      <span class="text-sm font-medium">{{ t('billing.purchase2.rechargePayable') }}</span>
-      <span class="text-2xl font-semibold tabular-nums text-red-600">¥{{ fmtCents(amountCents) }}</span>
+    <!-- 充值小结：充值金额 → 手续费 → 实付（实付为突出大字）。 -->
+    <div class="flex flex-col gap-2 text-sm">
+      <div class="flex items-baseline justify-between">
+        <span :class="hasFee ? 'text-muted-foreground' : 'font-medium'">{{ t('billing.purchase2.rechargeFaceAmount') }}</span>
+        <span class="tabular-nums" :class="hasFee ? '' : 'text-2xl font-semibold text-red-600'">¥{{ fmtCents(amountCents) }}</span>
+      </div>
+      <template v-if="hasFee">
+        <div class="flex items-baseline justify-between">
+          <span class="text-muted-foreground">
+            {{ t('billing.purchase2.sumFee') }}
+            <span v-if="feeHint" class="text-xs">（{{ feeHint }}）</span>
+          </span>
+          <span class="tabular-nums">¥{{ fmtCents(feeCents) }}</span>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span class="font-medium">{{ t('billing.purchase2.sumPayActual') }}</span>
+          <span class="text-2xl font-semibold tabular-nums text-red-600">¥{{ fmtCents(payActualCents) }}</span>
+        </div>
+      </template>
     </div>
 
     <!-- 充值不能用余额支付 -->

@@ -203,7 +203,12 @@ async function continuePay(o: Order2) {
       <span class="text-muted-foreground text-xs">{{ orderSummary(row) }}</span>
     </template>
     <template #cell-total_cents="{ row }">
-      <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
+      <div class="flex flex-col">
+        <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
+        <span v-if="row.fee_cents > 0" class="text-muted-foreground text-xs tabular-nums">
+          {{ t('billing.purchase2.sumPayActual') }} ¥{{ fmtCents(row.total_cents + row.fee_cents) }}
+        </span>
+      </div>
     </template>
     <template #cell-status="{ row }">
       <Badge :variant="statusVariant(row.status)">
@@ -253,6 +258,21 @@ async function continuePay(o: Order2) {
               </span>
               ¥{{ fmtCents(it.amount_cents) }}
             </span>
+          </div>
+        </div>
+        <!-- 手续费 / 实付小结：仅有手续费时展示（历史/旧订单为 0 时隐藏）。 -->
+        <div v-if="row.fee_cents > 0" class="mt-2 flex flex-col items-end gap-0.5 text-sm">
+          <div class="flex w-full max-w-xs items-baseline justify-between">
+            <span class="text-muted-foreground">{{ t('billing.purchase2.sumTotal') }}</span>
+            <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
+          </div>
+          <div class="flex w-full max-w-xs items-baseline justify-between">
+            <span class="text-muted-foreground">{{ t('billing.purchase2.sumFee') }}</span>
+            <span class="tabular-nums">¥{{ fmtCents(row.fee_cents) }}</span>
+          </div>
+          <div class="flex w-full max-w-xs items-baseline justify-between">
+            <span class="font-medium">{{ t('billing.purchase2.sumPayActual') }}</span>
+            <span class="font-semibold tabular-nums text-red-600">¥{{ fmtCents(row.total_cents + row.fee_cents) }}</span>
           </div>
         </div>
         <div v-if="row.gift_runtime_minutes > 0" class="text-emerald-600 dark:text-emerald-400 mt-2 text-xs">

@@ -636,6 +636,56 @@ func TestAdminSavePaymentMethods_BadRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+// 合法手续费配置（wechat 2%+¥1、balance 全 0）保存通过并回显 fee 字段。
+func TestAdminSavePaymentMethods_FeeValid(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, env := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "balance", "name": "余额", "enabled": true, "sort": 0, "fee_percent_bps": 0, "fee_fixed_cents": 0},
+			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_percent_bps": 200, "fee_fixed_cents": 100},
+		}})
+	require.Equal(t, http.StatusOK, code)
+	data := env["data"].(map[string]any)
+	methods := data["payment_methods"].([]any)
+	wechat := methods[1].(map[string]any)
+	assert.Equal(t, float64(200), wechat["fee_percent_bps"])
+	assert.Equal(t, float64(100), wechat["fee_fixed_cents"])
+}
+
+// balance 配置非 0 手续费 → 400。
+func TestAdminSavePaymentMethods_BalanceFeeRejected(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, _ := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "balance", "name": "余额", "enabled": true, "sort": 0, "fee_percent_bps": 200, "fee_fixed_cents": 0},
+		}})
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+// 负值固定手续费 → 400。
+func TestAdminSavePaymentMethods_NegativeFixedRejected(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, _ := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_percent_bps": 200, "fee_fixed_cents": -1},
+		}})
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+// 比例手续费超上限(>10000) → 400。
+func TestAdminSavePaymentMethods_PercentOverCapRejected(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, _ := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_percent_bps": 10001, "fee_fixed_cents": 0},
+		}})
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
 // ---- 后台订单 handler ----
 
 func TestAdminBizOrders_ListAndDetailAndMarkPaid(t *testing.T) {
@@ -684,4 +734,46 @@ func TestAdminGetBizOrder_NotFound(t *testing.T) {
 	r := billingRouter(injectUser(1))
 	code, _ := do(t, r, http.MethodGet, "/admin/billing/biz-orders/88888888", nil)
 	assert.NotEqual(t, http.StatusOK, code)
+}
+
+// 用户详情 GetBizOrder 与后台详情 AdminGetBizOrder 均返回 fee 三键且数值正确。
+func TestBizOrderDetail_ReturnsFeeKeys(t *testing.T) {
+	t.Cleanup(func() {
+		_ = PricingConfigService.Save(defaultPricingConfig())
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items", "billing_license_units")
+	})
+	_, err := PricingConfigService.SavePartial(func(d *PricingConfigData) {
+		d.PaymentMethods = []PaymentMethod{
+			{Code: PayBalance, Name: "余额", Enabled: true, Sort: 0},
+			{Code: PayWechat, Name: "微信", Enabled: true, Sort: 1, FeePercentBps: 200, FeeFixedCents: 100},
+		}
+	})
+	require.NoError(t, err)
+
+	uid := 970150
+	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizSeatNew, Quantity: 1, DurationValue: 1, PayMethod: PayWechat,
+	})
+	require.NoError(t, err)
+	oid := int(res.Order.ID)
+	// total = 3000；fee = 60 + 100 = 160。
+	require.Equal(t, int64(160), res.Order.FeeCents)
+
+	// 用户侧详情。
+	ru := billingRouter(injectUser(uid))
+	code, env := do(t, ru, http.MethodGet, "/billing/orders/"+itoa(oid), nil)
+	require.Equal(t, http.StatusOK, code)
+	d := env["data"].(map[string]any)
+	assert.Equal(t, float64(160), d["fee_cents"])
+	assert.Equal(t, float64(200), d["fee_percent_bps"])
+	assert.Equal(t, float64(100), d["fee_fixed_cents"])
+
+	// 后台侧详情。
+	ra := billingRouter(injectUser(1))
+	code, env = do(t, ra, http.MethodGet, "/admin/billing/biz-orders/"+itoa(oid), nil)
+	require.Equal(t, http.StatusOK, code)
+	ad := env["data"].(map[string]any)
+	assert.Equal(t, float64(160), ad["fee_cents"])
+	assert.Equal(t, float64(200), ad["fee_percent_bps"])
+	assert.Equal(t, float64(100), ad["fee_fixed_cents"])
 }

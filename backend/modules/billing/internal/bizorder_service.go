@@ -85,6 +85,12 @@ func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*Biz
 	if req.BizType == BizRecharge && req.PayMethod == PayBalance {
 		return nil, apperr.Validation("充值不支持余额支付")
 	}
+	// §4.3 支付方式校验：命中配置且 enabled 才放行（前端只展示 enabled 方式，后端兜底拒绝被禁用/已删方式）。
+	// 配置缺失（理论上应覆盖白名单）则容错按无手续费处理、不阻断（向后兼容）。
+	pm, pmOK := s.pricing.PaymentMethodByCode(req.PayMethod)
+	if pmOK && !pm.Enabled {
+		return nil, apperr.Validation("该支付方式已停用")
+	}
 
 	order := BizOrder{UserID: uint(userID), BizType: req.BizType, Status: BizOrderUnpaid, PayMethod: req.PayMethod}
 	var item BizOrderItem
@@ -127,6 +133,14 @@ func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*Biz
 		item.DurationUnit = s.durationUnit(kind)
 	}
 
+	// 在 create 之前固化手续费（create 用 tx.Create 一次性按当前字段入库，之后无 Update 回写）。
+	// 基数 = order.TotalCents（购买为折后应付、充值为面额）；配置缺失则 fee=0。
+	if pmOK {
+		order.FeePercentBps = pm.FeePercentBps
+		order.FeeFixedCents = pm.FeeFixedCents
+		order.FeeCents = computeFee(order.TotalCents, pm.FeePercentBps, pm.FeeFixedCents)
+	}
+
 	if err := s.repo.create(&order, []BizOrderItem{item}); err != nil {
 		return nil, err
 	}
@@ -166,7 +180,8 @@ func (s *bizOrderServiceImpl) PayOrder(userID, id int) (*BizOrderResult, error) 
 func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
 	// 余额支付才从钱包扣款；第三方由外部网关收款，不动余额。
 	if o.PayMethod == PayBalance && o.BizType != BizRecharge {
-		if err := s.wallet.Charge(userID, o.TotalCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID)); err != nil {
+		// 实付 = 商品金额 + 手续费（余额方式 fee 恒 0，等价于扣 TotalCents，行为不变）。
+		if err := s.wallet.Charge(userID, o.TotalCents+o.FeeCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID)); err != nil {
 			return PayResult{}, err
 		}
 	}

@@ -12,15 +12,34 @@ import { Switch } from '@/components/ui/switch'
 
 const { t } = useI18n()
 
-const methods = ref<PaymentMethod[]>([])
 const loading = ref(false)
 const saving = ref(false)
+
+// 行内编辑态：手续费以「%」与「¥」展示编辑，保存时再换算回 bps/cents。
+interface MethodRow extends PaymentMethod {
+  // 比例手续费（%）展示值，bps/100（200bps → 2）
+  feePercent: number
+  // 固定手续费（¥）展示值，cents/100（100cents → 1）
+  feeFixed: number
+}
+
+const methods = ref<MethodRow[]>([])
+
+function toRow(m: PaymentMethod): MethodRow {
+  // 余额方式手续费恒为 0，编辑态固定显示 0（输入框另在模板内 disable）。
+  const isBalance = m.code === 'balance'
+  return {
+    ...m,
+    feePercent: isBalance ? 0 : (m.fee_percent_bps ?? 0) / 100,
+    feeFixed: isBalance ? 0 : (m.fee_fixed_cents ?? 0) / 100,
+  }
+}
 
 async function load() {
   loading.value = true
   try {
     const { data } = await billingApi.getPaymentMethods()
-    methods.value = [...(data.payment_methods ?? [])].sort((a, b) => a.sort - b.sort)
+    methods.value = [...(data.payment_methods ?? [])].sort((a, b) => a.sort - b.sort).map(toRow)
   }
   catch {
     toast.error(t('billing.loadFail'))
@@ -59,8 +78,18 @@ function onDragEnd() {
 async function save() {
   saving.value = true
   try {
-    // 以当前展示顺序重写 sort（0..n-1）
-    const payload = methods.value.map((m, i) => ({ ...m, sort: i }))
+    // 以当前展示顺序重写 sort（0..n-1）；手续费换算回 bps/cents。
+    // 余额方式（balance）手续费恒为 0（前端兜底，后端校验为最终保证）。
+    const payload: PaymentMethod[] = methods.value.map((m, i) => {
+      const isBalance = m.code === 'balance'
+      const { feePercent, feeFixed, ...base } = m
+      return {
+        ...base,
+        sort: i,
+        fee_percent_bps: isBalance ? 0 : Math.round((feePercent || 0) * 100),
+        fee_fixed_cents: isBalance ? 0 : Math.round((feeFixed || 0) * 100),
+      }
+    })
     await billingApi.savePaymentMethods(payload)
     toast.success(t('billing.savedOk'))
     load()
@@ -110,11 +139,36 @@ async function save() {
               <GripVertical class="size-4" />
             </span>
             <span class="text-muted-foreground w-6 text-center text-xs tabular-nums">{{ idx + 1 }}</span>
-            <div class="flex flex-col gap-1">
-              <span class="font-mono text-xs text-muted-foreground">{{ m.code }}</span>
-              <Input v-model="m.name" class="h-8 max-w-xs" :placeholder="t('billing.payName')" />
+            <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+              <div class="flex flex-col gap-1">
+                <span class="font-mono text-xs text-muted-foreground">{{ m.code }}</span>
+                <Input v-model="m.name" class="h-8 w-44" :placeholder="t('billing.payName')" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-muted-foreground text-xs">{{ t('billing.payFeePercent') }}</span>
+                <Input
+                  v-model.number="m.feePercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  class="h-8 w-28"
+                  :disabled="m.code === 'balance'"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-muted-foreground text-xs">{{ t('billing.payFeeFixed') }}</span>
+                <Input
+                  v-model.number="m.feeFixed"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="h-8 w-28"
+                  :disabled="m.code === 'balance'"
+                />
+              </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 self-center">
               <span class="text-muted-foreground text-xs">{{ m.enabled ? t('billing.payEnabled') : t('billing.payDisabled') }}</span>
               <Switch v-model="m.enabled" />
             </div>

@@ -48,6 +48,10 @@ export interface PaymentMethod {
   name: string
   enabled: boolean
   sort: number
+  /** 比例手续费，基点(200=2%)；0=无该项；余额方式恒为 0 */
+  fee_percent_bps: number
+  /** 固定手续费，分(100=¥1)；0=无该项；余额方式恒为 0 */
+  fee_fixed_cents: number
 }
 export interface QtyTier {
   min_quantity: number
@@ -124,6 +128,12 @@ export interface Order2 {
   biz_type: BizType
   status: OrderStatus2
   total_cents: number
+  /** 实收手续费（分）；历史订单为 0 */
+  fee_cents: number
+  /** 下单时配置快照：比例手续费基点 */
+  fee_percent_bps: number
+  /** 下单时配置快照：固定手续费（分） */
+  fee_fixed_cents: number
   pay_method: string
   created_at: string
   paid_at: string | null

@@ -9,7 +9,7 @@ import { fmtCents, fmtDiscountBps } from '@/utils/money'
 import OrderSummary from './OrderSummary.vue'
 import PaymentBox from './PaymentBox.vue'
 import PurchaseNotice from './PurchaseNotice.vue'
-import { useQuote } from './useQuote'
+import { feeOf, useQuote } from './useQuote'
 
 // 临时开机时长包面板：须知 + 时长包按钮组/手输(≥min) + OrderSummary + PaymentBox。
 const props = defineProps<{
@@ -51,6 +51,9 @@ const { quote, loading } = useQuote(() => {
   if (minutes.value <= 0 || (selected.value === 'custom' && customInvalid.value)) return null
   return { biz_type: 'runtime_pack', minutes: minutes.value }
 })
+
+// 选中支付方式的手续费配置（传给 OrderSummary 实时预览实付）。
+const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
 
 async function confirm() {
   if (minutes.value < rt.value.min_minutes) {
@@ -133,7 +136,7 @@ async function confirm() {
       </p>
     </div>
 
-    <OrderSummary :quote="quote" :loading="loading" :unit-label="t('billing.purchase2.minuteUnit')" />
+    <OrderSummary :quote="quote" :loading="loading" :unit-label="t('billing.purchase2.minuteUnit')" :fee="selectedFee" />
 
     <PaymentBox
       v-model="payMethod"

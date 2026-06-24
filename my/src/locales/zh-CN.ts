@@ -1166,6 +1166,8 @@ export default {
       sumDiscount: '折扣',
       sumExpireAt: '到期时间',
       sumTotal: '应付总价',
+      sumFee: '手续费',
+      sumPayActual: '实付',
       quoting: '报价中…',
       selectToQuote: '请选择购买参数以获取报价',
       // 支付
@@ -1176,6 +1178,7 @@ export default {
       balanceShort: '（余额不足）',
       // 充值
       rechargeAmount: '充值金额',
+      rechargeFaceAmount: '充值金额',
       custom: '自定义',
       customAmount: '自定义金额',
       rechargePayable: '应付金额',

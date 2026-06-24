@@ -20,12 +20,14 @@ type PricingConfig struct {
 
 func (PricingConfig) TableName() string { return "billing_pricing_config" }
 
-// PaymentMethod 支付方式（开关 + 排序）。
+// PaymentMethod 支付方式（开关 + 排序 + 手续费配置）。
 type PaymentMethod struct {
-	Code    string `json:"code"`
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	Sort    int    `json:"sort"`
+	Code          string `json:"code"`
+	Name          string `json:"name"`
+	Enabled       bool   `json:"enabled"`
+	Sort          int    `json:"sort"`
+	FeePercentBps int    `json:"fee_percent_bps"` // 比例手续费，基点(200=2%)；0=无
+	FeeFixedCents int64  `json:"fee_fixed_cents"` // 固定手续费，分(100=¥1)；0=无
 }
 
 // KindPricing 某 kind（seat/boot_slot）的定价配置。

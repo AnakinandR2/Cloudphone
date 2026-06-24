@@ -6,11 +6,11 @@ function ok<T>(data: T, message = '成功') {
 
 // ---- Orders（购买与费用重构新形状：biz_type + status unpaid/paid/expired）----
 const orders: any[] = [
-  { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
-  { id: 9002, user_id: 102, biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
-  { id: 9003, user_id: 101, biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
-  { id: 9004, user_id: 103, biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
-  { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
+  { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, fee_cents: 0, fee_percent_bps: 0, fee_fixed_cents: 0, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
+  { id: 9002, user_id: 102, biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, fee_cents: 300, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
+  { id: 9003, user_id: 101, biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, fee_cents: 316, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
+  { id: 9004, user_id: 103, biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, fee_cents: 352, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
+  { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, fee_cents: 160, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
 ]
 
 // ---- Biz Order Items（订单项明细，按订单 id 索引；GET /biz-orders/:id 返回）----
@@ -108,9 +108,9 @@ let runtimeCfg: any = {
 
 // 支付方式
 let paymentMethods: any[] = [
-  { code: 'balance', name: '余额支付', enabled: true, sort: 0 },
-  { code: 'wechat', name: '微信支付', enabled: true, sort: 1 },
-  { code: 'alipay', name: '支付宝', enabled: true, sort: 2 },
+  { code: 'balance', name: '余额支付', enabled: true, sort: 0, fee_percent_bps: 0, fee_fixed_cents: 0 },
+  { code: 'wechat', name: '微信支付', enabled: true, sort: 1, fee_percent_bps: 200, fee_fixed_cents: 100 },
+  { code: 'alipay', name: '支付宝', enabled: true, sort: 2, fee_percent_bps: 200, fee_fixed_cents: 100 },
 ]
 
 // 充值预设

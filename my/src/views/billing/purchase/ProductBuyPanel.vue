@@ -7,7 +7,7 @@ import OrderSummary from './OrderSummary.vue'
 import PaymentBox from './PaymentBox.vue'
 import PurchaseNotice from './PurchaseNotice.vue'
 import QuantityPicker from './QuantityPicker.vue'
-import { bizTypeOf, useQuote } from './useQuote'
+import { bizTypeOf, feeOf, useQuote } from './useQuote'
 
 // 组合面板（新购）：kind=seat → 购买新实例；kind=boot_slot → 购买包月开机数（时长按天）。
 const props = defineProps<{
@@ -31,6 +31,9 @@ const { quote, loading } = useQuote(() => ({
   quantity: quantity.value,
   duration_value: durationValue.value,
 }))
+
+// 选中支付方式的手续费配置（传给 OrderSummary 实时预览实付）。
+const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
 
 // 到期 = now + 时长（月=按月加，天=按天加），仅用于摘要展示。
 const expireAt = computed(() => {
@@ -84,6 +87,7 @@ async function confirm() {
       :loading="loading"
       :expire-at="expireAt"
       :unit-label="kindCfg.unit_label"
+      :fee="selectedFee"
     />
 
     <PaymentBox

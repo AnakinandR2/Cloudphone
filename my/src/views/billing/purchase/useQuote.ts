@@ -1,6 +1,17 @@
-import type { BizType, QuoteReq2, QuoteResult2 } from '@/types/billing'
+import type { BizType, PaymentMethod, QuoteReq2, QuoteResult2 } from '@/types/billing'
 import { ref, watch } from 'vue'
 import billingApi from '@/api/modules/billing'
+
+// 按选中 code 从 payment_methods 反查手续费配置；命中即返回（含余额方式的 0/0），
+// 未命中（未选/已删）返回 null（OrderSummary 视为无手续费）。
+export function feeOf(
+  methods: PaymentMethod[],
+  code: string,
+): { fee_percent_bps: number, fee_fixed_cents: number } | null {
+  const pm = methods.find(m => m.code === code)
+  if (!pm) return null
+  return { fee_percent_bps: pm.fee_percent_bps, fee_fixed_cents: pm.fee_fixed_cents }
+}
 
 // 报价一律走 POST /billing/quote（服务端权威计价，前端不自算价）。
 // 入参变化时防抖请求；返回 quote / loading 供面板与 OrderSummary 使用。

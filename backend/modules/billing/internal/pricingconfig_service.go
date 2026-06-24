@@ -48,6 +48,20 @@ func (s *pricingConfigServiceImpl) SavePartial(mutate func(*PricingConfigData)) 
 	return cur, nil
 }
 
+// PaymentMethodByCode 按 code 取支付方式配置；不存在返回 (nil, false)。
+func (s *pricingConfigServiceImpl) PaymentMethodByCode(code string) (*PaymentMethod, bool) {
+	d, err := s.Get()
+	if err != nil {
+		return nil, false
+	}
+	for i := range d.PaymentMethods {
+		if d.PaymentMethods[i].Code == code {
+			return &d.PaymentMethods[i], true
+		}
+	}
+	return nil, false
+}
+
 // priceConfigFor 把某 kind 的持久化配置翻译成计价引擎 PriceConfig。
 func (s *pricingConfigServiceImpl) priceConfigFor(kind string) (PriceConfig, error) {
 	d, err := s.Get()

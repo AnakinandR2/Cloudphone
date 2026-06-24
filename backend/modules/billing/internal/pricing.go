@@ -71,6 +71,15 @@ func applyBps(cents int64, bps int) int64 {
 	return (cents*int64(bps) + int64(DiscountBpsFull)/2) / int64(DiscountBpsFull)
 }
 
+// computeFee 计算外加手续费 = 比例(基数×bps，四舍五入到分) + 固定。
+// 基数<=0（含 0 元订单）时不收任何手续费（含固定部分）。
+func computeFee(baseCents int64, percentBps int, fixedCents int64) int64 {
+	if baseCents <= 0 {
+		return 0
+	}
+	return applyBps(baseCents, percentBps) + fixedCents
+}
+
 // resolveQtyBps 取数量命中的最优阶梯（MinQuantity ≤ quantity 中门槛最高者）。无阶梯=全价。
 func resolveQtyBps(tiers []QtyTier, quantity int) int {
 	bps := DiscountBpsFull

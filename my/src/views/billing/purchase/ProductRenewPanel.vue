@@ -8,7 +8,7 @@ import DurationPicker from './DurationPicker.vue'
 import OrderSummary from './OrderSummary.vue'
 import PaymentBox from './PaymentBox.vue'
 import UnitRenewTable from './UnitRenewTable.vue'
-import { bizTypeOf, useQuote } from './useQuote'
+import { bizTypeOf, feeOf, useQuote } from './useQuote'
 
 // 组合面板（续费）：续费实例 / 续费包月数 共用，按 kind 参数化。
 // 续费数量 = 选中的单元数（享数量阶梯折扣）。
@@ -37,6 +37,9 @@ const { quote, loading } = useQuote(() => {
     duration_value: durationValue.value,
   }
 })
+
+// 选中支付方式的手续费配置（传给 OrderSummary 实时预览实付）。
+const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
 
 async function confirm() {
   if (!selectedIds.value.length) {
@@ -84,6 +87,7 @@ async function confirm() {
       :quote="quote"
       :loading="loading"
       :unit-label="kindCfg.unit_label"
+      :fee="selectedFee"
     />
 
     <PaymentBox
