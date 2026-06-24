@@ -23,7 +23,7 @@ func ListUsableScripts(userID int) ([]AutomationScript, error) {
 
 // RunScript 对指定 cp 下发一次性脚本任务（开放 API 用）。taskName 留空则用脚本名。
 func RunScript(userID int, scriptLocalID uint, cpIDs []string) ([]AutomationTask, error) {
-	return automationinternal.Service.RunNow(userID, scriptLocalID, cpIDs, "")
+	return automationinternal.Service.RunNow(userID, scriptLocalID, cpIDs, "", nil, nil)
 }
 
 // TaskDetail 查某脚本任务的状态 + 终态报告（开放 API 用）。

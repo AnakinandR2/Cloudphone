@@ -9,10 +9,11 @@ import (
 
 // ScriptInput 是新建/编辑脚本的入参。
 type ScriptInput struct {
-	Name        string
-	Description string
-	LuaContent  string
-	FileName    string
+	Name         string
+	Description  string
+	LuaContent   string
+	FileName     string
+	ParamsSchema string // 参数定义 JSON 数组（见 ParamSpec）；空=无参数
 }
 
 // ListUserScripts 我的脚本（store=false，本人）。
@@ -55,15 +56,19 @@ func (s *serviceImpl) createScript(ownerID uint, store bool, in ScriptInput) (*A
 	if strings.TrimSpace(in.Name) == "" {
 		return nil, apperr.BadRequest("脚本名称不能为空")
 	}
+	if _, err := validateSchema(in.ParamsSchema); err != nil {
+		return nil, err
+	}
 	rec := &AutomationScript{
-		UserID:      ownerID,
-		Store:       store,
-		Name:        in.Name,
-		Description: in.Description,
-		Version:     "1.0.0",
-		LuaContent:  in.LuaContent,
-		FileName:    in.FileName,
-		Status:      ScriptEnabled,
+		UserID:       ownerID,
+		Store:        store,
+		Name:         in.Name,
+		Description:  in.Description,
+		Version:      "1.0.0",
+		LuaContent:   in.LuaContent,
+		ParamsSchema: strings.TrimSpace(in.ParamsSchema),
+		FileName:     in.FileName,
+		Status:       ScriptEnabled,
 	}
 	if err := s.repo.createScript(rec); err != nil {
 		return nil, err
@@ -118,10 +123,14 @@ func (s *serviceImpl) updateScript(rec *AutomationScript, in ScriptInput) (*Auto
 	if strings.TrimSpace(in.LuaContent) == "" {
 		return nil, apperr.BadRequest("脚本内容不能为空")
 	}
+	if _, err := validateSchema(in.ParamsSchema); err != nil {
+		return nil, err
+	}
 	oldScriptID := rec.ScriptID
 	rec.Name = in.Name
 	rec.Description = in.Description
 	rec.LuaContent = in.LuaContent
+	rec.ParamsSchema = strings.TrimSpace(in.ParamsSchema)
 	if in.FileName != "" {
 		rec.FileName = in.FileName
 	}

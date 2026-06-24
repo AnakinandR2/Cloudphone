@@ -29,14 +29,18 @@ func paramUint(c *gin.Context, key string) (uint, bool) {
 
 // scriptBody 是新建/编辑脚本的请求体。
 type scriptBody struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	LuaContent  string `json:"luaContent"`
-	FileName    string `json:"fileName"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	LuaContent   string `json:"luaContent"`
+	FileName     string `json:"fileName"`
+	ParamsSchema string `json:"paramsSchema"`
 }
 
 func (b scriptBody) toInput() ScriptInput {
-	return ScriptInput{Name: b.Name, Description: b.Description, LuaContent: b.LuaContent, FileName: b.FileName}
+	return ScriptInput{
+		Name: b.Name, Description: b.Description, LuaContent: b.LuaContent,
+		FileName: b.FileName, ParamsSchema: b.ParamsSchema,
+	}
 }
 
 // ---- 脚本 ----
@@ -188,14 +192,15 @@ func CreatePlan(c *gin.Context) {
 		return
 	}
 	var b struct {
-		ScriptID      uint     `json:"scriptId"`
-		Name          string   `json:"name"`
-		Frequency     string   `json:"frequency"`
-		IntervalValue int      `json:"intervalValue"`
-		ExecutionTime string   `json:"executionTime"`
-		StartTime     string   `json:"startTime"`
-		EndTime       string   `json:"endTime"`
-		CpIDs         []string `json:"cpIds"`
+		ScriptID      uint           `json:"scriptId"`
+		Name          string         `json:"name"`
+		Frequency     string         `json:"frequency"`
+		IntervalValue int            `json:"intervalValue"`
+		ExecutionTime string         `json:"executionTime"`
+		StartTime     string         `json:"startTime"`
+		EndTime       string         `json:"endTime"`
+		CpIDs         []string       `json:"cpIds"`
+		Params        map[string]any `json:"params"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
@@ -204,7 +209,7 @@ func CreatePlan(c *gin.Context) {
 	rec, err := Service.CreatePlan(uid, PlanInput{
 		ScriptLocalID: b.ScriptID, Name: b.Name, Frequency: b.Frequency,
 		IntervalValue: b.IntervalValue, ExecutionTime: b.ExecutionTime,
-		StartTime: b.StartTime, EndTime: b.EndTime, CpIDs: b.CpIDs,
+		StartTime: b.StartTime, EndTime: b.EndTime, CpIDs: b.CpIDs, Params: b.Params,
 	})
 	if err != nil {
 		framework.FailErr(c, err)
@@ -251,15 +256,17 @@ func RunTask(c *gin.Context) {
 		return
 	}
 	var b struct {
-		ScriptID uint     `json:"scriptId"`
-		CpIDs    []string `json:"cpIds"`
-		TaskName string   `json:"taskName"`
+		ScriptID       uint                      `json:"scriptId"`
+		CpIDs          []string                  `json:"cpIds"`
+		TaskName       string                    `json:"taskName"`
+		Params         map[string]any            `json:"params"`
+		PerPhoneParams map[string]map[string]any `json:"perPhoneParams"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
 		return
 	}
-	rows, err := Service.RunNow(uid, b.ScriptID, b.CpIDs, b.TaskName)
+	rows, err := Service.RunNow(uid, b.ScriptID, b.CpIDs, b.TaskName, b.Params, b.PerPhoneParams)
 	if err != nil {
 		framework.FailErr(c, err)
 		return

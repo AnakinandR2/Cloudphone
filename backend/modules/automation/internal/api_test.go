@@ -291,7 +291,7 @@ func TestListTasksHandler(t *testing.T) {
 	seedPhone(t, userH, "cp-lt1")
 	rec, err := Service.CreateUserScript(userH, ScriptInput{Name: "r", LuaContent: "log(1)"})
 	require.NoError(t, err)
-	_, err = Service.RunNow(userH, rec.ID, []string{"cp-lt1"}, "t")
+	_, err = Service.RunNow(userH, rec.ID, []string{"cp-lt1"}, "t", nil, nil)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
@@ -318,7 +318,7 @@ func TestTaskDetailHandler(t *testing.T) {
 	seedPhone(t, userH, "cp-td1")
 	rec, err := Service.CreateUserScript(userH, ScriptInput{Name: "r", LuaContent: "log(1)"})
 	require.NoError(t, err)
-	rows, err := Service.RunNow(userH, rec.ID, []string{"cp-td1"}, "t")
+	rows, err := Service.RunNow(userH, rec.ID, []string{"cp-td1"}, "t", nil, nil)
 	require.NoError(t, err)
 
 	mid := strconv.FormatInt(rows[0].MidTaskID, 10)

@@ -58,7 +58,7 @@ func TestRunNowFiltersOwnership(t *testing.T) {
 	rec, err := Service.CreateUserScript(userA, ScriptInput{Name: "r", LuaContent: "log(1)"})
 	require.NoError(t, err)
 
-	rows, err := Service.RunNow(userA, rec.ID, []string{"cp-own1", "cp-foreign", "cp-own2"}, "测试")
+	rows, err := Service.RunNow(userA, rec.ID, []string{"cp-own1", "cp-foreign", "cp-own2"}, "测试", nil, nil)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"cp-own1", "cp-own2"}, f.lastTaskCps, "只应透传本人拥有的 cpId")
 	assert.Len(t, rows, 2)
@@ -70,7 +70,7 @@ func TestRunNowFiltersOwnership(t *testing.T) {
 	assert.NotEmpty(t, logs)
 
 	// 全是别人的机器 → 拒绝
-	_, err = Service.RunNow(userA, rec.ID, []string{"cp-foreign"}, "")
+	_, err = Service.RunNow(userA, rec.ID, []string{"cp-foreign"}, "", nil, nil)
 	require.Error(t, err)
 }
 
@@ -81,7 +81,7 @@ func TestTaskDetailMergesReport(t *testing.T) {
 	seedPhone(t, userA, "cp-d1")
 	rec, err := Service.CreateUserScript(userA, ScriptInput{Name: "d", LuaContent: "log(1)"})
 	require.NoError(t, err)
-	rows, err := Service.RunNow(userA, rec.ID, []string{"cp-d1"}, "")
+	rows, err := Service.RunNow(userA, rec.ID, []string{"cp-d1"}, "", nil, nil)
 	require.NoError(t, err)
 
 	detail, err := Service.TaskDetail(userA, rows[0].MidTaskID)

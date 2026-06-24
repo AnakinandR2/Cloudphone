@@ -57,12 +57,13 @@ func seedPhone(t *testing.T, userID int, cpID string) {
 
 // fakeOps 是 midplatPort 的假实现：记录调用，便于断言。
 type fakeOps struct {
-	uploaded    bool
-	scriptID    int64 // TemplateScriptID 返回（0 → 上传后返回 100）
-	deletedTpl  []int64
-	lastTaskCps []string
-	lastPlan    midplat.CreateScriptPlanRequest
-	planActions []string
+	uploaded       bool
+	scriptID       int64 // TemplateScriptID 返回（0 → 上传后返回 100）
+	deletedTpl     []int64
+	lastTaskCps    []string
+	lastTaskParams map[string]string // cpId → scriptParams JSON（最近一次 CreateTasks）
+	lastPlan       midplat.CreateScriptPlanRequest
+	planActions    []string
 }
 
 func (f *fakeOps) UploadTemplate(_ context.Context, _, _, _ string, _ []byte) error {
@@ -80,8 +81,9 @@ func (f *fakeOps) DeleteTemplate(_ context.Context, id int64) error {
 	f.deletedTpl = append(f.deletedTpl, id)
 	return nil
 }
-func (f *fakeOps) CreateTasks(_ context.Context, _ int64, taskName, _ string, cpIDs []string) ([]midplat.ScriptTaskCreated, error) {
+func (f *fakeOps) CreateTasks(_ context.Context, _ int64, taskName, _ string, cpIDs []string, scriptParamsByCp map[string]string) ([]midplat.ScriptTaskCreated, error) {
 	f.lastTaskCps = cpIDs
+	f.lastTaskParams = scriptParamsByCp
 	out := make([]midplat.ScriptTaskCreated, 0, len(cpIDs))
 	for i, cp := range cpIDs {
 		out = append(out, midplat.ScriptTaskCreated{ID: int64(9000 + i), TaskID: "T-" + cp, CpID: cp})

@@ -41,19 +41,21 @@ const (
 // 中台模板是租户全局资源、按 name 无强隔离；为可靠取回 scriptId，上传时用唯一 mid_name，
 // 展示名 name 单独存（编辑=重传得新 scriptId）。lua_content 留存以便编辑器重开。
 type AutomationScript struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	UserID      uint      `gorm:"index;not null" json:"-"`
-	Store       bool      `gorm:"index;default:false" json:"store"`
-	ScriptID    int64     `gorm:"index" json:"scriptId"`   // 中台 scriptId
-	MidName     string    `gorm:"size:128;index" json:"-"` // 中台模板唯一名
-	Name        string    `gorm:"size:255" json:"name"`    // 展示名
-	Description string    `gorm:"size:1024" json:"description"`
-	Version     string    `gorm:"size:64" json:"version"`
-	LuaContent  string    `gorm:"type:text" json:"luaContent"`
-	FileName    string    `gorm:"size:255" json:"fileName"`
-	Status      string    `gorm:"size:16" json:"status"` // enabled / disabled
-	CreatedAt   time.Time `json:"createTime"`
-	UpdatedAt   time.Time `json:"updateTime"`
+	ID          uint   `gorm:"primaryKey" json:"id"`
+	UserID      uint   `gorm:"index;not null" json:"-"`
+	Store       bool   `gorm:"index;default:false" json:"store"`
+	ScriptID    int64  `gorm:"index" json:"scriptId"`   // 中台 scriptId
+	MidName     string `gorm:"size:128;index" json:"-"` // 中台模板唯一名
+	Name        string `gorm:"size:255" json:"name"`    // 展示名
+	Description string `gorm:"size:1024" json:"description"`
+	Version     string `gorm:"size:64" json:"version"`
+	LuaContent  string `gorm:"type:text" json:"luaContent"`
+	// ParamsSchema 是参数定义（JSON 数组，见 ParamSpec）；空 / NULL = 无参数，向后兼容老脚本。
+	ParamsSchema string    `gorm:"type:text" json:"paramsSchema"`
+	FileName     string    `gorm:"size:255" json:"fileName"`
+	Status       string    `gorm:"size:16" json:"status"` // enabled / disabled
+	CreatedAt    time.Time `json:"createTime"`
+	UpdatedAt    time.Time `json:"updateTime"`
 }
 
 func (AutomationScript) TableName() string { return "automation_scripts" }

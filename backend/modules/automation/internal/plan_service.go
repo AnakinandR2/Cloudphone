@@ -15,6 +15,7 @@ type PlanInput struct {
 	StartTime     string
 	EndTime       string
 	CpIDs         []string
+	Params        map[string]any // 计划级共用参数（中台 §7.3 只有一个全局 scriptParams，不支持逐台）
 }
 
 // ListPlans 我的周期计划。
@@ -43,6 +44,16 @@ func (s *serviceImpl) CreatePlan(userID int, in PlanInput) (*AutomationPlan, err
 	if script.ScriptID == 0 {
 		return nil, apperr.Validation("脚本尚未就绪，请稍后重试")
 	}
+	// 按 schema 校验并构造计划级共用参数（中台 §7.3 仅一个全局 scriptParams，无逐台）。
+	specs, err := validateSchema(script.ParamsSchema)
+	if err != nil {
+		return nil, err
+	}
+	eff, err := buildParams(specs, in.Params)
+	if err != nil {
+		return nil, err
+	}
+	scriptParams := serializeParams(eff)
 	valid, err := s.filterOwned(userID, in.CpIDs)
 	if err != nil {
 		return nil, err
@@ -62,6 +73,7 @@ func (s *serviceImpl) CreatePlan(userID int, in PlanInput) (*AutomationPlan, err
 	created, err := s.ops.CreatePlan(ctx, midplat.CreateScriptPlanRequest{
 		ScriptID:           script.ScriptID,
 		PlanName:           in.Name,
+		ScriptParams:       scriptParams,
 		ExecutionFrequency: in.Frequency,
 		IntervalValue:      in.IntervalValue,
 		ExecutionTime:      in.ExecutionTime,

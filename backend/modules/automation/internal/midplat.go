@@ -18,8 +18,8 @@ type midplatPort interface {
 	ToggleTemplate(ctx context.Context, scriptID int64, enabled bool) error
 	DeleteTemplate(ctx context.Context, scriptID int64) error
 
-	// 任务（§7.2 创建 / §7.6 查询报告）。
-	CreateTasks(ctx context.Context, scriptID int64, taskName, publishTime string, cpIDs []string) ([]midplat.ScriptTaskCreated, error)
+	// 任务（§7.2 创建 / §7.6 查询报告）。scriptParamsByCp：cpId → 该台 scriptParams JSON（无则空串）。
+	CreateTasks(ctx context.Context, scriptID int64, taskName, publishTime string, cpIDs []string, scriptParamsByCp map[string]string) ([]midplat.ScriptTaskCreated, error)
 	TaskStatuses(ctx context.Context, ids []int64) ([]midplat.ScriptTaskVO, error)
 	TaskReport(ctx context.Context, id int64) (*midplat.ScriptTaskReport, error)
 	TasksByPlan(ctx context.Context, planUID string) ([]midplat.ScriptTaskVO, error)
@@ -62,10 +62,10 @@ func (a *sdkAdapter) DeleteTemplate(ctx context.Context, scriptID int64) error {
 	return a.c.DeleteScriptTemplates(ctx, []int64{scriptID})
 }
 
-func (a *sdkAdapter) CreateTasks(ctx context.Context, scriptID int64, taskName, publishTime string, cpIDs []string) ([]midplat.ScriptTaskCreated, error) {
+func (a *sdkAdapter) CreateTasks(ctx context.Context, scriptID int64, taskName, publishTime string, cpIDs []string, scriptParamsByCp map[string]string) ([]midplat.ScriptTaskCreated, error) {
 	items := make([]midplat.CreateScriptTaskItem, 0, len(cpIDs))
 	for _, cp := range cpIDs {
-		items = append(items, midplat.CreateScriptTaskItem{CpID: cp, PublishTime: publishTime})
+		items = append(items, midplat.CreateScriptTaskItem{CpID: cp, PublishTime: publishTime, ScriptParams: scriptParamsByCp[cp]})
 	}
 	return a.c.CreateScriptTasks(ctx, midplat.CreateScriptTaskRequest{
 		ScriptID: scriptID, TaskName: taskName, TaskList: items,

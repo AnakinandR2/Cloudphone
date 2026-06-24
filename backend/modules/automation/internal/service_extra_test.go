@@ -82,7 +82,7 @@ func TestRequireOpsUnconfigured(t *testing.T) {
 	require.Error(t, err)
 	_, err = Service.CreatePlan(userE, PlanInput{Frequency: "INTERVAL", IntervalValue: 1})
 	require.Error(t, err)
-	_, err = Service.RunNow(userE, 1, []string{"cp"}, "")
+	_, err = Service.RunNow(userE, 1, []string{"cp"}, "", nil, nil)
 	require.Error(t, err)
 	_, err = Service.TaskDetail(userE, 1)
 	require.Error(t, err)
@@ -211,7 +211,7 @@ func TestRunNowScriptNotReady(t *testing.T) {
 	rec := &AutomationScript{UserID: userE, Name: "nr", Status: ScriptEnabled, ScriptID: 0}
 	require.NoError(t, Service.repo.createScript(rec))
 
-	_, err := Service.RunNow(userE, rec.ID, []string{"cp-nr1"}, "")
+	_, err := Service.RunNow(userE, rec.ID, []string{"cp-nr1"}, "", nil, nil)
 	require.Error(t, err, "scriptId=0 应拒绝")
 
 	_, err = Service.CreatePlan(userE, PlanInput{

@@ -9,7 +9,8 @@ import (
 )
 
 // RunNow 一次性立即运行：把脚本下发到指定（本人拥有的）云手机。
-func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, taskName string) ([]AutomationTask, error) {
+// params 为共用参数；perPhone 为逐台覆盖（cpId → 覆盖值），均按脚本 params_schema 校验。
+func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, taskName string, params map[string]any, perPhone map[string]map[string]any) ([]AutomationTask, error) {
 	if err := s.requireOps(); err != nil {
 		return nil, err
 	}
@@ -31,9 +32,33 @@ func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, tas
 		taskName = script.Name
 	}
 
+	// 按 schema 校验并构造每台的 scriptParams：默认共用一份，逐台覆盖时单独构造。
+	specs, err := validateSchema(script.ParamsSchema)
+	if err != nil {
+		return nil, err
+	}
+	sharedEff, err := buildParams(specs, params)
+	if err != nil {
+		return nil, err
+	}
+	sharedJSON := serializeParams(sharedEff)
+	paramsByCp := make(map[string]string, len(valid))
+	for _, cp := range valid {
+		ov := perPhone[cp]
+		if len(ov) == 0 {
+			paramsByCp[cp] = sharedJSON
+			continue
+		}
+		eff, berr := buildParams(specs, mergeParams(params, ov))
+		if berr != nil {
+			return nil, apperr.Validation("云手机 " + cp + "：" + berr.Error())
+		}
+		paramsByCp[cp] = serializeParams(eff)
+	}
+
 	ctx, cancel := opCtx()
 	defer cancel()
-	created, err := s.ops.CreateTasks(ctx, script.ScriptID, taskName, beijingNow(), valid)
+	created, err := s.ops.CreateTasks(ctx, script.ScriptID, taskName, beijingNow(), valid, paramsByCp)
 	if err != nil {
 		return nil, apperr.Internal("创建任务失败：" + err.Error())
 	}
