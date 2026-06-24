@@ -151,6 +151,18 @@ export default {
     deleteOk: '删除成功',
     errRequired: '请填写名称与脚本内容',
     delConfirm: '确认删除商店脚本「{name}」吗？将同时从中台移除。',
+    params: {
+      title: '参数定义',
+      hint: '（启动时按此渲染填参表单，脚本里用 params.xxx 读取）',
+      empty: '暂无参数。点下方「添加参数」声明运行时可填的参数。',
+      add: '添加参数',
+      key: '字段名 key',
+      label: '显示名',
+      required: '必填',
+      default: '默认值',
+      options: '候选值（enum，逗号分隔）',
+      desc: '说明（可选）',
+    },
   },
   userScripts: {
     title: '用户脚本治理',

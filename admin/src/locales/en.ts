@@ -151,6 +151,18 @@ export default {
     deleteOk: 'Deleted',
     errRequired: 'Name and script content are required',
     delConfirm: 'Delete store script "{name}"? It will also be removed from the platform.',
+    params: {
+      title: 'Parameters',
+      hint: '(rendered as a form at launch; read in the script via params.xxx)',
+      empty: 'No parameters. Click “Add parameter” to declare runtime inputs.',
+      add: 'Add parameter',
+      key: 'Field key',
+      label: 'Label',
+      required: 'Required',
+      default: 'Default',
+      options: 'Options (enum, comma-separated)',
+      desc: 'Description (optional)',
+    },
   },
   userScripts: {
     title: 'User Scripts',
