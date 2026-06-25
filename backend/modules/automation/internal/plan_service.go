@@ -45,7 +45,8 @@ func (s *serviceImpl) CreatePlan(userID int, in PlanInput) (*AutomationPlan, err
 		return nil, apperr.Validation("脚本尚未就绪，请稍后重试")
 	}
 	// 按 schema 校验并构造计划级共用参数（中台 §7.3 仅一个全局 scriptParams，无逐台）。
-	specs, err := validateSchema(script.ParamsSchema)
+	// schema 现 parse 自脚本顶部注释（唯一真源）。
+	_, specs, err := deriveSchema(script.LuaContent, "")
 	if err != nil {
 		return nil, err
 	}

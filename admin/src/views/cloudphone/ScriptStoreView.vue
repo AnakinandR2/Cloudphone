@@ -30,8 +30,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
-import { extractSchemaComment, parseSchema, upsertSchemaComment } from '@/utils/paramsComment'
-import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
+import { extractSchemaComment, parseSchema } from '@/utils/paramsComment'
+import ParamsSchemaDialog from './ParamsSchemaDialog.vue'
 
 const { t } = useI18n()
 
@@ -41,9 +41,12 @@ const filters = reactive({ q: '' })
 useQuerySync(filters, { q: '' })
 const dialog = ref(false)
 const editing = ref<AutomationScript | null>(null)
-const form = ref({ name: '', description: '', luaContent: '', paramsSchema: '', fileName: '' })
+const form = ref({ name: '', description: '', luaContent: '', fileName: '' })
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const paramsDialogOpen = ref(false)
+// 参数个数：现从 luaContent 顶部注释解析（脚本注释是唯一真源）。
+const paramCount = computed(() => parseSchema(extractSchemaComment(form.value.luaContent) || '').length)
 
 const columns = computed<ColumnDef<AutomationScript>[]>(() => [
   { accessorKey: 'name', id: 'name', header: t('scriptStore.colName'), meta: { label: 'scriptStore.colName' } },
@@ -68,12 +71,12 @@ onMounted(load)
 
 function openNew() {
   editing.value = null
-  form.value = { name: '', description: '', luaContent: '', paramsSchema: '', fileName: '' }
+  form.value = { name: '', description: '', luaContent: '', fileName: '' }
   dialog.value = true
 }
 function openEdit(s: AutomationScript) {
   editing.value = s
-  form.value = { name: s.name, description: s.description, luaContent: s.luaContent, paramsSchema: s.paramsSchema ?? '', fileName: s.fileName }
+  form.value = { name: s.name, description: s.description, luaContent: s.luaContent, fileName: s.fileName }
   dialog.value = true
 }
 function pickFile() {
@@ -87,24 +90,20 @@ async function onFile(e: Event) {
   form.value.fileName = f.name
   if (!form.value.name)
     form.value.name = f.name.replace(/\.lua$/i, '')
-  const inner = extractSchemaComment(form.value.luaContent)
-  if (inner)
-    form.value.paramsSchema = JSON.stringify(parseSchema(inner))
+  // 上传的 .lua 顶部注释随 luaContent 一起进来；参数计数 computed 自动反映。
 }
 async function save() {
   if (!form.value.name.trim() || !form.value.luaContent.trim()) {
     toast.error(t('scriptStore.errRequired'))
     return
   }
-  // schema 真源是脚本顶部注释：把参数定义写回 luaContent 注释再上传（后端从注释推导）。
-  const specs = form.value.paramsSchema ? parseSchema(form.value.paramsSchema) : []
-  const payload = { ...form.value, luaContent: upsertSchemaComment(form.value.luaContent, specs) }
+  // 参数已由参数对话框写进 luaContent 顶部注释，直接上传（后端从注释推导校验）。
   saving.value = true
   try {
     if (editing.value)
-      await automationApi.storeUpdate(editing.value.id, payload)
+      await automationApi.storeUpdate(editing.value.id, form.value)
     else
-      await automationApi.storeCreate(payload)
+      await automationApi.storeCreate(form.value)
     toast.success(t('scriptStore.saveOk'))
     dialog.value = false
     load()
@@ -208,9 +207,15 @@ async function remove(s: AutomationScript) {
           </div>
           <div class="grid gap-2">
             <Label>{{ t('scriptStore.params.title') }} <span class="text-xs text-muted-foreground">{{ t('scriptStore.params.hint') }}</span></Label>
-            <ParamsSchemaEditor v-model="form.paramsSchema" />
+            <Button variant="outline" class="justify-start" @click="paramsDialogOpen = true">
+              {{ t('scriptStore.params.edit') }}
+              <span class="ml-1 text-muted-foreground">({{ paramCount || t('scriptStore.params.none') }})</span>
+            </Button>
           </div>
         </div>
+
+        <ParamsSchemaDialog v-model:open="paramsDialogOpen" :lua="form.luaContent" @saved="(v) => (form.luaContent = v)" />
+
         <DialogFooter class="border-t p-3">
           <Button variant="outline" @click="dialog = false">
             {{ t('scriptStore.cancel') }}

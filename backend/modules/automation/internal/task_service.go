@@ -33,7 +33,8 @@ func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, tas
 	}
 
 	// 按 schema 校验并构造每台的 scriptParams：默认共用一份，逐台覆盖时单独构造。
-	specs, err := validateSchema(script.ParamsSchema)
+	// schema 现 parse 自脚本顶部注释（唯一真源）。
+	_, specs, err := deriveSchema(script.LuaContent, "")
 	if err != nil {
 		return nil, err
 	}

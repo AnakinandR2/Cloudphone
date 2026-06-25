@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AutomationScript } from '@/types/automation'
 import { Upload } from 'lucide-vue-next'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import automationApi from '@/api/modules/automation'
@@ -17,9 +17,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { extractSchemaComment, parseSchema, upsertSchemaComment } from '@/utils/paramsComment'
+import { extractSchemaComment, parseSchema } from '@/utils/paramsComment'
 import LuaEditor from './LuaEditor.vue'
-import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
+import ParamsSchemaDialog from './ParamsSchemaDialog.vue'
 
 const props = defineProps<{
   script: AutomationScript | null // 非空=编辑
@@ -33,10 +33,13 @@ const { t } = useI18n()
 const name = ref('')
 const description = ref('')
 const luaContent = ref('')
-const paramsSchema = ref('')
 const fileName = ref('')
 const saving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const paramsDialogOpen = ref(false)
+
+// 参数个数：现从 luaContent 顶部注释解析（脚本注释是唯一真源）。
+const paramCount = computed(() => parseSchema(extractSchemaComment(luaContent.value) || '').length)
 
 watch(open, (v) => {
   if (!v)
@@ -44,7 +47,6 @@ watch(open, (v) => {
   name.value = props.script?.name ?? ''
   description.value = props.script?.description ?? ''
   luaContent.value = props.script?.luaContent ?? ''
-  paramsSchema.value = props.script?.paramsSchema ?? ''
   fileName.value = props.script?.fileName ?? ''
 })
 
@@ -59,10 +61,7 @@ async function onFile(e: Event) {
   fileName.value = f.name
   if (!name.value)
     name.value = f.name.replace(/\.lua$/i, '')
-  // 上传的 .lua 若带顶部 schema 注释，解析进参数定义编辑器。
-  const inner = extractSchemaComment(luaContent.value)
-  if (inner)
-    paramsSchema.value = JSON.stringify(parseSchema(inner))
+  // 上传的 .lua 顶部注释随 luaContent 一起进来；参数计数 computed 会自动反映。
 }
 
 async function save() {
@@ -76,10 +75,8 @@ async function save() {
   }
   saving.value = true
   try {
-    // schema 真源是脚本顶部注释：把参数定义写回 luaContent 注释，再上传（后端从注释推导）。
-    const specs = paramsSchema.value ? parseSchema(paramsSchema.value) : []
-    const finalLua = upsertSchemaComment(luaContent.value, specs)
-    const body = { name: name.value, description: description.value, luaContent: finalLua, fileName: fileName.value }
+    // 参数已由参数对话框写进 luaContent 顶部注释，直接上传（后端从注释推导校验）。
+    const body = { name: name.value, description: description.value, luaContent: luaContent.value, fileName: fileName.value }
     if (props.script)
       await automationApi.updateScript(props.script.id, body)
     else
@@ -123,9 +120,14 @@ async function save() {
         </div>
         <div class="grid gap-2">
           <Label>{{ t('script.params.title') }} <span class="text-xs text-muted-foreground">{{ t('script.params.hint') }}</span></Label>
-          <ParamsSchemaEditor v-model="paramsSchema" />
+          <Button variant="outline" class="justify-start" @click="paramsDialogOpen = true">
+            {{ t('script.params.edit') }}
+            <span class="ml-1 text-muted-foreground">({{ paramCount || t('script.params.none') }})</span>
+          </Button>
         </div>
       </div>
+
+      <ParamsSchemaDialog v-model:open="paramsDialogOpen" :lua="luaContent" @saved="(v) => (luaContent = v)" />
 
       <DialogFooter class="border-t p-3">
         <Button variant="outline" @click="open = false">

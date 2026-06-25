@@ -9,6 +9,11 @@ import (
 
 const userP = 7100
 
+// commentLua 把数组格式 schema 包成脚本顶部 --[[ ]] 注释（真源），跟上脚本 body。
+func commentLua(schemaArray, body string) string {
+	return "--[[\n" + schemaArray + "\n]]\n" + body
+}
+
 // validateSchema：合法 / 重复 key / 非法 key / enum 缺候选 / 默认值类型不匹配 / 空。
 func TestValidateSchema(t *testing.T) {
 	// 空 = 无参数，合法。
@@ -65,8 +70,7 @@ func TestRunNowSharedParamsAndDefaults(t *testing.T) {
 	seedPhone(t, userP, "cp-s2")
 
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)",
-		ParamsSchema: `[{"key":"name","type":"string","required":true},{"key":"greet","type":"string","default":"hello"}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"name","type":"string","required":true},{"key":"greet","type":"string","default":"hello"}]`, "log(1)"),
 	})
 	require.NoError(t, err)
 
@@ -88,8 +92,7 @@ func TestRunNowPerPhoneOverride(t *testing.T) {
 	seedPhone(t, userP, "cp-o2")
 
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)",
-		ParamsSchema: `[{"key":"name","type":"string","required":true}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"name","type":"string","required":true}]`, "log(1)"),
 	})
 	require.NoError(t, err)
 
@@ -108,8 +111,7 @@ func TestRunNowRequiredMissing(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-r1")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)",
-		ParamsSchema: `[{"key":"name","type":"string","required":true}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"name","type":"string","required":true}]`, "log(1)"),
 	})
 	require.NoError(t, err)
 
@@ -123,8 +125,7 @@ func TestRunNowEnumInvalid(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-e1")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)",
-		ParamsSchema: `[{"key":"mode","type":"enum","options":["a","b"]}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"mode","type":"enum","options":["a","b"]}]`, "log(1)"),
 	})
 	require.NoError(t, err)
 
@@ -133,7 +134,7 @@ func TestRunNowEnumInvalid(t *testing.T) {
 	require.Error(t, err)
 }
 
-// 无 schema 的老脚本：scriptParams 为空（向后兼容）。
+// 无 schema 的脚本：scriptParams 为空（向后兼容）。
 func TestRunNowNoSchemaBackwardCompat(t *testing.T) {
 	f := &fakeOps{}
 	withFakeOps(t, f)
@@ -152,8 +153,7 @@ func TestCreatePlanGlobalParams(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-pp1")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)",
-		ParamsSchema: `[{"key":"store","type":"string","required":true}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"store","type":"string","required":true}]`, "log(1)"),
 	})
 	require.NoError(t, err)
 
@@ -166,29 +166,25 @@ func TestCreatePlanGlobalParams(t *testing.T) {
 	assert.Equal(t, `{"store":"shop1.com"}`, f.lastPlan.ScriptParams)
 }
 
-// 保存脚本时 schema 非法 → 拒绝。
+// 保存脚本时注释里 schema 非法 → 拒绝。
 func TestCreateScriptRejectsBadSchema(t *testing.T) {
 	f := &fakeOps{}
 	withFakeOps(t, f)
 	_, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "p", LuaContent: "log(1)", ParamsSchema: `[{"key":"1bad","type":"string"}]`,
+		Name: "p", LuaContent: commentLua(`[{"key":"1bad","type":"string"}]`, "log(1)"),
 	})
 	require.Error(t, err)
 }
 
 // schema 真源 = 脚本顶部 --[[ ]] 注释（中台 object 格式），int→number、bool→boolean 映射，保序。
-func TestCreateScriptDerivesSchemaFromComment(t *testing.T) {
-	f := &fakeOps{}
-	withFakeOps(t, f)
+func TestDeriveSchemaFromComment(t *testing.T) {
 	lua := "--[[\n{\n  \"name\": {\"desc\":\"名字\",\"type\":\"string\",\"required\":true},\n" +
 		"  \"count\": {\"desc\":\"次数\",\"type\":\"int\"},\n" +
 		"  \"flag\": {\"desc\":\"开关\",\"type\":\"bool\"},\n" +
 		"  \"tags\": {\"desc\":\"标签\",\"type\":\"array\"}\n}\n]]\n" +
 		"local name='${name}'\nlocal count=${count}\n"
-	rec, err := Service.CreateUserScript(userP, ScriptInput{Name: "c", LuaContent: lua})
-	require.NoError(t, err)
 
-	specs, err := validateSchema(rec.ParamsSchema)
+	_, specs, err := deriveSchema(lua, "")
 	require.NoError(t, err)
 	require.Len(t, specs, 4)
 	// 保序
@@ -202,29 +198,13 @@ func TestCreateScriptDerivesSchemaFromComment(t *testing.T) {
 	assert.Equal(t, ParamArray, specs[3].Type)
 }
 
-// 注释优先于显式字段（注释为真源）。
-func TestCommentOverridesSchemaField(t *testing.T) {
-	f := &fakeOps{}
-	withFakeOps(t, f)
-	lua := "--[[\n{\"fromComment\":{\"type\":\"string\"}}\n]]\nlog(1)"
-	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "c", LuaContent: lua, ParamsSchema: `[{"key":"fromField","type":"string"}]`,
-	})
-	require.NoError(t, err)
-	specs, err := validateSchema(rec.ParamsSchema)
-	require.NoError(t, err)
-	require.Len(t, specs, 1)
-	assert.Equal(t, "fromComment", specs[0].Key)
-}
-
 // array 值渲染成 Lua table 文本注入 scriptParams。
 func TestRunNowRendersLuaTable(t *testing.T) {
 	f := &fakeOps{}
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-tbl")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "t", LuaContent: "local a=${tags}",
-		ParamsSchema: `[{"key":"tags","type":"array"}]`,
+		Name: "t", LuaContent: commentLua(`[{"key":"tags","type":"array"}]`, "local a=${tags}"),
 	})
 	require.NoError(t, err)
 	_, err = Service.RunNow(userP, rec.ID, []string{"cp-tbl"}, "t",
@@ -239,8 +219,7 @@ func TestRunNowRendersLuaObject(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-obj")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "o", LuaContent: "local c=${cfg}",
-		ParamsSchema: `[{"key":"cfg","type":"object"}]`,
+		Name: "o", LuaContent: commentLua(`[{"key":"cfg","type":"object"}]`, "local c=${cfg}"),
 	})
 	require.NoError(t, err)
 	_, err = Service.RunNow(userP, rec.ID, []string{"cp-obj"}, "t",
@@ -255,8 +234,7 @@ func TestRunNowScalarsStayNative(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-sc")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "s", LuaContent: "x",
-		ParamsSchema: `[{"key":"name","type":"string"},{"key":"count","type":"number"},{"key":"flag","type":"boolean"}]`,
+		Name: "s", LuaContent: commentLua(`[{"key":"name","type":"string"},{"key":"count","type":"number"},{"key":"flag","type":"boolean"}]`, "x"),
 	})
 	require.NoError(t, err)
 	_, err = Service.RunNow(userP, rec.ID, []string{"cp-sc"}, "t",

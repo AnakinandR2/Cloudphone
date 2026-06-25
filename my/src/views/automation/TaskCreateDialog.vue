@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { extractSchemaComment, parseSchema } from '@/utils/paramsComment'
 import ParamsForm from './ParamsForm.vue'
 
 const props = defineProps<{
@@ -53,7 +54,11 @@ const sharedFormRef = ref<InstanceType<typeof ParamsForm> | null>(null)
 
 const runnablePhones = computed(() => phones.value.filter(p => p.cp_id))
 const selectedScript = computed(() => scripts.value.find(s => s.id === scriptId.value))
-const schema = computed(() => selectedScript.value?.paramsSchema ?? '')
+// schema 现从脚本顶部注释解析（脚本注释是唯一真源）。
+const schema = computed(() => {
+  const inner = extractSchemaComment(selectedScript.value?.luaContent ?? '')
+  return inner ? JSON.stringify(parseSchema(inner)) : ''
+})
 const hasParams = computed(() => {
   try {
     return Array.isArray(JSON.parse(schema.value || '[]')) && JSON.parse(schema.value).length > 0

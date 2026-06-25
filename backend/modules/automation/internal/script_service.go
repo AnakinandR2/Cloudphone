@@ -7,13 +7,12 @@ import (
 	"manager-backend/framework/apperr"
 )
 
-// ScriptInput 是新建/编辑脚本的入参。
+// ScriptInput 是新建/编辑脚本的入参。参数 schema 写在 LuaContent 顶部注释里，不单独传。
 type ScriptInput struct {
-	Name         string
-	Description  string
-	LuaContent   string
-	FileName     string
-	ParamsSchema string // 参数定义 JSON 数组（见 ParamSpec）；空=无参数
+	Name        string
+	Description string
+	LuaContent  string
+	FileName    string
 }
 
 // ListUserScripts 我的脚本（store=false，本人）。
@@ -56,21 +55,19 @@ func (s *serviceImpl) createScript(ownerID uint, store bool, in ScriptInput) (*A
 	if strings.TrimSpace(in.Name) == "" {
 		return nil, apperr.BadRequest("脚本名称不能为空")
 	}
-	// schema 真源 = 脚本顶部 --[[ ]] 注释；回退到显式字段。规范化存库供填参表单用。
-	normSchema, _, err := deriveSchema(in.LuaContent, in.ParamsSchema)
-	if err != nil {
+	// 保存时校验顶部注释里的 schema（非法即拒），但不单独存——真源就是 LuaContent 注释。
+	if _, _, err := deriveSchema(in.LuaContent, ""); err != nil {
 		return nil, err
 	}
 	rec := &AutomationScript{
-		UserID:       ownerID,
-		Store:        store,
-		Name:         in.Name,
-		Description:  in.Description,
-		Version:      "1.0.0",
-		LuaContent:   in.LuaContent,
-		ParamsSchema: normSchema,
-		FileName:     in.FileName,
-		Status:       ScriptEnabled,
+		UserID:      ownerID,
+		Store:       store,
+		Name:        in.Name,
+		Description: in.Description,
+		Version:     "1.0.0",
+		LuaContent:  in.LuaContent,
+		FileName:    in.FileName,
+		Status:      ScriptEnabled,
 	}
 	if err := s.repo.createScript(rec); err != nil {
 		return nil, err
@@ -125,15 +122,13 @@ func (s *serviceImpl) updateScript(rec *AutomationScript, in ScriptInput) (*Auto
 	if strings.TrimSpace(in.LuaContent) == "" {
 		return nil, apperr.BadRequest("脚本内容不能为空")
 	}
-	normSchema, _, err := deriveSchema(in.LuaContent, in.ParamsSchema)
-	if err != nil {
+	if _, _, err := deriveSchema(in.LuaContent, ""); err != nil {
 		return nil, err
 	}
 	oldScriptID := rec.ScriptID
 	rec.Name = in.Name
 	rec.Description = in.Description
 	rec.LuaContent = in.LuaContent
-	rec.ParamsSchema = normSchema
 	if in.FileName != "" {
 		rec.FileName = in.FileName
 	}

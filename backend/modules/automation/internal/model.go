@@ -50,12 +50,11 @@ type AutomationScript struct {
 	Description string `gorm:"size:1024" json:"description"`
 	Version     string `gorm:"size:64" json:"version"`
 	LuaContent  string `gorm:"type:text" json:"luaContent"`
-	// ParamsSchema 是参数定义（JSON 数组，见 ParamSpec）；空 / NULL = 无参数，向后兼容老脚本。
-	ParamsSchema string    `gorm:"type:text" json:"paramsSchema"`
-	FileName     string    `gorm:"size:255" json:"fileName"`
-	Status       string    `gorm:"size:16" json:"status"` // enabled / disabled
-	CreatedAt    time.Time `json:"createTime"`
-	UpdatedAt    time.Time `json:"updateTime"`
+	// 参数 schema 不再单独存列：真源是 lua_content 顶部 --[[ ]] 注释，需要时现 parse。
+	FileName  string    `gorm:"size:255" json:"fileName"`
+	Status    string    `gorm:"size:16" json:"status"` // enabled / disabled
+	CreatedAt time.Time `json:"createTime"`
+	UpdatedAt time.Time `json:"updateTime"`
 }
 
 func (AutomationScript) TableName() string { return "automation_scripts" }

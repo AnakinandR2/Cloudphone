@@ -21,7 +21,6 @@ export interface AutomationScript {
   description: string
   version: string
   luaContent: string
-  paramsSchema: string // 参数定义 JSON 数组（空=无参数）
   fileName: string
   status: string // enabled / disabled
   createTime: string
@@ -39,7 +38,6 @@ export interface ScriptInput {
   description: string
   luaContent: string
   fileName?: string
-  paramsSchema?: string
 }
 
 /** 周期计划 */

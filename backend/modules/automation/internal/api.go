@@ -27,20 +27,16 @@ func paramUint(c *gin.Context, key string) (uint, bool) {
 	return uint(n), true
 }
 
-// scriptBody 是新建/编辑脚本的请求体。
+// scriptBody 是新建/编辑脚本的请求体。参数 schema 写在 luaContent 顶部注释里。
 type scriptBody struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	LuaContent   string `json:"luaContent"`
-	FileName     string `json:"fileName"`
-	ParamsSchema string `json:"paramsSchema"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	LuaContent  string `json:"luaContent"`
+	FileName    string `json:"fileName"`
 }
 
 func (b scriptBody) toInput() ScriptInput {
-	return ScriptInput{
-		Name: b.Name, Description: b.Description, LuaContent: b.LuaContent,
-		FileName: b.FileName, ParamsSchema: b.ParamsSchema,
-	}
+	return ScriptInput{Name: b.Name, Description: b.Description, LuaContent: b.LuaContent, FileName: b.FileName}
 }
 
 // ---- 脚本 ----
