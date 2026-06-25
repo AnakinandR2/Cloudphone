@@ -42,7 +42,7 @@ const types: { value: ParamType, label: string }[] = [
 
 let seq = 0
 const rows = ref<Row[]>([])
-let syncing = false
+let lastEmitted = '' // 自己发出去的最近一次 model 值，用于跳过回环 re-parse
 
 function specToRow(s: ParamSpec): Row {
   const row: Row = {
@@ -77,8 +77,11 @@ function parse(raw: string) {
 }
 
 watch(model, (v) => {
-  if (!syncing)
-    parse(v ?? '')
+  // 只在外部变化时 re-parse；自己 emit 的值（与 lastEmitted 相同）跳过，
+  // 否则输入候选项时整表会被重建、popover/输入框消失。
+  if ((v ?? '') === lastEmitted)
+    return
+  parse(v ?? '')
 }, { immediate: true })
 
 function rowToSpec(r: Row): ParamSpec {
@@ -112,9 +115,8 @@ function rowToSpec(r: Row): ParamSpec {
 
 function emitSchema() {
   const specs = rows.value.map(rowToSpec)
-  syncing = true
-  model.value = specs.length ? JSON.stringify(specs) : ''
-  syncing = false
+  lastEmitted = specs.length ? JSON.stringify(specs) : ''
+  model.value = lastEmitted
 }
 
 watch(rows, emitSchema, { deep: true })

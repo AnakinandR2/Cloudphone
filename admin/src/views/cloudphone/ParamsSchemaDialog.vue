@@ -37,7 +37,7 @@ function save() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-2xl">
+    <DialogContent class="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-4xl">
       <DialogHeader class="border-b p-4">
         <DialogTitle>{{ t('scriptStore.params.title') }}</DialogTitle>
         <DialogDescription>{{ t('scriptStore.params.hint') }}</DialogDescription>

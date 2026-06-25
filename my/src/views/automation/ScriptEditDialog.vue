@@ -109,18 +109,16 @@ async function save() {
           <Textarea v-model="description" :rows="2" :placeholder="t('script.descPh')" />
         </div>
         <div class="grid gap-2">
-          <Label>{{ t('script.params.title') }} <span class="text-xs text-muted-foreground">{{ t('script.params.hint') }}</span></Label>
-          <Button variant="outline" class="justify-start" @click="paramsDialogOpen = true">
-            {{ t('script.params.edit') }}
-            <span class="ml-1 text-muted-foreground">({{ paramCount || t('script.params.none') }})</span>
-          </Button>
-        </div>
-        <div class="grid gap-2">
           <div class="flex items-center justify-between">
             <Label>{{ t('script.code') }} <span class="text-xs text-muted-foreground">(Lua)</span></Label>
-            <Button variant="outline" size="sm" class="h-7" @click="pickFile">
-              <Upload class="size-3.5" /> {{ t('script.upload') }}
-            </Button>
+            <div class="flex items-center gap-2">
+              <Button variant="outline" size="sm" class="h-7" @click="paramsDialogOpen = true">
+                {{ t('script.params.edit') }}<span class="ml-1 text-muted-foreground">({{ paramCount || t('script.params.none') }})</span>
+              </Button>
+              <Button variant="outline" size="sm" class="h-7" @click="pickFile">
+                <Upload class="size-3.5" /> {{ t('script.upload') }}
+              </Button>
+            </div>
             <input ref="fileInput" type="file" accept=".lua,text/*" class="hidden" @change="onFile">
           </div>
           <LuaEditor v-model="luaContent" />

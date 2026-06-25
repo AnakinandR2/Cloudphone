@@ -196,18 +196,16 @@ async function remove(s: AutomationScript) {
             <Textarea v-model="form.description" :rows="2" />
           </div>
           <div class="grid gap-2">
-            <Label>{{ t('scriptStore.params.title') }} <span class="text-xs text-muted-foreground">{{ t('scriptStore.params.hint') }}</span></Label>
-            <Button variant="outline" class="justify-start" @click="paramsDialogOpen = true">
-              {{ t('scriptStore.params.edit') }}
-              <span class="ml-1 text-muted-foreground">({{ paramCount || t('scriptStore.params.none') }})</span>
-            </Button>
-          </div>
-          <div class="grid gap-2">
             <div class="flex items-center justify-between">
               <Label>{{ t('scriptStore.code') }} <span class="text-xs text-muted-foreground">(Lua)</span></Label>
-              <Button variant="outline" size="sm" class="h-7" @click="pickFile">
-                <Upload class="size-3.5" /> {{ t('scriptStore.upload') }}
-              </Button>
+              <div class="flex items-center gap-2">
+                <Button variant="outline" size="sm" class="h-7" @click="paramsDialogOpen = true">
+                  {{ t('scriptStore.params.edit') }}<span class="ml-1 text-muted-foreground">({{ paramCount || t('scriptStore.params.none') }})</span>
+                </Button>
+                <Button variant="outline" size="sm" class="h-7" @click="pickFile">
+                  <Upload class="size-3.5" /> {{ t('scriptStore.upload') }}
+                </Button>
+              </div>
               <input ref="fileInput" type="file" accept=".lua,text/*" class="hidden" @change="onFile">
             </div>
             <Textarea v-model="form.luaContent" :rows="12" class="font-mono text-xs" spellcheck="false" />
