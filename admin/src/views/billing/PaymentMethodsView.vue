@@ -137,7 +137,7 @@ async function save() {
 <template>
   <Card>
     <CardContent class="pt-6">
-      <div class="max-w-3xl space-y-5">
+      <div class="max-w-6xl space-y-5">
         <div class="flex items-start justify-between gap-3">
           <div class="space-y-1.5">
             <h2 class="text-lg font-semibold">
@@ -151,101 +151,132 @@ async function save() {
             {{ saving ? t('common.loading') : t('crud.save') }}
           </Button>
         </div>
-        <div class="divide-y rounded-md border">
-          <div
-            v-for="(m, idx) in methods"
-            :key="m.code"
-            class="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 px-3 py-2.5 transition-colors"
-            :class="[
-              dragIndex === idx ? 'opacity-50' : '',
-              overIndex === idx && dragIndex !== null && dragIndex !== idx ? 'bg-accent' : '',
-            ]"
-            draggable="true"
-            @dragstart="onDragStart(idx)"
-            @dragover.prevent="onDragOver(idx)"
-            @drop="onDrop(idx)"
-            @dragend="onDragEnd"
-          >
-            <span class="text-muted-foreground cursor-grab active:cursor-grabbing" :title="t('billing.payDragHint')">
-              <GripVertical class="size-4" />
-            </span>
-            <span class="text-muted-foreground w-6 text-center text-xs tabular-nums">{{ idx + 1 }}</span>
-            <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
-              <!-- 渠道 Logo：小预览（img，回退首字方块）+ 上传按钮 + 可编辑 URL 文本框 -->
-              <div class="flex flex-col gap-1">
-                <span class="text-muted-foreground text-xs">{{ t('billing.payLogo') }}</span>
-                <div class="flex items-center gap-2">
-                  <span class="bg-muted/40 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded border">
-                    <Loader2 v-if="uploading[m.code]" class="text-muted-foreground size-4 animate-spin" />
-                    <img
-                      v-else-if="m.logo_url && !logoError[m.code]"
-                      :src="m.logo_url"
-                      class="size-full object-contain"
-                      :alt="m.name"
-                      @error="logoError[m.code] = true"
-                    >
-                    <span v-else class="text-muted-foreground text-xs font-medium">{{ (m.name || m.code).slice(0, 1) }}</span>
+
+        <!-- 表格展示：仅左侧手柄可拖拽排序（行本身不 draggable，便于在输入框里框选文本）。 -->
+        <div class="overflow-x-auto rounded-md border">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-muted-foreground bg-muted/40 border-b text-left text-xs">
+                <th class="w-8 px-2 py-2" />
+                <th class="w-10 px-2 py-2 text-center">
+                  #
+                </th>
+                <th class="px-3 py-2 font-medium">
+                  {{ t('billing.payName') }}
+                </th>
+                <th class="px-3 py-2 font-medium">
+                  {{ t('billing.payLogo') }}
+                </th>
+                <th class="px-3 py-2 font-medium">
+                  {{ t('billing.payFeePercent') }}
+                </th>
+                <th class="px-3 py-2 font-medium">
+                  {{ t('billing.payFeeFixed') }}
+                </th>
+                <th class="px-3 py-2 font-medium">
+                  {{ t('billing.payFeeFreeThreshold') }}
+                </th>
+                <th class="w-16 px-3 py-2 text-center font-medium">
+                  {{ t('billing.payEnabled') }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              <tr
+                v-for="(m, idx) in methods"
+                :key="m.code"
+                class="transition-colors"
+                :class="[
+                  dragIndex === idx ? 'opacity-50' : '',
+                  overIndex === idx && dragIndex !== null && dragIndex !== idx ? 'bg-accent' : '',
+                ]"
+                @dragover.prevent="onDragOver(idx)"
+                @drop="onDrop(idx)"
+              >
+                <!-- 拖拽手柄：只有它 draggable，避免在输入框框选时误触发拖拽 -->
+                <td class="px-2 py-2 align-middle">
+                  <span
+                    class="text-muted-foreground inline-flex cursor-grab active:cursor-grabbing"
+                    :title="t('billing.payDragHint')"
+                    draggable="true"
+                    @dragstart="onDragStart(idx)"
+                    @dragend="onDragEnd"
+                  >
+                    <GripVertical class="size-4" />
                   </span>
-                  <label class="inline-flex">
-                    <Button
-                      as="span"
-                      variant="outline"
-                      size="sm"
-                      class="h-8 cursor-pointer gap-1"
-                    >
-                      <Upload class="size-3.5" />
-                      {{ t('billing.payLogoUpload') }}
-                    </Button>
-                    <input type="file" accept="image/*" class="hidden" :disabled="uploading[m.code]" @change="(e) => pickLogo(e, m)">
-                  </label>
-                  <Input v-model="m.logo_url" class="h-8 w-52" :placeholder="t('billing.payLogoUrlPlaceholder')" @update:model-value="logoError[m.code] = false" />
-                </div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="font-mono text-xs text-muted-foreground">{{ m.code }}</span>
-                <Input v-model="m.name" class="h-8 w-44" :placeholder="t('billing.payName')" />
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-muted-foreground text-xs">{{ t('billing.payFeePercent') }}</span>
-                <Input
-                  v-model.number="m.feePercent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  class="h-8 w-28"
-                  :disabled="m.code === 'balance'"
-                />
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-muted-foreground text-xs">{{ t('billing.payFeeFixed') }}</span>
-                <Input
-                  v-model.number="m.feeFixed"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="h-8 w-28"
-                  :disabled="m.code === 'balance'"
-                />
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-muted-foreground text-xs">{{ t('billing.payFeeFreeThreshold') }}</span>
-                <Input
-                  v-model.number="m.feeFreeThreshold"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="h-8 w-28"
-                  :disabled="m.code === 'balance'"
-                />
-              </div>
-            </div>
-            <div class="flex items-center gap-2 self-center">
-              <span class="text-muted-foreground text-xs">{{ m.enabled ? t('billing.payEnabled') : t('billing.payDisabled') }}</span>
-              <Switch v-model="m.enabled" />
-            </div>
-          </div>
+                </td>
+                <td class="text-muted-foreground px-2 py-2 text-center align-middle text-xs tabular-nums">
+                  {{ idx + 1 }}
+                </td>
+                <td class="px-3 py-2 align-middle">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-muted-foreground font-mono text-xs">{{ m.code }}</span>
+                    <Input v-model="m.name" class="h-8 w-40" :placeholder="t('billing.payName')" />
+                  </div>
+                </td>
+                <!-- 渠道 Logo：小预览（img，回退首字方块）+ 上传按钮 + 可编辑 URL 文本框 -->
+                <td class="px-3 py-2 align-middle">
+                  <div class="flex items-center gap-2">
+                    <span class="bg-muted/40 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded border">
+                      <Loader2 v-if="uploading[m.code]" class="text-muted-foreground size-4 animate-spin" />
+                      <img
+                        v-else-if="m.logo_url && !logoError[m.code]"
+                        :src="m.logo_url"
+                        class="size-full object-contain"
+                        :alt="m.name"
+                        @error="logoError[m.code] = true"
+                      >
+                      <span v-else class="text-muted-foreground text-xs font-medium">{{ (m.name || m.code).slice(0, 1) }}</span>
+                    </span>
+                    <label class="inline-flex">
+                      <Button as="span" variant="outline" size="sm" class="h-8 cursor-pointer gap-1">
+                        <Upload class="size-3.5" />
+                        {{ t('billing.payLogoUpload') }}
+                      </Button>
+                      <input type="file" accept="image/*" class="hidden" :disabled="uploading[m.code]" @change="(e) => pickLogo(e, m)">
+                    </label>
+                    <Input v-model="m.logo_url" class="h-8 w-44" :placeholder="t('billing.payLogoUrlPlaceholder')" @update:model-value="logoError[m.code] = false" />
+                  </div>
+                </td>
+                <td class="px-3 py-2 align-middle">
+                  <Input
+                    v-model.number="m.feePercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    class="h-8 w-24"
+                    :disabled="m.code === 'balance'"
+                  />
+                </td>
+                <td class="px-3 py-2 align-middle">
+                  <Input
+                    v-model.number="m.feeFixed"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="h-8 w-24"
+                    :disabled="m.code === 'balance'"
+                  />
+                </td>
+                <td class="px-3 py-2 align-middle">
+                  <Input
+                    v-model.number="m.feeFreeThreshold"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="h-8 w-24"
+                    :disabled="m.code === 'balance'"
+                  />
+                </td>
+                <td class="px-3 py-2 text-center align-middle">
+                  <Switch v-model="m.enabled" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+
         <p v-if="!methods.length && !loading" class="text-muted-foreground py-6 text-center text-sm">
           {{ t('billing.payEmpty') }}
         </p>
