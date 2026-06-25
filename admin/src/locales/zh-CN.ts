@@ -164,6 +164,7 @@ export default {
       value: '值',
       optionsCol: '候选项',
       enumPh: '候选值，逗号分隔',
+      choose: '请选择',
       required: '必填',
       default: '默认值',
       options: '候选值（enum，逗号分隔）',

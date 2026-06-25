@@ -164,6 +164,7 @@ export default {
       value: 'Value',
       optionsCol: 'Options',
       enumPh: 'Options, comma-separated',
+      choose: 'Select',
       required: 'Required',
       default: 'Default',
       options: 'Options (enum, comma-separated)',

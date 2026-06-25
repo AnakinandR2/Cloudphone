@@ -6,7 +6,9 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 
 // v-model 是参数定义的 JSON 字符串（我们的数组格式）。
@@ -136,7 +138,6 @@ function removeRow(rid: number) {
         <tr class="text-left text-xs text-muted-foreground">
           <th class="font-medium">{{ t('scriptStore.params.key') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.type') }}</th>
-          <th class="font-medium">{{ t('scriptStore.params.optionsCol') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.value') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.required') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.desc') }}</th>
@@ -148,16 +149,28 @@ function removeRow(rid: number) {
           <td class="w-32">
             <Input v-model="r.key" class="h-8 font-mono" :placeholder="t('scriptStore.params.key')" />
           </td>
-          <td class="w-24">
-            <NativeSelect v-model="r.type" class="h-8 w-24">
-              <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
-                {{ ty.label }}
-              </NativeSelectOption>
-            </NativeSelect>
-          </td>
-          <td class="w-40">
-            <Input v-if="r.type === 'enum'" v-model="r.optionsText" class="h-8" :placeholder="t('scriptStore.params.enumPh')" />
-            <span v-else class="text-xs text-muted-foreground">—</span>
+          <td>
+            <div class="flex items-center gap-1">
+              <NativeSelect v-model="r.type" class="h-8 w-24">
+                <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
+                  {{ ty.label }}
+                </NativeSelectOption>
+              </NativeSelect>
+              <!-- enum：候选项用 popover 编辑 -->
+              <Popover v-if="r.type === 'enum'">
+                <PopoverTrigger as-child>
+                  <Button variant="outline" size="sm" class="h-8 px-2 text-xs">
+                    {{ t('scriptStore.params.optionsCol') }}<span class="ml-1 text-muted-foreground">({{ optionsOf(r).length }})</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent class="w-64" align="start">
+                  <div class="grid gap-1.5">
+                    <Label class="text-xs">{{ t('scriptStore.params.optionsCol') }}</Label>
+                    <Textarea v-model="r.optionsText" :rows="3" class="text-xs" :placeholder="t('scriptStore.params.enumPh')" />
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </td>
           <td>
             <label v-if="r.type === 'boolean'" class="flex h-8 items-center gap-2">
