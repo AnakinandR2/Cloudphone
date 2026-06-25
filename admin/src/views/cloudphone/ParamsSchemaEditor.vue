@@ -18,10 +18,16 @@ interface Row {
   key: string
   type: ParamType
   required: boolean
-  // 「值」列：string/number → 文本/数字；enum → 候选项（逗号分隔）；table → Lua 文本；bool 用 valueBool
+  optionsText: string // 仅 enum：候选项（逗号分隔）
+  // 「值」列=默认值：string/number/table → 文本/数字/Lua 文本；enum → 选中的默认；bool 用 valueBool
   valueText: string
   valueBool: boolean
   description: string
+}
+
+// 解析某行 enum 的候选项。
+function optionsOf(r: Row): string[] {
+  return String(r.optionsText ?? '').split(/[,\n]/).map(s => s.trim()).filter(Boolean)
 }
 
 const types: { value: ParamType, label: string }[] = [
@@ -42,13 +48,12 @@ function specToRow(s: ParamSpec): Row {
     key: s.key ?? '',
     type: s.type ?? 'string',
     required: !!s.required,
+    optionsText: (s.options ?? []).join(', '),
     valueText: '',
     valueBool: false,
     description: s.description ?? '',
   }
-  if (s.type === 'enum')
-    row.valueText = (s.options ?? []).join(', ')
-  else if (s.type === 'boolean')
+  if (s.type === 'boolean')
     row.valueBool = s.default === true
   else if (s.default !== undefined && s.default !== null)
     row.valueText = String(s.default)
@@ -78,21 +83,24 @@ function rowToSpec(r: Row): ParamSpec {
   const spec: ParamSpec = { key: r.key.trim(), type: r.type }
   if (r.required)
     spec.required = true
+  const valTxt = String(r.valueText ?? '').trim() // 数字输入可能给到 number，统一转字符串
   if (r.type === 'enum') {
-    spec.options = r.valueText.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+    const opts = optionsOf(r)
+    spec.options = opts
+    if (valTxt && opts.includes(valTxt))
+      spec.default = valTxt
   }
   else if (r.type === 'boolean') {
     spec.default = r.valueBool
   }
-  else if (r.valueText.trim()) {
-    const txt = r.valueText.trim()
+  else if (valTxt) {
     if (r.type === 'number') {
-      const n = Number(txt)
+      const n = Number(valTxt)
       if (!Number.isNaN(n))
         spec.default = n
     }
     else {
-      spec.default = txt // string / table（Lua 文本）
+      spec.default = valTxt // string / table（Lua 文本）
     }
   }
   if (r.description.trim())
@@ -110,7 +118,7 @@ function emitSchema() {
 watch(rows, emitSchema, { deep: true })
 
 function addRow() {
-  rows.value.push({ rid: ++seq, key: '', type: 'string', required: false, valueText: '', valueBool: false, description: '' })
+  rows.value.push({ rid: ++seq, key: '', type: 'string', required: false, optionsText: '', valueText: '', valueBool: false, description: '' })
 }
 function removeRow(rid: number) {
   rows.value = rows.value.filter(r => r.rid !== rid)
@@ -128,6 +136,7 @@ function removeRow(rid: number) {
         <tr class="text-left text-xs text-muted-foreground">
           <th class="font-medium">{{ t('scriptStore.params.key') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.type') }}</th>
+          <th class="font-medium">{{ t('scriptStore.params.optionsCol') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.value') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.required') }}</th>
           <th class="font-medium">{{ t('scriptStore.params.desc') }}</th>
@@ -146,13 +155,24 @@ function removeRow(rid: number) {
               </NativeSelectOption>
             </NativeSelect>
           </td>
+          <td class="w-40">
+            <Input v-if="r.type === 'enum'" v-model="r.optionsText" class="h-8" :placeholder="t('scriptStore.params.enumPh')" />
+            <span v-else class="text-xs text-muted-foreground">—</span>
+          </td>
           <td>
             <label v-if="r.type === 'boolean'" class="flex h-8 items-center gap-2">
               <Checkbox :model-value="r.valueBool" @update:model-value="(v) => (r.valueBool = v === true)" />
               <span class="text-muted-foreground">{{ r.valueBool ? 'true' : 'false' }}</span>
             </label>
             <Input v-else-if="r.type === 'number'" v-model="r.valueText" type="number" class="h-8" />
-            <Input v-else-if="r.type === 'enum'" v-model="r.valueText" class="h-8" :placeholder="t('scriptStore.params.enumPh')" />
+            <NativeSelect v-else-if="r.type === 'enum'" :model-value="r.valueText" class="h-8" @update:model-value="(v?: unknown) => (r.valueText = String(v ?? ''))">
+              <NativeSelectOption value="">
+                {{ t('scriptStore.params.choose') }}
+              </NativeSelectOption>
+              <NativeSelectOption v-for="o in optionsOf(r)" :key="o" :value="o">
+                {{ o }}
+              </NativeSelectOption>
+            </NativeSelect>
             <Textarea
               v-else-if="r.type === 'table'"
               :model-value="r.valueText"

@@ -57,6 +57,7 @@ export default {
       key: '字段名 key',
       type: '类型',
       value: '值',
+      optionsCol: '候选项',
       enumPh: '候选值，逗号分隔',
       required: '必填',
       default: '默认值',
@@ -1450,6 +1451,7 @@ export default {
       video: '视频',
       audio: '音频',
       document: '文档',
+      app: '应用',
       other: '其他',
     },
     folder: {

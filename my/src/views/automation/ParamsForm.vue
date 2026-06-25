@@ -37,7 +37,7 @@ watch(specs, (list) => {
     const cur = model.value[s.key]
     if (cur !== undefined)
       next[s.key] = cur
-    else if (props.seedDefaults && s.type !== 'enum' && s.default !== undefined)
+    else if (props.seedDefaults && s.default !== undefined)
       next[s.key] = s.default
   }
   model.value = next

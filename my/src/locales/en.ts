@@ -57,6 +57,7 @@ export default {
       key: 'Field key',
       type: 'Type',
       value: 'Value',
+      optionsCol: 'Options',
       enumPh: 'Options, comma-separated',
       required: 'Required',
       default: 'Default',
@@ -1450,6 +1451,7 @@ export default {
       video: 'Video',
       audio: 'Audio',
       document: 'Document',
+      app: 'App',
       other: 'Other',
     },
     folder: {
