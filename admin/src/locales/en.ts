@@ -154,7 +154,7 @@ export default {
     delConfirm: 'Delete store script "{name}"? It will also be removed from the platform.',
     params: {
       title: 'Parameters',
-      hint: '(rendered as a form at launch; reference in the script via ${key})',
+      hint: "(rendered as a form at launch; reference in the script via ${'{'}key{'}'})",
       edit: 'Edit parameters',
       none: 'none',
       empty: 'No parameters. Click “Add parameter” to declare runtime inputs.',
