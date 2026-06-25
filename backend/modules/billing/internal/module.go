@@ -78,6 +78,7 @@ func (m *billingModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs 
 		admin.PUT("/pricing", staff.PermissionMiddleware("billing:manage"), AdminSavePricing)
 		admin.GET("/payment-methods", staff.PermissionMiddleware("billing:view"), AdminGetPaymentMethods)
 		admin.PUT("/payment-methods", staff.PermissionMiddleware("billing:manage"), AdminSavePaymentMethods)
+		admin.POST("/payment-methods/upload", staff.PermissionMiddleware("billing:manage"), UploadPayMethodLogo)
 		admin.GET("/recharge-presets", staff.PermissionMiddleware("billing:view"), AdminGetRechargePresets)
 		admin.PUT("/recharge-presets", staff.PermissionMiddleware("billing:manage"), AdminSaveRechargePresets)
 		admin.GET("/notices", staff.PermissionMiddleware("billing:view"), AdminGetNotices)

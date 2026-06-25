@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { PaymentMethod } from '@/types/billing'
 import { Check } from 'lucide-vue-next'
-import { computed, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
+import { computeFeeCents, feeWaived, fmtCents } from '@/utils/money'
 
 // 支付方式选择 + 确认支付。
 // allowBalance：充值=false（不能用余额买余额），其它=true。
@@ -31,6 +32,20 @@ const STYLE: Record<string, { mark: string, color: string }> = {
 }
 function styleOf(code: string) {
   return STYLE[code] ?? { mark: code.slice(0, 1).toUpperCase(), color: '#64748b' }
+}
+
+// logo 加载失败的 code 集合 → 回退首字方块（避免白块）。
+const logoError = reactive<Record<string, boolean>>({})
+
+// 每个支付方式在当前订单金额下的手续费展示（只显金额）：
+// 无配置(bps=0&&fixed=0) → 无手续费；满额免(达标且本应收>0) → 免手续费；否则 「{手续费} ¥{rawFee}」。
+// amountCents<=0（金额未定）返回空串 → 不显示该行。
+function feeTextOf(m: PaymentMethod): string {
+  if (props.amountCents <= 0) return ''
+  if (m.fee_percent_bps === 0 && m.fee_fixed_cents === 0) return t('billing.purchase2.feeNone')
+  const rawFee = computeFeeCents(props.amountCents, m.fee_percent_bps, m.fee_fixed_cents)
+  if (rawFee > 0 && feeWaived(props.amountCents, m.fee_free_threshold_cents)) return t('billing.purchase2.feeWaived')
+  return `${t('billing.purchase2.sumFee')} ¥${fmtCents(rawFee)}`
 }
 
 // 可选支付方式：启用 + 按 sort 排序；allowBalance=false 时剔除余额。
@@ -66,8 +81,18 @@ const payDisabled = computed(() =>
         :class="model === m.code ? 'border-primary bg-primary/5 ring-primary/30 ring-1' : 'hover:bg-muted/60'"
         @click="model = m.code"
       >
-        <span class="flex size-6 items-center justify-center rounded text-xs font-bold text-white" :style="{ backgroundColor: styleOf(m.code).color }">{{ styleOf(m.code).mark }}</span>
-        <span class="text-sm font-medium">{{ m.name }}</span>
+        <img
+          v-if="m.logo_url && !logoError[m.code]"
+          :src="m.logo_url"
+          :alt="m.name"
+          class="size-6 shrink-0 rounded object-contain"
+          @error="logoError[m.code] = true"
+        >
+        <span v-else class="flex size-6 shrink-0 items-center justify-center rounded text-xs font-bold text-white" :style="{ backgroundColor: styleOf(m.code).color }">{{ styleOf(m.code).mark }}</span>
+        <span class="flex min-w-0 flex-col">
+          <span class="text-sm font-medium">{{ m.name }}</span>
+          <span v-if="feeTextOf(m)" class="text-muted-foreground text-xs tabular-nums">{{ feeTextOf(m) }}</span>
+        </span>
         <Check v-if="model === m.code" class="text-primary absolute top-1/2 right-2 size-3.5 -translate-y-1/2" />
       </button>
     </div>

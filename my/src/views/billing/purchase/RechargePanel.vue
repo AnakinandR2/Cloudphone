@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { PurchaseConfig } from '@/types/billing'
-import { computed, ref } from 'vue'
+import { HelpCircle } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
-import { computeFeeCents, fmtCents, fmtFeeHint } from '@/utils/money'
+import { computeFeeCents, feeWaived, fmtCents, fmtFeeHint } from '@/utils/money'
 import PaymentBox from './PaymentBox.vue'
 import { feeOf } from './useQuote'
 
@@ -35,15 +37,39 @@ const amountCents = computed(() => {
 })
 const customInvalid = computed(() => presetCents.value === 'custom' && amountCents.value <= 0)
 
-// 选中支付方式的手续费配置（充值不允许余额方式；缺省视为无手续费）。
-const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
-// 手续费基数 = 充值面额（amountCents）；实付 = 面额 + 手续费。
-const feeCents = computed(() =>
-  computeFeeCents(amountCents.value, selectedFee.value?.fee_percent_bps ?? 0, selectedFee.value?.fee_fixed_cents ?? 0))
-const hasFee = computed(() => feeCents.value > 0)
+// 选中的支付方式（充值不允许余额方式；缺省视为无手续费、无 logo）。
+const selectedMethod = computed(() => feeOf(props.config.payment_methods, payMethod.value))
+// 手续费基数 = 充值面额（amountCents）。原始应收手续费（不含阈值，用于满额免画删除线）。
+const rawFeeCents = computed(() =>
+  computeFeeCents(amountCents.value, selectedMethod.value?.fee_percent_bps ?? 0, selectedMethod.value?.fee_fixed_cents ?? 0))
+// 满额免：本应收>0 且 面额达阈值。
+const waived = computed(() =>
+  rawFeeCents.value > 0 && feeWaived(amountCents.value, selectedMethod.value?.fee_free_threshold_cents ?? 0))
+// 实收手续费 = 满额免则 0，否则原始应收。
+const feeCents = computed(() => (waived.value ? 0 : rawFeeCents.value))
+// 进入「有手续费分支」的条件：本应收>0（满额免也走此分支，显示删除线 + ? 提示）。
+const hasFee = computed(() => rawFeeCents.value > 0)
 const payActualCents = computed(() => amountCents.value + feeCents.value)
 // 手续费构成标注，如「2% + ¥1」。
-const feeHint = computed(() => fmtFeeHint(selectedFee.value?.fee_percent_bps ?? 0, selectedFee.value?.fee_fixed_cents ?? 0))
+const feeHint = computed(() => fmtFeeHint(selectedMethod.value?.fee_percent_bps ?? 0, selectedMethod.value?.fee_fixed_cents ?? 0))
+// 满额免阈值（>0 时显示 ? 气泡）。
+const freeThresholdCents = computed(() => selectedMethod.value?.fee_free_threshold_cents ?? 0)
+const freeThresholdYuan = computed(() => fmtCents(freeThresholdCents.value))
+
+// 行首渠道 logo 回退首字方块（与 PaymentBox 的 STYLE 映射一致）。
+const logoError = ref(false)
+// 切换支付方式 / logo 变化时重置失败标记，避免上一方式的失败残留把新方式的有效 logo 也隐藏。
+watch(() => selectedMethod.value?.logo_url, () => { logoError.value = false })
+const LOGO_STYLE: Record<string, { mark: string, color: string }> = {
+  balance: { mark: '余', color: '#6366f1' },
+  wechat: { mark: '微', color: '#07C160' },
+  alipay: { mark: '支', color: '#1677FF' },
+}
+const feeLogoColor = computed(() => LOGO_STYLE[selectedMethod.value?.code ?? '']?.color ?? '#64748b')
+const feeLogoMark = computed(() => {
+  const code = selectedMethod.value?.code ?? ''
+  return LOGO_STYLE[code]?.mark ?? code.slice(0, 1).toUpperCase()
+})
 
 async function confirm() {
   if (amountCents.value <= 0) {
@@ -123,11 +149,34 @@ async function confirm() {
       </div>
       <template v-if="hasFee">
         <div class="flex items-baseline justify-between">
-          <span class="text-muted-foreground">
-            {{ t('billing.purchase2.sumFee') }}
+          <span class="text-muted-foreground flex items-center gap-1.5">
+            <template v-if="selectedMethod">
+              <img
+                v-if="selectedMethod.logo_url && !logoError"
+                :src="selectedMethod.logo_url"
+                :alt="selectedMethod.name"
+                class="size-4 shrink-0 self-center rounded object-contain"
+                @error="logoError = true"
+              >
+              <span v-else class="flex size-4 shrink-0 items-center justify-center self-center rounded text-[9px] font-bold text-white" :style="{ backgroundColor: feeLogoColor }">{{ feeLogoMark }}</span>
+            </template>
+            <span>{{ t('billing.purchase2.sumFee') }}</span>
             <span v-if="feeHint" class="text-xs">（{{ feeHint }}）</span>
+            <Popover v-if="freeThresholdCents > 0">
+              <PopoverTrigger as-child>
+                <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
+                  <HelpCircle class="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent class="w-auto max-w-60 text-xs" :side-offset="6">
+                {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
+              </PopoverContent>
+            </Popover>
           </span>
-          <span class="tabular-nums">¥{{ fmtCents(feeCents) }}</span>
+          <span class="tabular-nums">
+            <span v-if="waived" class="text-muted-foreground mr-1 line-through">¥{{ fmtCents(rawFeeCents) }}</span>
+            <span :class="waived ? 'text-emerald-600 dark:text-emerald-400' : ''">¥{{ fmtCents(feeCents) }}</span>
+          </span>
         </div>
         <div class="flex items-baseline justify-between">
           <span class="font-medium">{{ t('billing.purchase2.sumPayActual') }}</span>

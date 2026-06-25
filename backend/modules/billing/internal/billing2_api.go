@@ -1,7 +1,10 @@
 package billing
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -9,7 +12,13 @@ import (
 	"manager-backend/framework"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
+
+// allowedImageExt 允许上传的渠道 logo 图片扩展名（billing 包内本地定义，不跨 internal 复用 partner 常量）。
+var allowedImageExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true, ".svg": true}
+
+const maxImageSize = 5 << 20 // 5MB
 
 // 新购买/费用模型 HTTP handler（契约 §1 用户端 + §2 后台）。新路径，不破坏旧端点。
 
@@ -356,8 +365,16 @@ func AdminSavePaymentMethods(c *gin.Context) {
 			framework.Fail(c, http.StatusBadRequest, "固定手续费不能为负")
 			return
 		}
+		if pm.FeeFreeThresholdCents < 0 {
+			framework.Fail(c, http.StatusBadRequest, "满额免手续费阈值不能为负")
+			return
+		}
 		if pm.Code == PayBalance && (pm.FeePercentBps != 0 || pm.FeeFixedCents != 0) {
 			framework.Fail(c, http.StatusBadRequest, "余额支付不可配置手续费")
+			return
+		}
+		if pm.Code == PayBalance && pm.FeeFreeThresholdCents != 0 {
+			framework.Fail(c, http.StatusBadRequest, "余额支付不可配置满额免手续费阈值")
 			return
 		}
 	}
@@ -367,6 +384,48 @@ func AdminSavePaymentMethods(c *gin.Context) {
 		return
 	}
 	framework.OKWithData(c, gin.H{"payment_methods": cfg.PaymentMethods})
+}
+
+// UploadPayMethodLogo POST /admin/billing/payment-methods/upload —— 上传支付方式渠道 logo 到 S3，返回公开 URL。
+// 镜像 partner 的图片上传：multipart "file"、≤5MB、png/jpg/jpeg/webp/gif/svg；S3 未配置返回 503。
+func UploadPayMethodLogo(c *gin.Context) {
+	if framework.S3 == nil {
+		framework.Fail(c, http.StatusServiceUnavailable, "对象存储未配置，无法上传图片")
+		return
+	}
+	fh, err := c.FormFile("file")
+	if err != nil {
+		framework.Fail(c, http.StatusBadRequest, "请选择图片文件")
+		return
+	}
+	if fh.Size > maxImageSize {
+		framework.Fail(c, http.StatusBadRequest, "图片不能超过 5MB")
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(fh.Filename))
+	if !allowedImageExt[ext] {
+		framework.Fail(c, http.StatusBadRequest, "仅支持 png/jpg/jpeg/webp/gif/svg 图片")
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		framework.Fail(c, http.StatusInternalServerError, "读取文件失败")
+		return
+	}
+	defer f.Close()
+
+	contentType := fh.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	key := fmt.Sprintf("pay-logos/%s%s", uuid.NewString(), ext)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := framework.S3.PutObject(ctx, key, f, contentType); err != nil {
+		framework.Fail(c, http.StatusInternalServerError, "上传失败："+err.Error())
+		return
+	}
+	framework.OKWithData(c, gin.H{"url": framework.S3.PublicURL(key)})
 }
 
 // AdminGetRechargePresets GET /admin/billing/recharge-presets

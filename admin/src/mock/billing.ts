@@ -108,9 +108,9 @@ let runtimeCfg: any = {
 
 // 支付方式
 let paymentMethods: any[] = [
-  { code: 'balance', name: '余额支付', enabled: true, sort: 0, fee_percent_bps: 0, fee_fixed_cents: 0 },
-  { code: 'wechat', name: '微信支付', enabled: true, sort: 1, fee_percent_bps: 200, fee_fixed_cents: 100 },
-  { code: 'alipay', name: '支付宝', enabled: true, sort: 2, fee_percent_bps: 200, fee_fixed_cents: 100 },
+  { code: 'balance', name: '余额支付', enabled: true, sort: 0, fee_percent_bps: 0, fee_fixed_cents: 0, logo_url: '', fee_free_threshold_cents: 0 },
+  { code: 'wechat', name: '微信支付', enabled: true, sort: 1, fee_percent_bps: 200, fee_fixed_cents: 100, logo_url: 'https://cdn.simpleicons.org/wechat/07C160', fee_free_threshold_cents: 0 },
+  { code: 'alipay', name: '支付宝', enabled: true, sort: 2, fee_percent_bps: 200, fee_fixed_cents: 100, logo_url: 'https://cdn.simpleicons.org/alipay/1677FF', fee_free_threshold_cents: 0 },
 ]
 
 // 充值预设
@@ -392,6 +392,12 @@ export default defineFakeRoute([
       if (Array.isArray(d.payment_methods)) paymentMethods = d.payment_methods
       return ok({ payment_methods: [...paymentMethods].sort((a, b) => a.sort - b.sort) })
     },
+  },
+  // 渠道 logo 上传（mock 直接回一张随机图）
+  {
+    url: '/v1/admin/billing/payment-methods/upload',
+    method: 'post',
+    response: () => ok({ url: `https://picsum.photos/seed/paylogo${Date.now()}/120` }),
   },
   // ── 配置：充值预设 ───────────────────────────────────────────
   {

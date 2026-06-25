@@ -52,6 +52,10 @@ export interface PaymentMethod {
   fee_percent_bps: number
   /** 固定手续费，分(100=¥1)；0=无该项；余额方式恒为 0 */
   fee_fixed_cents: number
+  /** 渠道 logo URL（上传或手填）；空=无，前端回退首字方块 */
+  logo_url: string
+  /** 订单(加费前)金额≥此值免手续费，分；0=永不免；余额方式恒为 0 */
+  fee_free_threshold_cents: number
 }
 export interface QtyTier {
   min_quantity: number

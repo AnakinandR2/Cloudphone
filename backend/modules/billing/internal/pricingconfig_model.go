@@ -22,12 +22,14 @@ func (PricingConfig) TableName() string { return "billing_pricing_config" }
 
 // PaymentMethod 支付方式（开关 + 排序 + 手续费配置）。
 type PaymentMethod struct {
-	Code          string `json:"code"`
-	Name          string `json:"name"`
-	Enabled       bool   `json:"enabled"`
-	Sort          int    `json:"sort"`
-	FeePercentBps int    `json:"fee_percent_bps"` // 比例手续费，基点(200=2%)；0=无
-	FeeFixedCents int64  `json:"fee_fixed_cents"` // 固定手续费，分(100=¥1)；0=无
+	Code                  string `json:"code"`
+	Name                  string `json:"name"`
+	Enabled               bool   `json:"enabled"`
+	Sort                  int    `json:"sort"`
+	FeePercentBps         int    `json:"fee_percent_bps"`          // 比例手续费，基点(200=2%)；0=无
+	FeeFixedCents         int64  `json:"fee_fixed_cents"`          // 固定手续费，分(100=¥1)；0=无
+	LogoURL               string `json:"logo_url"`                 // 渠道 logo（上传得到的 URL 或手填 URL）；空=无
+	FeeFreeThresholdCents int64  `json:"fee_free_threshold_cents"` // 订单(加费前)金额≥此值免手续费，分；0=永不免
 }
 
 // KindPricing 某 kind（seat/boot_slot）的定价配置。

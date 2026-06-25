@@ -106,31 +106,39 @@ func TestComputeQuote_RejectsNonPositiveInputs(t *testing.T) {
 	}
 }
 
-// computeFee 外加手续费 = 比例(基数×bps，四舍五入到分) + 固定；基数<=0 一律 0。
+// computeFee 实收外加手续费 = 比例(基数×bps，四舍五入到分) + 固定；基数<=0 一律 0；满额免（threshold>0 且 base>=threshold）则免。
 func TestComputeFee(t *testing.T) {
 	cases := []struct {
 		name       string
 		base       int64
 		percentBps int
 		fixed      int64
+		threshold  int64
 		want       int64
 	}{
-		{"全0无费", 5000, 0, 0, 0},
-		{"纯比例2%", 5000, 200, 0, 100},
-		{"纯固定¥1", 5000, 0, 100, 100},
-		{"叠加2%+¥1", 5000, 200, 100, 200},
-		{"舍入向上(奇数分四舍五入)", 50, 200, 0, 1},   // 50×200/10000 = 1.0 → 1
-		{"舍入边界_round_half_up", 25, 200, 0, 1}, // 25×200/10000 = 0.5 → 1（half-up）
-		{"舍入向下", 24, 200, 0, 0},               // 24×200/10000 = 0.48 → 0
-		{"100%比例", 5000, 10000, 0, 5000},
-		{"base为0不收任何费(含固定)", 0, 200, 100, 0},
-		{"base为负不收任何费", -100, 200, 100, 0},
+		{"全0无费", 5000, 0, 0, 0, 0},
+		{"纯比例2%", 5000, 200, 0, 0, 100},
+		{"纯固定¥1", 5000, 0, 100, 0, 100},
+		{"叠加2%+¥1", 5000, 200, 100, 0, 200},
+		{"舍入向上(奇数分四舍五入)", 50, 200, 0, 0, 1},      // 50×200/10000 = 1.0 → 1
+		{"舍入边界_round_half_up", 25, 200, 0, 0, 1}, // 25×200/10000 = 0.5 → 1（half-up）
+		{"舍入向下", 24, 200, 0, 0, 0},               // 24×200/10000 = 0.48 → 0
+		{"100%比例", 5000, 10000, 0, 0, 5000},
+		{"base为0不收任何费(含固定)", 0, 200, 100, 0, 0},
+		{"base为负不收任何费", -100, 200, 100, 0, 0},
+		// ---- 满额免手续费 ----
+		{"满额免_base等于阈值边界免", 5000, 200, 100, 5000, 0},    // base==threshold → 免
+		{"满额免_base超过阈值免", 6000, 200, 100, 5000, 0},      // base>threshold → 免
+		{"满额免_base低于阈值1分不免", 4999, 200, 100, 5000, 200}, // base==threshold-1 → 不免（4999×2%=99.98→100 + 100）
+		{"满额免_阈值为0永不免", 100000, 200, 100, 0, 2100},      // threshold==0 → 永不免（100000×2%+100）
+		{"满额免_纯比例叠加场景达标仍免", 8000, 300, 200, 8000, 0},    // 满额覆盖比例+固定，整体免
+		{"满额免_base为0即便阈值更高也不收", 0, 200, 100, 1, 0},      // base<=0 短路在阈值判断前
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := computeFee(tc.base, tc.percentBps, tc.fixed)
+			got := computeFee(tc.base, tc.percentBps, tc.fixed, tc.threshold)
 			if got != tc.want {
-				t.Errorf("computeFee(%d, %d, %d) = %d, want %d", tc.base, tc.percentBps, tc.fixed, got, tc.want)
+				t.Errorf("computeFee(%d, %d, %d, %d) = %d, want %d", tc.base, tc.percentBps, tc.fixed, tc.threshold, got, tc.want)
 			}
 		})
 	}

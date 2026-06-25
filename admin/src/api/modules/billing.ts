@@ -49,6 +49,12 @@ export default {
   // 支付方式（开关 + 排序）。后端 GET/PUT 均以 { payment_methods } 包裹。
   getPaymentMethods: () => api.get<unknown, R<PaymentMethodsResp>>('admin/billing/payment-methods'),
   savePaymentMethods: (payment_methods: PaymentMethod[]) => api.put<unknown, R<PaymentMethodsResp>>('admin/billing/payment-methods', { payment_methods }),
+  // 上传渠道 logo 到 S3，返回 { url }。multipart，不手动设 Content-Type。镜像 partnerApi.upload。
+  uploadPayLogo: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post<unknown, R<{ url: string }>>('admin/billing/payment-methods/upload', fd, { timeout: 120000 })
+  },
   // 充值预设（金额档位）
   getRechargePresets: () => api.get<unknown, R<RechargePresets>>('admin/billing/recharge-presets'),
   saveRechargePresets: (presets_cents: number[]) => api.put<unknown, R<RechargePresets>>('admin/billing/recharge-presets', { presets_cents }),

@@ -53,6 +53,8 @@ type BizOrder struct {
 	// FeePercentBps / FeeFixedCents 下单时支付方式手续费配置快照，保证日后改配置不影响历史对账。
 	FeePercentBps int   `gorm:"not null;default:0" json:"fee_percent_bps"`
 	FeeFixedCents int64 `gorm:"not null;default:0" json:"fee_fixed_cents"`
+	// FeeFreeThresholdCents 下单时「满额免手续费」阈值快照（分）；0=无阈值。配合 fee_cents 可解释「为何免」。
+	FeeFreeThresholdCents int64 `gorm:"not null;default:0" json:"fee_free_threshold_cents"`
 }
 
 func (BizOrder) TableName() string { return "billing_biz_orders" }

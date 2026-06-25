@@ -651,6 +651,10 @@ export default {
     payEmpty: '暂无支付方式。',
     payFeePercent: '比例手续费(%)',
     payFeeFixed: '固定手续费(¥)',
+    payLogo: '渠道 Logo',
+    payLogoUpload: '上传',
+    payLogoUrlPlaceholder: '粘贴 logo URL',
+    payFeeFreeThreshold: '满额免手续费(¥)',
     // 充值预设
     rechargeTitle: '充值预设',
     rechargeDesc: '配置充值页的金额快捷档位（元）。',

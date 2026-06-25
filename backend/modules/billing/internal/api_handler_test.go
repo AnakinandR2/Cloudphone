@@ -3,6 +3,7 @@ package billing
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,6 +68,7 @@ func billingRouter(inject gin.HandlerFunc) *gin.Engine {
 		admin.PUT("/pricing", AdminSavePricing)
 		admin.GET("/payment-methods", AdminGetPaymentMethods)
 		admin.PUT("/payment-methods", AdminSavePaymentMethods)
+		admin.POST("/payment-methods/upload", UploadPayMethodLogo)
 		admin.GET("/recharge-presets", AdminGetRechargePresets)
 		admin.PUT("/recharge-presets", AdminSaveRechargePresets)
 		admin.GET("/notices", AdminGetNotices)
@@ -684,6 +686,96 @@ func TestAdminSavePaymentMethods_PercentOverCapRejected(t *testing.T) {
 			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_percent_bps": 10001, "fee_fixed_cents": 0},
 		}})
 	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+// 满额免阈值合法（wechat 满 ¥1000 免 + logo_url）保存通过并回显新字段。
+func TestAdminSavePaymentMethods_ThresholdAndLogoValid(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, env := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_percent_bps": 200, "fee_fixed_cents": 100, "fee_free_threshold_cents": 100000, "logo_url": "https://x.com/w.svg"},
+		}})
+	require.Equal(t, http.StatusOK, code)
+	data := env["data"].(map[string]any)
+	methods := data["payment_methods"].([]any)
+	wechat := methods[0].(map[string]any)
+	assert.Equal(t, float64(100000), wechat["fee_free_threshold_cents"])
+	assert.Equal(t, "https://x.com/w.svg", wechat["logo_url"])
+}
+
+// 满额免阈值为负 → 400。
+func TestAdminSavePaymentMethods_NegativeThresholdRejected(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, _ := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "wechat", "name": "微信", "enabled": true, "sort": 1, "fee_free_threshold_cents": -1},
+		}})
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+// balance 配置非 0 满额免阈值 → 400。
+func TestAdminSavePaymentMethods_BalanceThresholdRejected(t *testing.T) {
+	restorePricing(t)
+	r := billingRouter(injectUser(1))
+	code, _ := do(t, r, http.MethodPut, "/admin/billing/payment-methods",
+		map[string]any{"payment_methods": []map[string]any{
+			{"code": "balance", "name": "余额", "enabled": true, "sort": 0, "fee_free_threshold_cents": 100000},
+		}})
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+// ---- UploadPayMethodLogo（镜像 partner 上传校验；S3 为全局变量，按既有方式跳过深覆盖）----
+
+// payLogoMultipart 构造一个 multipart 请求体（field=file）。
+func payLogoMultipart(t *testing.T, filename string, data []byte) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", filename)
+	require.NoError(t, err)
+	_, _ = fw.Write(data)
+	require.NoError(t, mw.Close())
+	return &buf, mw.FormDataContentType()
+}
+
+// S3 未配置 → 503。
+func TestUploadPayMethodLogo_NoS3(t *testing.T) {
+	if framework.S3 != nil {
+		t.Skip("S3 已配置，跳过未配置分支")
+	}
+	r := billingRouter(injectUser(1))
+	req := httptest.NewRequest(http.MethodPost, "/admin/billing/payment-methods/upload", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+// S3 已配置但缺文件 → 400。
+func TestUploadPayMethodLogo_MissingFile(t *testing.T) {
+	if framework.S3 == nil {
+		t.Skip("S3 未配置，缺文件分支被 503 短路")
+	}
+	r := billingRouter(injectUser(1))
+	req := httptest.NewRequest(http.MethodPost, "/admin/billing/payment-methods/upload", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// 非法扩展名（.exe）→ 400。
+func TestUploadPayMethodLogo_BadExt(t *testing.T) {
+	if framework.S3 == nil {
+		t.Skip("S3 未配置，扩展名校验分支被 503 短路")
+	}
+	r := billingRouter(injectUser(1))
+	buf, ct := payLogoMultipart(t, "evil.exe", []byte("x"))
+	req := httptest.NewRequest(http.MethodPost, "/admin/billing/payment-methods/upload", buf)
+	req.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 // ---- 后台订单 handler ----

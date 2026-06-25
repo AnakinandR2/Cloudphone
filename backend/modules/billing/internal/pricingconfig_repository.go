@@ -107,8 +107,8 @@ func defaultPricingConfig() *PricingConfigData {
 	return &PricingConfigData{
 		PaymentMethods: []PaymentMethod{
 			{Code: "balance", Name: "余额支付", Enabled: true, Sort: 0},
-			{Code: "wechat", Name: "微信支付", Enabled: true, Sort: 1},
-			{Code: "alipay", Name: "支付宝", Enabled: true, Sort: 2},
+			{Code: "wechat", Name: "微信支付", Enabled: true, Sort: 1, LogoURL: "https://cdn.simpleicons.org/wechat/07C160"},
+			{Code: "alipay", Name: "支付宝", Enabled: true, Sort: 2, LogoURL: "https://cdn.simpleicons.org/alipay/1677FF"},
 		},
 		RechargePresets: []int64{1000, 5000, 10000, 50000},
 		Kinds: map[string]KindPricing{

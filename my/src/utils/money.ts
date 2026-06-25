@@ -18,6 +18,12 @@ export function computeFeeCents(baseCents: number, percentBps: number, fixedCent
   return Math.round((baseCents * percentBps) / 10000) + fixedCents
 }
 
+// 满额免手续费谓词：阈值>0 且 基数>=阈值。
+// 与后端 computeFee 的免除分支同语义；base<=0 时无手续费、本就不涉及，此处仍按字面返回（threshold>0 且 0>=threshold 不成立 → false）。
+export function feeWaived(baseCents: number, freeThresholdCents: number): boolean {
+  return freeThresholdCents > 0 && baseCents >= freeThresholdCents
+}
+
 // 手续费构成标注，如「2% + ¥1」；任一项为 0 只显示另一项；都为 0 返回空串。
 export function fmtFeeHint(percentBps: number, fixedCents: number): string {
   const parts: string[] = []

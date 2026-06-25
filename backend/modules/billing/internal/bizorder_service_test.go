@@ -282,6 +282,9 @@ func TestPaymentMethod_LegacyJSONDecodesFeeZero(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"code":"wechat","name":"微信","enabled":true,"sort":1}`), &pm))
 	assert.Equal(t, 0, pm.FeePercentBps)
 	assert.Equal(t, int64(0), pm.FeeFixedCents)
+	// 满额免/ logo 新字段缺省解码为空/0。
+	assert.Equal(t, "", pm.LogoURL)
+	assert.Equal(t, int64(0), pm.FeeFreeThresholdCents)
 }
 
 // 向后兼容：缺 fee 字段的旧 BizOrder JSON 解码为 0。
@@ -291,4 +294,65 @@ func TestBizOrder_LegacyJSONDecodesFeeZero(t *testing.T) {
 	assert.Equal(t, int64(0), o.FeeCents)
 	assert.Equal(t, 0, o.FeePercentBps)
 	assert.Equal(t, int64(0), o.FeeFixedCents)
+	// 满额免阈值快照缺省解码为 0。
+	assert.Equal(t, int64(0), o.FeeFreeThresholdCents)
+}
+
+// ---- 满额免手续费（阈值快照 + 实收 fee） ----
+
+// setPaymentMethodsWithThreshold 把 wechat 配为 2%+¥1 且满 ¥1000（100000 分）免手续费；用例结束还原默认。
+func setPaymentMethodsWithThreshold(t *testing.T, thresholdCents int64) {
+	t.Helper()
+	t.Cleanup(func() { _ = PricingConfigService.Save(defaultPricingConfig()) })
+	_, err := PricingConfigService.SavePartial(func(d *PricingConfigData) {
+		d.PaymentMethods = []PaymentMethod{
+			{Code: PayBalance, Name: "余额支付", Enabled: true, Sort: 0},
+			{Code: PayWechat, Name: "微信支付", Enabled: true, Sort: 1, FeePercentBps: 200, FeeFixedCents: 100, FeeFreeThresholdCents: thresholdCents},
+			{Code: PayAlipay, Name: "支付宝", Enabled: true, Sort: 2, FeePercentBps: 200, FeeFixedCents: 100},
+		}
+	})
+	require.NoError(t, err)
+}
+
+// 满额订单：阈值快照固化，且达标 → fee_cents==0。
+func TestBizOrder_FeeFreeThreshold_WaivedWhenReached(t *testing.T) {
+	// 阈值 ¥1000（100000 分）。10 席位 ×12 月 = 226800 ≥ 100000 → 免。
+	setPaymentMethodsWithThreshold(t, 100000)
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items", "billing_license_units")
+	})
+	uid := 950020
+	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizSeatNew, Quantity: 10, DurationValue: 12, PayMethod: PayWechat,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(226800), res.Order.TotalCents)
+	// 满额免：实收手续费为 0。
+	assert.Equal(t, int64(0), res.Order.FeeCents)
+	// 阈值快照固化。
+	assert.Equal(t, int64(100000), res.Order.FeeFreeThresholdCents)
+
+	// DB 读回：阈值快照确已落库。
+	o, _, err := BizOrderService.GetOrder(uid, int(res.Order.ID))
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), o.FeeCents)
+	assert.Equal(t, int64(100000), o.FeeFreeThresholdCents)
+}
+
+// 未满额订单：阈值快照固化，但未达标 → fee 正常计收。
+func TestBizOrder_FeeFreeThreshold_NotReachedChargesFee(t *testing.T) {
+	// 阈值 ¥10000（1000000 分），远高于本单 226800 → 不免。
+	setPaymentMethodsWithThreshold(t, 1000000)
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items", "billing_license_units")
+	})
+	uid := 950021
+	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizSeatNew, Quantity: 10, DurationValue: 12, PayMethod: PayWechat,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(226800), res.Order.TotalCents)
+	// 未满额：fee = 2% + ¥1 = 4536 + 100 = 4636。
+	assert.Equal(t, int64(4636), res.Order.FeeCents)
+	assert.Equal(t, int64(1000000), res.Order.FeeFreeThresholdCents)
 }

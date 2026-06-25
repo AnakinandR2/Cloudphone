@@ -32,8 +32,8 @@ const { quote, loading } = useQuote(() => ({
   duration_value: durationValue.value,
 }))
 
-// 选中支付方式的手续费配置（传给 OrderSummary 实时预览实付）。
-const selectedFee = computed(() => feeOf(props.config.payment_methods, payMethod.value))
+// 选中的支付方式（传给 OrderSummary：fee 费率 / 满额免阈值 / logo 实时预览实付）。
+const selectedMethod = computed(() => feeOf(props.config.payment_methods, payMethod.value))
 
 // 到期 = now + 时长（月=按月加，天=按天加），仅用于摘要展示。
 const expireAt = computed(() => {
@@ -87,7 +87,7 @@ async function confirm() {
       :loading="loading"
       :expire-at="expireAt"
       :unit-label="kindCfg.unit_label"
-      :fee="selectedFee"
+      :method="selectedMethod"
     />
 
     <PaymentBox

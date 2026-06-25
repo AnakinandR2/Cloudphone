@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { QuoteResult2 } from '@/types/billing'
-import { Loader2 } from 'lucide-vue-next'
-import { computed } from 'vue'
+import type { PaymentMethod, QuoteResult2 } from '@/types/billing'
+import { HelpCircle, Loader2 } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { formatDate } from '@/utils/date'
-import { computeFeeCents, fmtCents, fmtDiscountBps, fmtFeeHint } from '@/utils/money'
+import { computeFeeCents, feeWaived, fmtCents, fmtDiscountBps, fmtFeeHint } from '@/utils/money'
 
 // 订单摘要：数量 / 折后单价 / 总价 / 到期时间。折扣相乘（服务端已算，前端只展示）。
 const props = defineProps<{
@@ -14,12 +15,16 @@ const props = defineProps<{
   expireAt?: string | null
   unitLabel?: string
   loading?: boolean
-  // 选中支付方式的手续费配置（父面板按选中 code 从 config.payment_methods 反查后传入）；
-  // 缺省视为无手续费（向后兼容）。
-  fee?: { fee_percent_bps: number, fee_fixed_cents: number } | null
+  // 选中的支付方式（父面板按选中 code 从 config.payment_methods 反查后传入）；
+  // 据此取 fee 费率/满额免阈值/logo_url；缺省视为无手续费、无 logo（向后兼容）。
+  method?: PaymentMethod | null
 }>()
 
 const { t } = useI18n()
+
+const logoError = ref(false)
+// 切换支付方式 / logo 变化时重置失败标记，避免上一方式的失败残留把新方式的有效 logo 也隐藏。
+watch(() => props.method?.logo_url, () => { logoError.value = false })
 
 // 折后单价 = payable / billing_units（展示用，含数量×时长两层折扣的均摊）
 const discountedUnit = computed(() => {
@@ -30,17 +35,37 @@ const discountedUnit = computed(() => {
 const qtyZhe = computed(() => fmtDiscountBps(props.quote?.qty_discount_bps ?? 10000))
 const durZhe = computed(() => fmtDiscountBps(props.quote?.duration_discount_bps ?? 10000))
 
-// 手续费基数 = 折后应付（payable_cents）；与后端 computeFee 同公式实时预览。
-const feeCents = computed(() => {
-  const q = props.quote
-  if (!q) return 0
-  return computeFeeCents(q.payable_cents, props.fee?.fee_percent_bps ?? 0, props.fee?.fee_fixed_cents ?? 0)
-})
-const hasFee = computed(() => feeCents.value > 0)
-// 实付 = 折后应付 + 手续费。
-const payActualCents = computed(() => (props.quote?.payable_cents ?? 0) + feeCents.value)
+// 手续费基数 = 折后应付（payable_cents）。
+const baseCents = computed(() => props.quote?.payable_cents ?? 0)
+// 原始应收手续费（不含阈值；与后端 applyBps 同舍入），用于满额免时画删除线。
+const rawFeeCents = computed(() =>
+  computeFeeCents(baseCents.value, props.method?.fee_percent_bps ?? 0, props.method?.fee_fixed_cents ?? 0))
+// 满额免：本应收>0 且 基数达阈值。
+const waived = computed(() =>
+  rawFeeCents.value > 0 && feeWaived(baseCents.value, props.method?.fee_free_threshold_cents ?? 0))
+// 实收手续费 = 满额免则 0，否则原始应收。
+const feeCents = computed(() => (waived.value ? 0 : rawFeeCents.value))
+// 进入「有手续费分支」的条件：本应收>0（满额免也走此分支，显示删除线 + ? 提示）。
+const hasFee = computed(() => rawFeeCents.value > 0)
+// 实付 = 折后应付 + 实收手续费。
+const payActualCents = computed(() => baseCents.value + feeCents.value)
 // 手续费构成标注，如「2% + ¥1」。
-const feeHint = computed(() => fmtFeeHint(props.fee?.fee_percent_bps ?? 0, props.fee?.fee_fixed_cents ?? 0))
+const feeHint = computed(() => fmtFeeHint(props.method?.fee_percent_bps ?? 0, props.method?.fee_fixed_cents ?? 0))
+// 满额免阈值（>0 时显示 ? 气泡）。
+const freeThresholdCents = computed(() => props.method?.fee_free_threshold_cents ?? 0)
+const freeThresholdYuan = computed(() => fmtCents(freeThresholdCents.value))
+
+// 行首渠道 logo 回退首字方块（与 PaymentBox 的 STYLE 映射一致）。
+const LOGO_STYLE: Record<string, { mark: string, color: string }> = {
+  balance: { mark: '余', color: '#6366f1' },
+  wechat: { mark: '微', color: '#07C160' },
+  alipay: { mark: '支', color: '#1677FF' },
+}
+const feeLogoColor = computed(() => LOGO_STYLE[props.method?.code ?? '']?.color ?? '#64748b')
+const feeLogoMark = computed(() => {
+  const code = props.method?.code ?? ''
+  return LOGO_STYLE[code]?.mark ?? code.slice(0, 1).toUpperCase()
+})
 </script>
 
 <template>
@@ -96,11 +121,34 @@ const feeHint = computed(() => fmtFeeHint(props.fee?.fee_percent_bps ?? 0, props
             </span>
           </div>
           <div class="flex items-baseline justify-between">
-            <span class="text-muted-foreground">
-              {{ t('billing.purchase2.sumFee') }}
+            <span class="text-muted-foreground flex items-center gap-1.5">
+              <template v-if="method">
+                <img
+                  v-if="method.logo_url && !logoError"
+                  :src="method.logo_url"
+                  :alt="method.name"
+                  class="size-4 shrink-0 self-center rounded object-contain"
+                  @error="logoError = true"
+                >
+                <span v-else class="flex size-4 shrink-0 items-center justify-center self-center rounded text-[9px] font-bold text-white" :style="{ backgroundColor: feeLogoColor }">{{ feeLogoMark }}</span>
+              </template>
+              <span>{{ t('billing.purchase2.sumFee') }}</span>
               <span v-if="feeHint" class="text-xs">（{{ feeHint }}）</span>
+              <Popover v-if="freeThresholdCents > 0">
+                <PopoverTrigger as-child>
+                  <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
+                    <HelpCircle class="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent class="w-auto max-w-60 text-xs" :side-offset="6">
+                  {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
+                </PopoverContent>
+              </Popover>
             </span>
-            <span class="tabular-nums">¥{{ fmtCents(feeCents) }}</span>
+            <span class="tabular-nums">
+              <span v-if="waived" class="text-muted-foreground mr-1 line-through">¥{{ fmtCents(rawFeeCents) }}</span>
+              <span :class="waived ? 'text-emerald-600 dark:text-emerald-400' : ''">¥{{ fmtCents(feeCents) }}</span>
+            </span>
           </div>
           <div class="flex items-baseline justify-between">
             <span class="font-medium">{{ t('billing.purchase2.sumPayActual') }}</span>

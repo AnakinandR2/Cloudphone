@@ -68,6 +68,10 @@ export interface PaymentMethod {
   fee_percent_bps: number
   /** 固定手续费，分(100=¥1)；0=无 */
   fee_fixed_cents: number
+  /** 渠道 logo URL（上传得到或手填）；空=无 */
+  logo_url: string
+  /** 订单(加费前)金额≥此值免手续费，分；0=永不免 */
+  fee_free_threshold_cents: number
 }
 /** GET/PUT /admin/billing/payment-methods 整体形状：{ payment_methods } */
 export interface PaymentMethodsResp { payment_methods: PaymentMethod[] }

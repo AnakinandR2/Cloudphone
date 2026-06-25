@@ -648,6 +648,10 @@ export default {
     payEmpty: 'No payment methods.',
     payFeePercent: 'Percentage fee (%)',
     payFeeFixed: 'Fixed fee (¥)',
+    payLogo: 'Channel logo',
+    payLogoUpload: 'Upload',
+    payLogoUrlPlaceholder: 'Paste logo URL',
+    payFeeFreeThreshold: 'Fee-free threshold (¥)',
     // Recharge presets
     rechargeTitle: 'Recharge Presets',
     rechargeDesc: 'Configure quick recharge amount presets (¥).',

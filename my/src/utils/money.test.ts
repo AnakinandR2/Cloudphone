@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeFeeCents, fmtCents, fmtDiscountBps, fmtFeeHint } from './money'
+import { computeFeeCents, feeWaived, fmtCents, fmtDiscountBps, fmtFeeHint } from './money'
 
 describe('money', () => {
   it('分→元两位小数', () => {
@@ -36,6 +36,29 @@ describe('computeFeeCents（与后端 computeFee 同公式同舍入）', () => {
   it('基数 <= 0 一律返回 0（含固定部分）', () => {
     expect(computeFeeCents(0, 200, 100)).toBe(0)
     expect(computeFeeCents(-100, 200, 100)).toBe(0)
+  })
+})
+
+describe('feeWaived（满额免手续费谓词）', () => {
+  it('阈值 0 永不免', () => {
+    expect(feeWaived(100000, 0)).toBe(false)
+    expect(feeWaived(0, 0)).toBe(false)
+  })
+  it('base >= threshold 即免', () => {
+    expect(feeWaived(50000, 30000)).toBe(true)
+  })
+  it('base < threshold 不免', () => {
+    expect(feeWaived(20000, 30000)).toBe(false)
+  })
+  it('边界：base == threshold 免（“满”含等于）', () => {
+    expect(feeWaived(30000, 30000)).toBe(true)
+  })
+  it('边界：base == threshold - 1 不免', () => {
+    expect(feeWaived(29999, 30000)).toBe(false)
+  })
+  it('base <= 0 时不免（阈值>0 但基数不达标）', () => {
+    expect(feeWaived(0, 30000)).toBe(false)
+    expect(feeWaived(-100, 30000)).toBe(false)
   })
 })
 

@@ -138,7 +138,8 @@ func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*Biz
 	if pmOK {
 		order.FeePercentBps = pm.FeePercentBps
 		order.FeeFixedCents = pm.FeeFixedCents
-		order.FeeCents = computeFee(order.TotalCents, pm.FeePercentBps, pm.FeeFixedCents)
+		order.FeeFreeThresholdCents = pm.FeeFreeThresholdCents
+		order.FeeCents = computeFee(order.TotalCents, pm.FeePercentBps, pm.FeeFixedCents, pm.FeeFreeThresholdCents)
 	}
 
 	if err := s.repo.create(&order, []BizOrderItem{item}); err != nil {
