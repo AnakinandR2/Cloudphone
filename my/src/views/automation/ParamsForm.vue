@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ParamSpec } from '@/types/automation'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{
   seedDefaults?: boolean
 }>(), { seedDefaults: true })
 
-// v-model：参数值 { key: value }。array/object 存的是已解析的实际值。
+// v-model：参数值 { key: value }。table 存的是 Lua table 字面量文本（string）。
 const model = defineModel<Record<string, unknown>>({ default: () => ({}) })
 const { t } = useI18n()
 
@@ -30,25 +30,15 @@ const specs = computed<ParamSpec[]>(() => {
   }
 })
 
-const rawText = reactive<Record<string, string>>({}) // array/object 的文本态
-const errors = reactive<Record<string, string>>({}) // array/object 的解析错误
-
-// schema 变化时初始化值与文本。
+// schema 变化时按默认值初始化（enum 无默认）。
 watch(specs, (list) => {
   const next: Record<string, unknown> = {}
   for (const s of list) {
     const cur = model.value[s.key]
-    if (cur !== undefined) {
+    if (cur !== undefined)
       next[s.key] = cur
-    }
-    else if (props.seedDefaults && s.default !== undefined) {
+    else if (props.seedDefaults && s.type !== 'enum' && s.default !== undefined)
       next[s.key] = s.default
-    }
-    if (s.type === 'array' || s.type === 'object') {
-      const v = next[s.key]
-      rawText[s.key] = v === undefined ? '' : JSON.stringify(v, null, 2)
-      errors[s.key] = ''
-    }
   }
   model.value = next
 }, { immediate: true })
@@ -69,42 +59,15 @@ function onNumber(key: string, e: Event) {
     setVal(key, n)
 }
 
-function onJson(key: string, text: string) {
-  rawText[key] = text
-  if (!text.trim()) {
-    errors[key] = ''
-    const { [key]: _omit, ...rest } = model.value
-    model.value = rest
-    return
-  }
-  try {
-    setVal(key, JSON.parse(text))
-    errors[key] = ''
-  }
-  catch {
-    errors[key] = t('script.params.badJson')
-  }
-}
-
-function labelOf(s: ParamSpec) {
-  return s.label || s.key
-}
-
 // 暴露校验：返回错误信息（空=通过）。
 const lastError = ref('')
 function validate(): string {
   for (const s of specs.value) {
-    if (s.type === 'array' || s.type === 'object') {
-      if (errors[s.key]) {
-        lastError.value = `${labelOf(s)}: ${errors[s.key]}`
-        return lastError.value
-      }
-    }
     if (s.required) {
       const v = model.value[s.key]
       const empty = v === undefined || v === null || v === ''
       if (empty) {
-        lastError.value = t('script.params.requiredMsg', { name: labelOf(s) })
+        lastError.value = t('script.params.requiredMsg', { name: s.key })
         return lastError.value
       }
     }
@@ -120,9 +83,9 @@ defineExpose({ validate })
   <div v-if="specs.length" class="space-y-3">
     <div v-for="s in specs" :key="s.key" class="grid gap-1.5">
       <Label class="text-sm">
-        {{ labelOf(s) }}
-        <span v-if="s.required" class="text-destructive">*</span>
-        <span class="ml-1 font-mono text-xs text-muted-foreground">{{ s.key }}</span>
+        <span class="font-mono">{{ s.key }}</span>
+        <span v-if="s.required" class="ml-0.5 text-destructive">*</span>
+        <span class="ml-1 text-xs text-muted-foreground">{{ s.type }}</span>
       </Label>
 
       <!-- boolean -->
@@ -156,19 +119,15 @@ defineExpose({ validate })
         @input="(e: Event) => onNumber(s.key, e)"
       />
 
-      <!-- array / object -->
-      <template v-else-if="s.type === 'array' || s.type === 'object'">
-        <Textarea
-          :model-value="rawText[s.key] ?? ''"
-          :rows="3"
-          class="font-mono text-xs"
-          :placeholder="s.type === 'array' ? '[]' : '{}'"
-          @update:model-value="(v) => onJson(s.key, String(v))"
-        />
-        <p v-if="errors[s.key]" class="text-xs text-destructive">
-          {{ errors[s.key] }}
-        </p>
-      </template>
+      <!-- table：直接写 Lua table 字面量文本 -->
+      <Textarea
+        v-else-if="s.type === 'table'"
+        :model-value="(model[s.key] as string) ?? ''"
+        :rows="2"
+        class="font-mono text-xs"
+        placeholder="{1, 2, 3}"
+        @update:model-value="(v) => setVal(s.key, String(v))"
+      />
 
       <!-- string -->
       <Input

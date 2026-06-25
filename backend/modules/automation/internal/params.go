@@ -11,7 +11,7 @@ import (
 	"manager-backend/framework/apperr"
 )
 
-// ParamType 是脚本参数的类型（覆盖全 JSON 类型 + enum 下拉）。
+// ParamType 是脚本参数的类型。table = 普通 Lua table（值为 Lua table 字面量文本）。
 type ParamType string
 
 const (
@@ -19,22 +19,20 @@ const (
 	ParamNumber  ParamType = "number"
 	ParamBoolean ParamType = "boolean"
 	ParamEnum    ParamType = "enum"
-	ParamArray   ParamType = "array"
-	ParamObject  ParamType = "object"
+	ParamTable   ParamType = "table"
 )
 
 var validParamTypes = map[ParamType]bool{
 	ParamString: true, ParamNumber: true, ParamBoolean: true,
-	ParamEnum: true, ParamArray: true, ParamObject: true,
+	ParamEnum: true, ParamTable: true,
 }
 
-// ParamSpec 是单个参数定义（automation_scripts.params_schema 数组项）。
+// ParamSpec 是单个参数定义（脚本顶部注释里的一项）。
 type ParamSpec struct {
 	Key         string    `json:"key"`
-	Label       string    `json:"label,omitempty"`
 	Type        ParamType `json:"type"`
 	Required    bool      `json:"required,omitempty"`
-	Default     any       `json:"default,omitempty"`
+	Default     any       `json:"default,omitempty"` // 默认值（table 为 Lua 字面量文本）
 	Description string    `json:"description,omitempty"`
 	Options     []string  `json:"options,omitempty"` // 仅 enum：候选值
 }
@@ -95,12 +93,13 @@ func valueMatchesType(t ParamType, v any) bool {
 	case ParamBoolean:
 		_, ok := v.(bool)
 		return ok
-	case ParamArray:
-		_, ok := v.([]any)
-		return ok
-	case ParamObject:
-		_, ok := v.(map[string]any)
-		return ok
+	case ParamTable:
+		// table 值通常是 Lua table 字面量文本（string）；也容忍 API 直接传 []any/map。
+		switch v.(type) {
+		case string, []any, map[string]any:
+			return true
+		}
+		return false
 	}
 	return false
 }
@@ -115,9 +114,6 @@ func containsStr(list []string, s string) bool {
 }
 
 func labelOf(sp ParamSpec) string {
-	if sp.Label != "" {
-		return sp.Label
-	}
 	return sp.Key
 }
 
@@ -293,10 +289,8 @@ func mapMidType(t string) ParamType {
 		return ParamNumber
 	case "bool", "boolean":
 		return ParamBoolean
-	case "array", "table", "list":
-		return ParamArray
-	case "object", "map":
-		return ParamObject
+	case "array", "table", "list", "object", "map":
+		return ParamTable // 旧的 array/object 统一并入 table
 	case "enum":
 		return ParamEnum
 	default:
@@ -329,17 +323,12 @@ func parseSchema(jsonText string) ([]ParamSpec, error) {
 		if e.UIType != "" && validParamTypes[ParamType(e.UIType)] {
 			ptype = ParamType(e.UIType) // 优先用我们记录的真实类型
 		}
-		label := e.Label
-		if label == "" {
-			label = e.Desc
-		}
 		desc := e.Description
 		if desc == "" {
 			desc = e.Desc
 		}
 		specs = append(specs, ParamSpec{
 			Key:         k,
-			Label:       label,
 			Type:        ptype,
 			Required:    e.Required,
 			Default:     e.Default,

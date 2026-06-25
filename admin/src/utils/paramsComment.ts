@@ -5,15 +5,14 @@ import type { ParamSpec, ParamType } from '@/types/automation'
 // 替换机制是纯 ${} 文本替换（见 docs/external_params_example.lua）。
 
 const COMMENT_RE = /^\s*--\[\[([\s\S]*?)\]\]/
-const OUR_TYPES: ParamType[] = ['string', 'number', 'boolean', 'enum', 'array', 'object']
+const OUR_TYPES: ParamType[] = ['string', 'number', 'boolean', 'enum', 'table']
 
-// 中台/通用类型词 → 我们的内部类型。
+// 中台/通用类型词 → 我们的内部类型（旧 array/object 并入 table）。
 function mapMidType(t: string): ParamType {
   switch ((t || '').toLowerCase().trim()) {
     case 'int': case 'integer': case 'number': case 'float': case 'double': case 'long': return 'number'
     case 'bool': case 'boolean': return 'boolean'
-    case 'array': case 'table': case 'list': return 'array'
-    case 'object': case 'map': return 'object'
+    case 'array': case 'table': case 'list': case 'object': case 'map': return 'table'
     case 'enum': return 'enum'
     default: return 'string'
   }
@@ -25,8 +24,7 @@ function toMidType(t: ParamType): string {
     case 'number': return 'int'
     case 'boolean': return 'bool'
     case 'enum': return 'string'
-    case 'object': return 'object'
-    case 'array': return 'array'
+    case 'table': return 'table'
     default: return 'string'
   }
 }
@@ -50,10 +48,8 @@ export function extractSchemaComment(lua: string): string | null {
 
 function normalizeSpec(s: Record<string, unknown>): ParamSpec {
   const t = s.type as ParamType
-  const type: ParamType = OUR_TYPES.includes(t) ? t : 'string'
+  const type: ParamType = OUR_TYPES.includes(t) ? t : mapMidType(String(s.type ?? ''))
   const spec: ParamSpec = { key: String(s.key ?? ''), type }
-  if (s.label)
-    spec.label = String(s.label)
   if (s.required)
     spec.required = true
   if (s.default !== undefined && s.default !== null)
@@ -88,7 +84,6 @@ export function parseSchema(jsonText: string): ParamSpec[] {
       const type = (ui && OUR_TYPES.includes(ui)) ? ui : mapMidType(String(e.type ?? ''))
       return normalizeSpec({
         key,
-        label: e.label || e.desc || '',
         type,
         required: !!e.required,
         default: e.default,
@@ -100,22 +95,20 @@ export function parseSchema(jsonText: string): ParamSpec[] {
   return []
 }
 
-// 由 specs 生成中台 object 格式的注释块（带 uiType/label/options 扩展，便于无损回环）。
+// 由 specs 生成中台 object 格式的注释块（带 uiType/options 扩展，便于无损回环）。
 export function buildSchemaComment(specs: ParamSpec[]): string {
   const obj: Record<string, Record<string, unknown>> = {}
   for (const s of specs) {
     if (!s.key)
       continue
     const entry: Record<string, unknown> = {
-      desc: s.label || s.key,
+      desc: s.description || s.key,
       type: toMidType(s.type),
       required: !!s.required,
       uiType: s.type,
     }
     if (s.default !== undefined && s.default !== null)
       entry.default = s.default
-    if (s.label)
-      entry.label = s.label
     if (s.description)
       entry.description = s.description
     if (s.type === 'enum' && s.options?.length)

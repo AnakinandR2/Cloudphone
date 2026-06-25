@@ -1,13 +1,12 @@
-/** 参数类型（覆盖全 JSON 类型 + enum 下拉） */
-export type ParamType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'object'
+/** 参数类型。table = 普通 Lua table（值为 Lua table 字面量文本） */
+export type ParamType = 'string' | 'number' | 'boolean' | 'enum' | 'table'
 
-/** 单个参数定义（脚本 params_schema 数组项） */
+/** 单个参数定义（脚本顶部注释里的一项） */
 export interface ParamSpec {
   key: string
-  label?: string
   type: ParamType
   required?: boolean
-  default?: unknown
+  default?: unknown // table 为 Lua 字面量文本
   description?: string
   options?: string[] // 仅 enum：候选值
 }

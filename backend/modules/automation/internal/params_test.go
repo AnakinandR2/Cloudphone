@@ -27,8 +27,8 @@ func TestValidateSchema(t *testing.T) {
 		{"key":"count","type":"number","default":3},
 		{"key":"flag","type":"boolean"},
 		{"key":"mode","type":"enum","options":["a","b"],"default":"a"},
-		{"key":"list","type":"array"},
-		{"key":"obj","type":"object"}
+		{"key":"list","type":"table"},
+		{"key":"obj","type":"table"}
 	]`)
 	require.NoError(t, err)
 	assert.Len(t, specs, 6)
@@ -195,7 +195,7 @@ func TestDeriveSchemaFromComment(t *testing.T) {
 	assert.True(t, specs[0].Required)
 	assert.Equal(t, ParamNumber, specs[1].Type)  // int → number
 	assert.Equal(t, ParamBoolean, specs[2].Type) // bool → boolean
-	assert.Equal(t, ParamArray, specs[3].Type)
+	assert.Equal(t, ParamTable, specs[3].Type)   // array → table
 }
 
 // array 值渲染成 Lua table 文本注入 scriptParams。
@@ -204,7 +204,7 @@ func TestRunNowRendersLuaTable(t *testing.T) {
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-tbl")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "t", LuaContent: commentLua(`[{"key":"tags","type":"array"}]`, "local a=${tags}"),
+		Name: "t", LuaContent: commentLua(`[{"key":"tags","type":"table"}]`, "local a=${tags}"),
 	})
 	require.NoError(t, err)
 	_, err = Service.RunNow(userP, rec.ID, []string{"cp-tbl"}, "t",
@@ -213,13 +213,28 @@ func TestRunNowRendersLuaTable(t *testing.T) {
 	assert.Contains(t, f.lastTaskParams["cp-tbl"], `{'a', 'b', 'c'}`)
 }
 
+// table 值若已是 Lua 文本（前端直接编辑），原样透传（不二次渲染）。
+func TestRunNowTableAsLuaText(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	seedPhone(t, userP, "cp-tt")
+	rec, err := Service.CreateUserScript(userP, ScriptInput{
+		Name: "t", LuaContent: commentLua(`[{"key":"tags","type":"table"}]`, "local a=${tags}"),
+	})
+	require.NoError(t, err)
+	_, err = Service.RunNow(userP, rec.ID, []string{"cp-tt"}, "t",
+		map[string]any{"tags": "{1, 2, 3}"}, nil)
+	require.NoError(t, err)
+	assert.Contains(t, f.lastTaskParams["cp-tt"], `"tags":"{1, 2, 3}"`)
+}
+
 // object 值渲染成 Lua table（键稳定排序）。
 func TestRunNowRendersLuaObject(t *testing.T) {
 	f := &fakeOps{}
 	withFakeOps(t, f)
 	seedPhone(t, userP, "cp-obj")
 	rec, err := Service.CreateUserScript(userP, ScriptInput{
-		Name: "o", LuaContent: commentLua(`[{"key":"cfg","type":"object"}]`, "local c=${cfg}"),
+		Name: "o", LuaContent: commentLua(`[{"key":"cfg","type":"table"}]`, "local c=${cfg}"),
 	})
 	require.NoError(t, err)
 	_, err = Service.RunNow(userP, rec.ID, []string{"cp-obj"}, "t",

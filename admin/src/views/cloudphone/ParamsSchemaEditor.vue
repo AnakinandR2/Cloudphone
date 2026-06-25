@@ -7,26 +7,53 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Textarea } from '@/components/ui/textarea'
 
-// v-model 是参数定义的 JSON 字符串（脚本 paramsSchema）。
+// v-model 是参数定义的 JSON 字符串（我们的数组格式）。
 const model = defineModel<string>({ default: '' })
 const { t } = useI18n()
 
 interface Row {
   rid: number
   key: string
-  label: string
   type: ParamType
   required: boolean
-  defaultText: string
-  optionsText: string
+  // 「值」列：string/number → 文本/数字；enum → 候选项（逗号分隔）；table → Lua 文本；bool 用 valueBool
+  valueText: string
+  valueBool: boolean
   description: string
 }
 
-const types: ParamType[] = ['string', 'number', 'boolean', 'enum', 'array', 'object']
+const types: { value: ParamType, label: string }[] = [
+  { value: 'string', label: 'string' },
+  { value: 'number', label: 'number' },
+  { value: 'boolean', label: 'bool' },
+  { value: 'enum', label: 'enum' },
+  { value: 'table', label: 'table' },
+]
+
 let seq = 0
 const rows = ref<Row[]>([])
 let syncing = false
+
+function specToRow(s: ParamSpec): Row {
+  const row: Row = {
+    rid: ++seq,
+    key: s.key ?? '',
+    type: s.type ?? 'string',
+    required: !!s.required,
+    valueText: '',
+    valueBool: false,
+    description: s.description ?? '',
+  }
+  if (s.type === 'enum')
+    row.valueText = (s.options ?? []).join(', ')
+  else if (s.type === 'boolean')
+    row.valueBool = s.default === true
+  else if (s.default !== undefined && s.default !== null)
+    row.valueText = String(s.default)
+  return row
+}
 
 function parse(raw: string) {
   rows.value = []
@@ -34,20 +61,8 @@ function parse(raw: string) {
     return
   try {
     const specs = JSON.parse(raw) as ParamSpec[]
-    if (!Array.isArray(specs))
-      return
-    rows.value = specs.map(s => ({
-      rid: ++seq,
-      key: s.key ?? '',
-      label: s.label ?? '',
-      type: s.type ?? 'string',
-      required: !!s.required,
-      defaultText: s.default === undefined || s.default === null
-        ? ''
-        : (s.type === 'array' || s.type === 'object' ? JSON.stringify(s.default) : String(s.default)),
-      optionsText: (s.options ?? []).join(', '),
-      description: s.description ?? '',
-    }))
+    if (Array.isArray(specs))
+      rows.value = specs.map(specToRow)
   }
   catch {
     rows.value = []
@@ -55,55 +70,38 @@ function parse(raw: string) {
 }
 
 watch(model, (v) => {
-  if (syncing)
-    return
-  parse(v ?? '')
+  if (!syncing)
+    parse(v ?? '')
 }, { immediate: true })
 
-function coerceDefault(r: Row): unknown {
-  const txt = r.defaultText.trim()
-  if (!txt)
-    return undefined
-  switch (r.type) {
-    case 'number': {
-      const n = Number(txt)
-      return Number.isNaN(n) ? undefined : n
-    }
-    case 'boolean':
-      return txt === 'true'
-    case 'array':
-    case 'object':
-      try {
-        return JSON.parse(txt)
-      }
-      catch {
-        return undefined
-      }
-    default:
-      return txt
+function rowToSpec(r: Row): ParamSpec {
+  const spec: ParamSpec = { key: r.key.trim(), type: r.type }
+  if (r.required)
+    spec.required = true
+  if (r.type === 'enum') {
+    spec.options = r.valueText.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
   }
-}
-
-function parseOptions(r: Row): string[] {
-  return r.optionsText.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+  else if (r.type === 'boolean') {
+    spec.default = r.valueBool
+  }
+  else if (r.valueText.trim()) {
+    const txt = r.valueText.trim()
+    if (r.type === 'number') {
+      const n = Number(txt)
+      if (!Number.isNaN(n))
+        spec.default = n
+    }
+    else {
+      spec.default = txt // string / table（Lua 文本）
+    }
+  }
+  if (r.description.trim())
+    spec.description = r.description.trim()
+  return spec
 }
 
 function emitSchema() {
-  const specs: ParamSpec[] = rows.value.map((r) => {
-    const spec: ParamSpec = { key: r.key.trim(), type: r.type }
-    if (r.label.trim())
-      spec.label = r.label.trim()
-    if (r.required)
-      spec.required = true
-    if (r.type === 'enum')
-      spec.options = parseOptions(r)
-    const def = coerceDefault(r)
-    if (def !== undefined)
-      spec.default = def
-    if (r.description.trim())
-      spec.description = r.description.trim()
-    return spec
-  })
+  const specs = rows.value.map(rowToSpec)
   syncing = true
   model.value = specs.length ? JSON.stringify(specs) : ''
   syncing = false
@@ -112,7 +110,7 @@ function emitSchema() {
 watch(rows, emitSchema, { deep: true })
 
 function addRow() {
-  rows.value.push({ rid: ++seq, key: '', label: '', type: 'string', required: false, defaultText: '', optionsText: '', description: '' })
+  rows.value.push({ rid: ++seq, key: '', type: 'string', required: false, valueText: '', valueBool: false, description: '' })
 }
 function removeRow(rid: number) {
   rows.value = rows.value.filter(r => r.rid !== rid)
@@ -125,29 +123,60 @@ function removeRow(rid: number) {
       {{ t('scriptStore.params.empty') }}
     </div>
 
-    <div v-for="r in rows" :key="r.rid" class="space-y-2 rounded-md border p-3">
-      <div class="flex items-center gap-2">
-        <Input v-model="r.key" class="h-8 flex-1 font-mono" :placeholder="t('scriptStore.params.key')" />
-        <NativeSelect v-model="r.type" class="h-8 w-28">
-          <NativeSelectOption v-for="ty in types" :key="ty" :value="ty">
-            {{ ty }}
-          </NativeSelectOption>
-        </NativeSelect>
-        <label class="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-          <Checkbox :model-value="r.required" @update:model-value="(v) => (r.required = v === true)" />
-          {{ t('scriptStore.params.required') }}
-        </label>
-        <Button variant="ghost" size="icon" class="size-8 text-destructive" @click="removeRow(r.rid)">
-          <Trash2 class="size-4" />
-        </Button>
-      </div>
-      <div class="grid grid-cols-2 gap-2">
-        <Input v-model="r.label" class="h-8" :placeholder="t('scriptStore.params.label')" />
-        <Input v-model="r.defaultText" class="h-8" :placeholder="t('scriptStore.params.default')" />
-      </div>
-      <Input v-if="r.type === 'enum'" v-model="r.optionsText" class="h-8" :placeholder="t('scriptStore.params.options')" />
-      <Input v-model="r.description" class="h-8" :placeholder="t('scriptStore.params.desc')" />
-    </div>
+    <table v-else class="w-full border-separate border-spacing-x-2 border-spacing-y-1 text-sm">
+      <thead>
+        <tr class="text-left text-xs text-muted-foreground">
+          <th class="font-medium">{{ t('scriptStore.params.key') }}</th>
+          <th class="font-medium">{{ t('scriptStore.params.type') }}</th>
+          <th class="font-medium">{{ t('scriptStore.params.value') }}</th>
+          <th class="font-medium">{{ t('scriptStore.params.required') }}</th>
+          <th class="font-medium">{{ t('scriptStore.params.desc') }}</th>
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in rows" :key="r.rid" class="align-top">
+          <td class="w-32">
+            <Input v-model="r.key" class="h-8 font-mono" :placeholder="t('scriptStore.params.key')" />
+          </td>
+          <td class="w-24">
+            <NativeSelect v-model="r.type" class="h-8 w-24">
+              <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
+                {{ ty.label }}
+              </NativeSelectOption>
+            </NativeSelect>
+          </td>
+          <td>
+            <label v-if="r.type === 'boolean'" class="flex h-8 items-center gap-2">
+              <Checkbox :model-value="r.valueBool" @update:model-value="(v) => (r.valueBool = v === true)" />
+              <span class="text-muted-foreground">{{ r.valueBool ? 'true' : 'false' }}</span>
+            </label>
+            <Input v-else-if="r.type === 'number'" v-model="r.valueText" type="number" class="h-8" />
+            <Input v-else-if="r.type === 'enum'" v-model="r.valueText" class="h-8" :placeholder="t('scriptStore.params.enumPh')" />
+            <Textarea
+              v-else-if="r.type === 'table'"
+              :model-value="r.valueText"
+              :rows="2"
+              class="font-mono text-xs"
+              placeholder="{1, 2, 3}"
+              @update:model-value="(v) => (r.valueText = String(v))"
+            />
+            <Input v-else v-model="r.valueText" class="h-8" />
+          </td>
+          <td class="w-12 text-center">
+            <Checkbox :model-value="r.required" class="mt-1.5" @update:model-value="(v) => (r.required = v === true)" />
+          </td>
+          <td>
+            <Input v-model="r.description" class="h-8" />
+          </td>
+          <td class="w-8">
+            <Button variant="ghost" size="icon" class="size-8 text-destructive" @click="removeRow(r.rid)">
+              <Trash2 class="size-4" />
+            </Button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
     <Button variant="outline" size="sm" class="w-full" @click="addRow">
       <Plus class="size-4" /> {{ t('scriptStore.params.add') }}
