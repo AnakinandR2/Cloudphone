@@ -1,7 +1,26 @@
-# 自动化：脚本参数能力（运行时参数表 + 启动时填参）— 设计
+# 自动化：脚本参数能力（${} 文本替换 + 注释声明 schema + 启动时填参）— 设计
 
 - 日期：2026-06-25
-- 状态：待评审
+- 状态：已实现（含机制纠正）
+
+## 修订 2026-06-25（机制纠正，以本节为准）
+
+拿到中台官方参数示例 [docs/external_params_example.lua](../../external_params_example.lua) 后，确认了之前"不确定"的设备端机制，原 §1 决策 1 被推翻：
+
+- **机制 = 纯 `${placeholder}` 文本替换，替换值是一段 Lua 字面量**（不是运行时 `params.xxx` 表）。
+  - `local s = '${string_param}'`（字符串：模板自带引号，值传原文）
+  - `local n = ${int_param}` / `local b = ${bool_param}`（数字/布尔：裸字面量）
+  - `local a = ${array_param}`（数组/对象：注入 Lua table 文本 `{'a','b','c'}`，**由我们渲染**）
+- **schema 真源 = 脚本顶部 `--[[ ... ]]` 注释**（中台 object 格式：按参数名为 key，每项 `{desc,type,required}`；类型词表 `string/int/bool/array`）。我们解析它来渲染填参表单；编辑器在打开/上传时解析、保存时写回注释（双向同步）。
+- **类型**：保留我们的全 JSON 类型超集（`string/number/boolean/enum/array/object`），与中台词表互映射（`int↔number`、`bool↔boolean`、`array/object→Lua table`、`enum→string`+options），注释里另存 `uiType` 做无损回环。
+- **替换约定（中台示例风格）**：字符串 `'${x}'`、其余裸 `${x}`；标量按 JSON 原生发，array/object 由后端渲染成 Lua table 文本塞进 `scriptParams`。
+- **`params_schema` 列**：从此是"由顶部注释推导的归一化缓存"（供填参表单），不是独立编辑的字段。
+- **透传链路不变**：值仍走 §7.2/§7.3 `scriptParams`；下面 §2/§3 的"运行时参数表"措辞按本节理解为"`${}` 文本替换"。
+
+以下原文保留备查（决策 1 已被本节取代）。
+
+---
+
 - 背景：脚本管理 / 任务计划 / 任务日志已落地（见 [2026-06-17 设计](2026-06-17-automation-scripts-tasks-design.md)）。
   但脚本是「纯静态代码」——无法在启动时把外部值喂进去（如 `hello {placeholder}` 里的 `placeholder`）。
   本设计给脚本系统加上**参数能力**：作者在脚本上声明类型化参数，运行者启动任务时填值，值透传给中台 `scriptParams`。

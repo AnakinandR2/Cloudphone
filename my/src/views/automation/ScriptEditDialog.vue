@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { extractSchemaComment, parseSchema, upsertSchemaComment } from '@/utils/paramsComment'
 import LuaEditor from './LuaEditor.vue'
 import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
 
@@ -58,6 +59,10 @@ async function onFile(e: Event) {
   fileName.value = f.name
   if (!name.value)
     name.value = f.name.replace(/\.lua$/i, '')
+  // 上传的 .lua 若带顶部 schema 注释，解析进参数定义编辑器。
+  const inner = extractSchemaComment(luaContent.value)
+  if (inner)
+    paramsSchema.value = JSON.stringify(parseSchema(inner))
 }
 
 async function save() {
@@ -71,7 +76,10 @@ async function save() {
   }
   saving.value = true
   try {
-    const body = { name: name.value, description: description.value, luaContent: luaContent.value, paramsSchema: paramsSchema.value, fileName: fileName.value }
+    // schema 真源是脚本顶部注释：把参数定义写回 luaContent 注释，再上传（后端从注释推导）。
+    const specs = paramsSchema.value ? parseSchema(paramsSchema.value) : []
+    const finalLua = upsertSchemaComment(luaContent.value, specs)
+    const body = { name: name.value, description: description.value, luaContent: finalLua, fileName: fileName.value }
     if (props.script)
       await automationApi.updateScript(props.script.id, body)
     else

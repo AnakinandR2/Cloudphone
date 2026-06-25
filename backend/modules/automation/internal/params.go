@@ -2,7 +2,10 @@ package automation
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"manager-backend/framework/apperr"
@@ -159,14 +162,263 @@ func mergeParams(base, override map[string]any) map[string]any {
 	return out
 }
 
-// serializeParams 把最终参数序列化为中台 scriptParams 字符串；空则返回 ""（透传时 omitempty 丢弃）。
+// serializeParams 把最终参数序列化为中台 scriptParams 字符串（key → 待替换文本）。
+//
+// 中台是纯 ${} 文本替换、替换值是 Lua 字面量（见 docs/external_params_example.lua）：
+//   - string/enum：原文（脚本里写 '${x}'，模板自带引号）
+//   - number/boolean：JSON 原生（替换成裸 3 / true）
+//   - array/object：渲染成 Lua table 文本字符串（如 "{'a', 'b'}"），脚本里写裸 ${x}
+//
+// 空则返回 ""（透传 omitempty 丢弃）。
 func serializeParams(params map[string]any) string {
 	if len(params) == 0 {
 		return ""
 	}
-	b, err := json.Marshal(params)
+	out := make(map[string]any, len(params))
+	for k, v := range params {
+		switch v.(type) {
+		case []any, map[string]any:
+			out[k] = luaTableLiteral(v) // 复杂类型 → Lua table 文本
+		default:
+			out[k] = v // 标量保持 JSON 原生
+		}
+	}
+	b, err := json.Marshal(out)
 	if err != nil {
 		return ""
 	}
 	return string(b)
+}
+
+// ===== Lua 字面量渲染（array/object → Lua table 文本）=====
+
+func luaTableLiteral(v any) string {
+	switch t := v.(type) {
+	case []any:
+		parts := make([]string, 0, len(t))
+		for _, e := range t {
+			parts = append(parts, luaValue(e))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	case map[string]any:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys) // 稳定顺序
+		parts := make([]string, 0, len(t))
+		for _, k := range keys {
+			parts = append(parts, luaKey(k)+"="+luaValue(t[k]))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	default:
+		return luaValue(v)
+	}
+}
+
+func luaValue(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "nil"
+	case string:
+		return "'" + luaEscapeSingle(t) + "'"
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case []any, map[string]any:
+		return luaTableLiteral(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// luaKey 合法标识符直接用 k=，否则用 ["k"]=（Lua 双引号字符串键）。
+func luaKey(k string) string {
+	if paramKeyRe.MatchString(k) {
+		return k
+	}
+	return "[\"" + luaEscapeDouble(k) + "\"]"
+}
+
+func luaEscapeSingle(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "'", "\\'")
+	return s
+}
+
+func luaEscapeDouble(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return s
+}
+
+// ===== 顶部注释 schema 提取与解析（真源）=====
+
+// 匹配脚本开头的 --[[ ... ]] 长注释块（首块）。
+var schemaCommentRe = regexp.MustCompile(`(?s)^\s*--\[\[(.*?)\]\]`)
+
+// extractSchemaComment 取脚本顶部 --[[ ... ]] 注释里的内容（无则空串）。
+func extractSchemaComment(lua string) string {
+	m := schemaCommentRe.FindStringSubmatch(lua)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+// midParamEntry 是中台 object 格式注释里的单项（+ 我们的扩展字段）。
+type midParamEntry struct {
+	Desc        string   `json:"desc"`
+	Description string   `json:"description"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	UIType      string   `json:"uiType"` // 我们的真实类型（enum/object/number），用于无损回环
+	Required    bool     `json:"required"`
+	Default     any      `json:"default"`
+	Options     []string `json:"options"`
+}
+
+// mapMidType 把中台/通用类型词映射到我们的内部类型。
+func mapMidType(t string) ParamType {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "int", "integer", "number", "float", "double", "long":
+		return ParamNumber
+	case "bool", "boolean":
+		return ParamBoolean
+	case "array", "table", "list":
+		return ParamArray
+	case "object", "map":
+		return ParamObject
+	case "enum":
+		return ParamEnum
+	default:
+		return ParamString
+	}
+}
+
+// parseSchema 解析 schema JSON：支持我们的数组格式与中台的 object 格式（保序）。空 → nil。
+func parseSchema(jsonText string) ([]ParamSpec, error) {
+	jsonText = strings.TrimSpace(jsonText)
+	if jsonText == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(jsonText, "[") {
+		return validateSchema(jsonText) // 我们的数组格式
+	}
+	// 中台 object 格式：按声明顺序解析。
+	keys, err := objectKeysInOrder(jsonText)
+	if err != nil {
+		return nil, apperr.Validation("参数定义不是合法的 JSON 对象")
+	}
+	var raw map[string]midParamEntry
+	if err := json.Unmarshal([]byte(jsonText), &raw); err != nil {
+		return nil, apperr.Validation("参数定义不是合法的 JSON 对象")
+	}
+	specs := make([]ParamSpec, 0, len(keys))
+	for _, k := range keys {
+		e := raw[k]
+		ptype := mapMidType(e.Type)
+		if e.UIType != "" && validParamTypes[ParamType(e.UIType)] {
+			ptype = ParamType(e.UIType) // 优先用我们记录的真实类型
+		}
+		label := e.Label
+		if label == "" {
+			label = e.Desc
+		}
+		desc := e.Description
+		if desc == "" {
+			desc = e.Desc
+		}
+		specs = append(specs, ParamSpec{
+			Key:         k,
+			Label:       label,
+			Type:        ptype,
+			Required:    e.Required,
+			Default:     e.Default,
+			Description: desc,
+			Options:     e.Options,
+		})
+	}
+	// 复用数组校验逻辑：序列化回数组再校验。
+	norm, _ := json.Marshal(specs)
+	return validateSchema(string(norm))
+}
+
+// objectKeysInOrder 用流式 decoder 取顶层 object 的 key 顺序（encoding/json 的 map 不保序）。
+func objectKeysInOrder(jsonText string) ([]string, error) {
+	dec := json.NewDecoder(strings.NewReader(jsonText))
+	t, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	if d, ok := t.(json.Delim); !ok || d != '{' {
+		return nil, fmt.Errorf("not a json object")
+	}
+	var keys []string
+	for dec.More() {
+		kt, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, _ := kt.(string)
+		keys = append(keys, key)
+		if err := skipJSONValue(dec); err != nil {
+			return nil, err
+		}
+	}
+	return keys, nil
+}
+
+// skipJSONValue 跳过 decoder 当前位置的一个完整值（含嵌套）。
+func skipJSONValue(dec *json.Decoder) error {
+	t, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if d, ok := t.(json.Delim); ok && (d == '{' || d == '[') {
+		depth := 1
+		for depth > 0 {
+			tt, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			if dd, ok := tt.(json.Delim); ok {
+				if dd == '{' || dd == '[' {
+					depth++
+				} else {
+					depth--
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// deriveSchema 从脚本推导 schema：顶部注释为真源；注释缺失时回退到显式 schema 字段。
+// 返回 (规范化后的我们数组格式 JSON, specs)；无参数则 ("", nil)。
+func deriveSchema(lua, fallbackSchema string) (string, []ParamSpec, error) {
+	src := extractSchemaComment(lua)
+	if src == "" {
+		src = strings.TrimSpace(fallbackSchema)
+	}
+	if src == "" {
+		return "", nil, nil
+	}
+	specs, err := parseSchema(src)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(specs) == 0 {
+		return "", nil, nil
+	}
+	norm, _ := json.Marshal(specs)
+	return string(norm), specs, nil
 }

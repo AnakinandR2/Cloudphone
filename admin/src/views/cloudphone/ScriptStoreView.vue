@@ -30,6 +30,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
+import { extractSchemaComment, parseSchema, upsertSchemaComment } from '@/utils/paramsComment'
 import ParamsSchemaEditor from './ParamsSchemaEditor.vue'
 
 const { t } = useI18n()
@@ -86,18 +87,24 @@ async function onFile(e: Event) {
   form.value.fileName = f.name
   if (!form.value.name)
     form.value.name = f.name.replace(/\.lua$/i, '')
+  const inner = extractSchemaComment(form.value.luaContent)
+  if (inner)
+    form.value.paramsSchema = JSON.stringify(parseSchema(inner))
 }
 async function save() {
   if (!form.value.name.trim() || !form.value.luaContent.trim()) {
     toast.error(t('scriptStore.errRequired'))
     return
   }
+  // schema 真源是脚本顶部注释：把参数定义写回 luaContent 注释再上传（后端从注释推导）。
+  const specs = form.value.paramsSchema ? parseSchema(form.value.paramsSchema) : []
+  const payload = { ...form.value, luaContent: upsertSchemaComment(form.value.luaContent, specs) }
   saving.value = true
   try {
     if (editing.value)
-      await automationApi.storeUpdate(editing.value.id, form.value)
+      await automationApi.storeUpdate(editing.value.id, payload)
     else
-      await automationApi.storeCreate(form.value)
+      await automationApi.storeCreate(payload)
     toast.success(t('scriptStore.saveOk'))
     dialog.value = false
     load()

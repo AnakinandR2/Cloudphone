@@ -1,10 +1,17 @@
 import { defineFakeRoute } from 'vite-plugin-fake-server/client'
+import { extractSchemaComment, parseSchema } from '@/utils/paramsComment'
 
 function ok<T>(data: T, message = '成功') {
   return { code: 0, message, data }
 }
 function now() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
+}
+// 仿后端：schema 真源 = 脚本顶部注释；归一化成我们的数组 JSON 存库。
+function deriveSchema(lua: string, fallback?: string): string {
+  const inner = extractSchemaComment(lua || '')
+  const specs = inner ? parseSchema(inner) : (fallback ? parseSchema(fallback) : [])
+  return specs.length ? JSON.stringify(specs) : ''
 }
 
 interface ScriptRec {
@@ -25,7 +32,7 @@ interface ScriptRec {
 let scriptSeq = 10
 const scripts: ScriptRec[] = [
   { id: 1, store: false, scriptId: 100, name: '每日签到', description: '自动签到', version: '1.0.0', luaContent: 'log("hi")\nreport_result(\'{"ok":true}\')', paramsSchema: '', fileName: 'checkin.lua', status: 'enabled', createTime: '2026-06-10 10:00:00', updateTime: '2026-06-10 10:00:00' },
-  { id: 2, store: true, scriptId: 200, name: 'Hello World', description: '连通性测试脚本', version: '1.0.0', luaContent: 'log("hello " .. params.name)', paramsSchema: '[{"key":"name","label":"名字","type":"string","required":true,"default":"world"}]', fileName: 'hello.lua', status: 'enabled', createTime: '2026-06-01 09:00:00', updateTime: '2026-06-01 09:00:00' },
+  { id: 2, store: true, scriptId: 200, name: 'Hello World', description: '连通性测试脚本', version: '1.0.0', luaContent: '--[[\n{ "name": { "desc": "名字", "type": "string", "required": true, "default": "world", "uiType": "string", "label": "名字" } }\n]]\nlocal name = \'${name}\'\nlog("hello " .. name)', paramsSchema: '[{"key":"name","label":"名字","type":"string","required":true,"default":"world"}]', fileName: 'hello.lua', status: 'enabled', createTime: '2026-06-01 09:00:00', updateTime: '2026-06-01 09:00:00' },
 ]
 
 interface PlanRec {
@@ -81,7 +88,7 @@ export default defineFakeRoute([
       const rec: ScriptRec = {
         id: ++scriptSeq, store: false, scriptId: 300 + scriptSeq,
         name: body?.name ?? '脚本', description: body?.description ?? '', version: '1.0.0',
-        luaContent: body?.luaContent ?? '', paramsSchema: body?.paramsSchema ?? '',
+        luaContent: body?.luaContent ?? '', paramsSchema: deriveSchema(body?.luaContent ?? '', body?.paramsSchema),
         fileName: body?.fileName ?? '', status: 'enabled',
         createTime: now(), updateTime: now(),
       }
@@ -95,7 +102,7 @@ export default defineFakeRoute([
     response: ({ params, body }) => {
       const s = scripts.find(x => x.id === Number(params.id))
       if (s) {
-        Object.assign(s, { name: body?.name, description: body?.description, luaContent: body?.luaContent, paramsSchema: body?.paramsSchema ?? '', updateTime: now() })
+        Object.assign(s, { name: body?.name, description: body?.description, luaContent: body?.luaContent, paramsSchema: deriveSchema(body?.luaContent ?? '', body?.paramsSchema), updateTime: now() })
       }
       return ok(s)
     },

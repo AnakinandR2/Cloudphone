@@ -175,3 +175,95 @@ func TestCreateScriptRejectsBadSchema(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+// schema 真源 = 脚本顶部 --[[ ]] 注释（中台 object 格式），int→number、bool→boolean 映射，保序。
+func TestCreateScriptDerivesSchemaFromComment(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	lua := "--[[\n{\n  \"name\": {\"desc\":\"名字\",\"type\":\"string\",\"required\":true},\n" +
+		"  \"count\": {\"desc\":\"次数\",\"type\":\"int\"},\n" +
+		"  \"flag\": {\"desc\":\"开关\",\"type\":\"bool\"},\n" +
+		"  \"tags\": {\"desc\":\"标签\",\"type\":\"array\"}\n}\n]]\n" +
+		"local name='${name}'\nlocal count=${count}\n"
+	rec, err := Service.CreateUserScript(userP, ScriptInput{Name: "c", LuaContent: lua})
+	require.NoError(t, err)
+
+	specs, err := validateSchema(rec.ParamsSchema)
+	require.NoError(t, err)
+	require.Len(t, specs, 4)
+	// 保序
+	assert.Equal(t, []string{"name", "count", "flag", "tags"},
+		[]string{specs[0].Key, specs[1].Key, specs[2].Key, specs[3].Key})
+	// 类型映射
+	assert.Equal(t, ParamString, specs[0].Type)
+	assert.True(t, specs[0].Required)
+	assert.Equal(t, ParamNumber, specs[1].Type)  // int → number
+	assert.Equal(t, ParamBoolean, specs[2].Type) // bool → boolean
+	assert.Equal(t, ParamArray, specs[3].Type)
+}
+
+// 注释优先于显式字段（注释为真源）。
+func TestCommentOverridesSchemaField(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	lua := "--[[\n{\"fromComment\":{\"type\":\"string\"}}\n]]\nlog(1)"
+	rec, err := Service.CreateUserScript(userP, ScriptInput{
+		Name: "c", LuaContent: lua, ParamsSchema: `[{"key":"fromField","type":"string"}]`,
+	})
+	require.NoError(t, err)
+	specs, err := validateSchema(rec.ParamsSchema)
+	require.NoError(t, err)
+	require.Len(t, specs, 1)
+	assert.Equal(t, "fromComment", specs[0].Key)
+}
+
+// array 值渲染成 Lua table 文本注入 scriptParams。
+func TestRunNowRendersLuaTable(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	seedPhone(t, userP, "cp-tbl")
+	rec, err := Service.CreateUserScript(userP, ScriptInput{
+		Name: "t", LuaContent: "local a=${tags}",
+		ParamsSchema: `[{"key":"tags","type":"array"}]`,
+	})
+	require.NoError(t, err)
+	_, err = Service.RunNow(userP, rec.ID, []string{"cp-tbl"}, "t",
+		map[string]any{"tags": []any{"a", "b", "c"}}, nil)
+	require.NoError(t, err)
+	assert.Contains(t, f.lastTaskParams["cp-tbl"], `{'a', 'b', 'c'}`)
+}
+
+// object 值渲染成 Lua table（键稳定排序）。
+func TestRunNowRendersLuaObject(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	seedPhone(t, userP, "cp-obj")
+	rec, err := Service.CreateUserScript(userP, ScriptInput{
+		Name: "o", LuaContent: "local c=${cfg}",
+		ParamsSchema: `[{"key":"cfg","type":"object"}]`,
+	})
+	require.NoError(t, err)
+	_, err = Service.RunNow(userP, rec.ID, []string{"cp-obj"}, "t",
+		map[string]any{"cfg": map[string]any{"k": "v", "n": float64(2)}}, nil)
+	require.NoError(t, err)
+	assert.Contains(t, f.lastTaskParams["cp-obj"], `{k='v', n=2}`)
+}
+
+// 标量保持 JSON 原生（字符串原文、数字裸），供 ${} 文本替换。
+func TestRunNowScalarsStayNative(t *testing.T) {
+	f := &fakeOps{}
+	withFakeOps(t, f)
+	seedPhone(t, userP, "cp-sc")
+	rec, err := Service.CreateUserScript(userP, ScriptInput{
+		Name: "s", LuaContent: "x",
+		ParamsSchema: `[{"key":"name","type":"string"},{"key":"count","type":"number"},{"key":"flag","type":"boolean"}]`,
+	})
+	require.NoError(t, err)
+	_, err = Service.RunNow(userP, rec.ID, []string{"cp-sc"}, "t",
+		map[string]any{"name": "world", "count": float64(3), "flag": true}, nil)
+	require.NoError(t, err)
+	got := f.lastTaskParams["cp-sc"]
+	assert.Contains(t, got, `"name":"world"`)
+	assert.Contains(t, got, `"count":3`)
+	assert.Contains(t, got, `"flag":true`)
+}

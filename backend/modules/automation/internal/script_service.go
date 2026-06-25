@@ -56,7 +56,9 @@ func (s *serviceImpl) createScript(ownerID uint, store bool, in ScriptInput) (*A
 	if strings.TrimSpace(in.Name) == "" {
 		return nil, apperr.BadRequest("脚本名称不能为空")
 	}
-	if _, err := validateSchema(in.ParamsSchema); err != nil {
+	// schema 真源 = 脚本顶部 --[[ ]] 注释；回退到显式字段。规范化存库供填参表单用。
+	normSchema, _, err := deriveSchema(in.LuaContent, in.ParamsSchema)
+	if err != nil {
 		return nil, err
 	}
 	rec := &AutomationScript{
@@ -66,7 +68,7 @@ func (s *serviceImpl) createScript(ownerID uint, store bool, in ScriptInput) (*A
 		Description:  in.Description,
 		Version:      "1.0.0",
 		LuaContent:   in.LuaContent,
-		ParamsSchema: strings.TrimSpace(in.ParamsSchema),
+		ParamsSchema: normSchema,
 		FileName:     in.FileName,
 		Status:       ScriptEnabled,
 	}
@@ -123,14 +125,15 @@ func (s *serviceImpl) updateScript(rec *AutomationScript, in ScriptInput) (*Auto
 	if strings.TrimSpace(in.LuaContent) == "" {
 		return nil, apperr.BadRequest("脚本内容不能为空")
 	}
-	if _, err := validateSchema(in.ParamsSchema); err != nil {
+	normSchema, _, err := deriveSchema(in.LuaContent, in.ParamsSchema)
+	if err != nil {
 		return nil, err
 	}
 	oldScriptID := rec.ScriptID
 	rec.Name = in.Name
 	rec.Description = in.Description
 	rec.LuaContent = in.LuaContent
-	rec.ParamsSchema = strings.TrimSpace(in.ParamsSchema)
+	rec.ParamsSchema = normSchema
 	if in.FileName != "" {
 		rec.FileName = in.FileName
 	}
