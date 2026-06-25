@@ -3,7 +3,7 @@ import type { PaymentMethod, QuoteResult2 } from '@/types/billing'
 import { HelpCircle, Loader2 } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { formatDate } from '@/utils/date'
 import { computeFeeCents, feeWaived, fmtCents, fmtDiscountBps, fmtFeeHint } from '@/utils/money'
@@ -134,16 +134,18 @@ const feeLogoMark = computed(() => {
               </template>
               <span>{{ t('billing.purchase2.sumFee') }}</span>
               <span v-if="feeHint" class="text-xs">（{{ feeHint }}）</span>
-              <Popover v-if="freeThresholdCents > 0">
-                <PopoverTrigger as-child>
-                  <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
-                    <HelpCircle class="size-3.5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent class="w-auto max-w-60 text-xs" :side-offset="6">
-                  {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
-                </PopoverContent>
-              </Popover>
+              <TooltipProvider v-if="freeThresholdCents > 0" :delay-duration="100">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
+                      <HelpCircle class="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent class="max-w-60 text-xs" :side-offset="6">
+                    {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </span>
             <span class="tabular-nums">
               <span v-if="waived" class="text-muted-foreground mr-1 line-through">¥{{ fmtCents(rawFeeCents) }}</span>

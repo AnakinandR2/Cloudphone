@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { computeFeeCents, feeWaived, fmtCents, fmtFeeHint } from '@/utils/money'
 import PaymentBox from './PaymentBox.vue'
@@ -162,16 +162,18 @@ async function confirm() {
             </template>
             <span>{{ t('billing.purchase2.sumFee') }}</span>
             <span v-if="feeHint" class="text-xs">（{{ feeHint }}）</span>
-            <Popover v-if="freeThresholdCents > 0">
-              <PopoverTrigger as-child>
-                <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
-                  <HelpCircle class="size-3.5" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent class="w-auto max-w-60 text-xs" :side-offset="6">
-                {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
-              </PopoverContent>
-            </Popover>
+            <TooltipProvider v-if="freeThresholdCents > 0" :delay-duration="100">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button type="button" class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer self-center transition-colors">
+                    <HelpCircle class="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent class="max-w-60 text-xs" :side-offset="6">
+                  {{ t('billing.purchase2.feeFreeHint', { amount: freeThresholdYuan }) }}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </span>
           <span class="tabular-nums">
             <span v-if="waived" class="text-muted-foreground mr-1 line-through">¥{{ fmtCents(rawFeeCents) }}</span>
