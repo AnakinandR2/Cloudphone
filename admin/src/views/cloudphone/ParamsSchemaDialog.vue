@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -29,7 +30,32 @@ watch(open, (v) => {
 })
 
 function save() {
-  const specs = schema.value ? parseSchema(schema.value) : []
+  // 校验：每个参数 key 必填、合法、唯一（空 key 行 parseSchema 会丢弃，这里先拦下）。
+  let raw: { key?: unknown }[] = []
+  try {
+    raw = schema.value ? JSON.parse(schema.value) : []
+  }
+  catch {
+    raw = []
+  }
+  const seen = new Set<string>()
+  for (const r of raw) {
+    const key = String(r?.key ?? '').trim()
+    if (!key) {
+      toast.error(t('scriptStore.params.errKey'))
+      return
+    }
+    if (!/^[A-Za-z_]\w*$/.test(key)) {
+      toast.error(t('scriptStore.params.errKeyBad', { key }))
+      return
+    }
+    if (seen.has(key)) {
+      toast.error(t('scriptStore.params.errKeyDup', { key }))
+      return
+    }
+    seen.add(key)
+  }
+  const specs = parseSchema(schema.value)
   emit('saved', upsertSchemaComment(props.lua, specs))
   open.value = false
 }

@@ -169,6 +169,9 @@ export default {
       default: '默认值',
       options: '候选值（enum，逗号分隔）',
       desc: '说明（可选）',
+      errKey: '参数 key 必填，请填写后再保存',
+      errKeyBad: 'key 非法（须字母或下划线开头）：{key}',
+      errKeyDup: 'key 重复：{key}',
     },
   },
   userScripts: {

@@ -169,6 +169,9 @@ export default {
       default: 'Default',
       options: 'Options (enum, comma-separated)',
       desc: 'Description (optional)',
+      errKey: 'Parameter key is required',
+      errKeyBad: 'Invalid key (must start with a letter or underscore): {key}',
+      errKeyDup: 'Duplicate key: {key}',
     },
   },
   userScripts: {

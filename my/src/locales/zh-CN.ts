@@ -66,6 +66,9 @@ export default {
       choose: '请选择',
       badJson: 'JSON 格式不合法',
       requiredMsg: '「{name}」为必填',
+      errKey: '参数 key 必填，请填写后再保存',
+      errKeyBad: 'key 非法（须字母或下划线开头）：{key}',
+      errKeyDup: 'key 重复：{key}',
     },
   },
   taskSchedule: {

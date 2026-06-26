@@ -66,6 +66,9 @@ export default {
       choose: 'Select',
       badJson: 'Invalid JSON',
       requiredMsg: '“{name}” is required',
+      errKey: 'Parameter key is required',
+      errKeyBad: 'Invalid key (must start with a letter or underscore): {key}',
+      errKeyDup: 'Duplicate key: {key}',
     },
   },
   taskSchedule: {
