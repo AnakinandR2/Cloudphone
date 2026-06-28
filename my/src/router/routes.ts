@@ -44,10 +44,24 @@ export const asyncRoutes: AppMainRoute[] = [
         meta: { title: 'menu.proxy', icon: 'Network' },
       },
       {
+        // 应用/素材（我的应用 + 应用市场 + 我的素材，共享容量条）
+        path: '/assets',
+        name: 'assets',
+        component: () => import('@/views/assets/AssetsView.vue'),
+        meta: { title: 'menu.assets', icon: 'FolderArchive' },
+      },
+      {
+        // 旧入口重定向到合并后的「应用/素材」页（不在菜单显示）
         path: '/phone/apps',
         name: 'phoneApps',
-        component: () => import('@/views/app/AppLibraryView.vue'),
-        meta: { title: 'menu.phoneApps', icon: 'AppWindow' },
+        redirect: '/assets',
+        meta: { menu: false },
+      },
+      {
+        path: '/library',
+        name: 'library',
+        redirect: '/assets',
+        meta: { menu: false },
       },
     ],
   },
@@ -190,6 +204,15 @@ export function flattenRoutes(mains: AppMainRoute[]): RouteRecordRaw[] {
           path: node.path,
           name: node.name,
           component: node.component,
+          meta: node.meta,
+        } as RouteRecordRaw)
+      }
+      else if (node.redirect && node.path) {
+        // 仅重定向的路由（无 component），用于旧入口跳转到新页
+        result.push({
+          path: node.path,
+          name: node.name,
+          redirect: node.redirect,
           meta: node.meta,
         } as RouteRecordRaw)
       }

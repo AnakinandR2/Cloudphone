@@ -65,6 +65,9 @@ importers:
       reka-ui:
         specifier: ^2.9.8
         version: 2.9.8(vue@3.5.35(typescript@5.8.3))
+      spark-md5:
+        specifier: ^3.0.2
+        version: 3.0.2
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.6.0
@@ -93,6 +96,9 @@ importers:
       '@types/node':
         specifier: ^22.15.0
         version: 22.19.19
+      '@types/spark-md5':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@vitejs/plugin-vue':
         specifier: ^6.0.0
         version: 6.0.7(vite@7.3.3(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))(vue@3.5.35(typescript@5.8.3))
@@ -1400,6 +1406,9 @@ packages:
 
   '@types/pbf@3.0.5':
     resolution: {integrity: sha512-j3pOPiEcWZ34R6a6mN07mUkM4o4Lwf6hPNt8eilOeZhTFbxFXmKhvXl9Y28jotFPaI1bpPDJsbCprUoNke6OrA==}
+
+  '@types/spark-md5@3.0.5':
+    resolution: {integrity: sha512-lWf05dnD42DLVKQJZrDHtWFidcLrHuip01CtnC2/S6AMhX4t9ZlEUj4iuRlAnts0PQk7KESOqKxeGE/b6sIPGg==}
 
   '@types/supercluster@5.0.3':
     resolution: {integrity: sha512-XMSqQEr7YDuNtFwSgaHHOjsbi0ZGL62V9Js4CW45RBuRYlNWSW/KDqN+RFFE7HdHcGhJPtN0klKvw06r9Kg7rg==}
@@ -3576,6 +3585,9 @@ packages:
     resolution: {integrity: sha512-LbrmJOMUSdEVxIKvdcJzQC+nQhe8FUZQTXQy6+I75skNgn3OoQ0DZA8YnFa7gp8tqtL3KPf1kmo0R5DoApeSGQ==}
     engines: {node: '>=0.10.0'}
 
+  spark-md5@3.0.2:
+    resolution: {integrity: sha512-wcFzz9cDfbuqe0FZzfi2or1sgyIrsDwmPwfZC4hiNidPdPINjeUwNfv5kldczoEAcjl9Y1L3SM7Uz2PUEQzxQw==}
+
   spdx-exceptions@2.5.0:
     resolution: {integrity: sha512-PiU42r+xO4UbUS1buo3LPJkjlO7430Xn5SVAhdpzzsPHsjbYVflnnFdATgabnLude+Cqu25p6N+g2lw/PFsa4w==}
 
@@ -5156,6 +5168,8 @@ snapshots:
   '@types/parse-json@4.0.2': {}
 
   '@types/pbf@3.0.5': {}
+
+  '@types/spark-md5@3.0.5': {}
 
   '@types/supercluster@5.0.3':
     dependencies:
@@ -7740,6 +7754,8 @@ snapshots:
   source-map-js@1.2.1: {}
 
   source-map@0.5.7: {}
+
+  spark-md5@3.0.2: {}
 
   spdx-exceptions@2.5.0: {}
 

@@ -38,6 +38,8 @@ export default defineConfig(({ mode }) => {
       port: 5666,
       strictPort: false, 
       host: true,
+      // 开发环境放开所有 Host 头校验（反代/自定义域名访问，如 vibe06.u4a.cn）
+      allowedHosts: true,
       // HMR 客户端路径跟 base 对齐到 /my/，让 nginx 的 location /my 走 WS Upgrade。
       hmr: {
         path: '/my/',

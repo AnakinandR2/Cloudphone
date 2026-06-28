@@ -109,6 +109,13 @@ var PermissionGroups = []PermissionGroup{
 			{Key: "partner:manage", Label: "管理代理IP合作商（增删改/上传）"},
 		},
 	},
+	{
+		Module: "素材库", ModuleKey: "library",
+		Permissions: []Permission{
+			{Key: "library:view", Label: "查看素材库定价配置"},
+			{Key: "library:manage", Label: "管理素材库定价配置"},
+		},
+	},
 	// scaffold:permission-groups
 }
 

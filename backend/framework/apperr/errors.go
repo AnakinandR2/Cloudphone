@@ -19,6 +19,7 @@ const (
 	KindValidation               // 入参/业务校验失败 → 422
 	KindUnauthorized             // 未认证 → 401
 	KindForbidden                // 已认证但无权限 → 403
+	KindUnavailable              // 依赖未配置/暂不可用 → 503
 )
 
 // Error 携带类别与可直接展示给调用方的消息。
@@ -65,6 +66,8 @@ func HTTPStatus(k Kind) int {
 		return http.StatusUnauthorized
 	case KindForbidden:
 		return http.StatusForbidden
+	case KindUnavailable:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

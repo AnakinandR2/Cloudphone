@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config 应用配置
@@ -80,6 +81,23 @@ type Config struct {
 	S3Bucket          string
 	S3UsePathStyle    bool   // MinIO 等自建兼容服务多需 true；AWS/多数云厂商用 false
 	S3PublicBaseURL   string // 公开访问/CDN 前缀；为空时由端点+桶拼接
+
+	// 素材库专用【私有】对象存储——一套与公开 S3 完全独立的配置（可以是不同服务/厂商）。
+	// 私有桶无匿名读、无匿名 list、无公开前缀。AK/SK/Bucket 配全框架才构造 framework.S3Library；
+	// 缺任一则 S3Library 为 nil（素材库存储不可用，相关接口返回未配置错误）——不回退公开 S3。
+	S3LibraryEndpoint        string
+	S3LibraryRegion          string
+	S3LibraryAccessKeyID     string
+	S3LibrarySecretAccessKey string
+	S3LibraryBucket          string
+	S3LibraryUsePathStyle    bool
+	// S3PresignGetTTL / S3PresignPutTTL 素材库 presigned 下载/上传短链有效期（Go duration）。
+	// 解析失败或 <=0 回退默认（GET 15m / PUT 30m）。
+	S3PresignGetTTL time.Duration
+	S3PresignPutTTL time.Duration
+	// S3LibraryInstallGetTTL 应用按 URL 安装时给中台下载用的 presigned GET 有效期（Go duration）。
+	// 必须够中台从该 URL 下载完成，故默认放大到 1h（远长于普通浏览 15m）。
+	S3LibraryInstallGetTTL time.Duration
 }
 
 var AppConfig *Config
@@ -154,13 +172,22 @@ func LoadConfig() *Config {
 		// 参考官方控制台 cp-glory-service 默认 "cloudphone-demo"。
 		MidplatOperatorName: getEnv("MIDPLAT_OPERATOR_NAME", "cloudphone-manager"),
 
-		S3Endpoint:        getEnv("S3_ENDPOINT", ""),
-		S3Region:          getEnv("S3_REGION", "us-east-1"),
-		S3AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
-		S3SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
-		S3Bucket:          getEnv("S3_BUCKET", ""),
-		S3UsePathStyle:    getEnvAsBool("S3_USE_PATH_STYLE", false),
-		S3PublicBaseURL:   getEnv("S3_PUBLIC_BASE_URL", ""),
+		S3Endpoint:               getEnv("S3_ENDPOINT", ""),
+		S3Region:                 getEnv("S3_REGION", "us-east-1"),
+		S3AccessKeyID:            getEnv("S3_ACCESS_KEY_ID", ""),
+		S3SecretAccessKey:        getEnv("S3_SECRET_ACCESS_KEY", ""),
+		S3Bucket:                 getEnv("S3_BUCKET", ""),
+		S3UsePathStyle:           getEnvAsBool("S3_USE_PATH_STYLE", false),
+		S3PublicBaseURL:          getEnv("S3_PUBLIC_BASE_URL", ""),
+		S3LibraryEndpoint:        getEnv("S3_LIBRARY_ENDPOINT", ""),
+		S3LibraryRegion:          getEnv("S3_LIBRARY_REGION", "us-east-1"),
+		S3LibraryAccessKeyID:     getEnv("S3_LIBRARY_ACCESS_KEY_ID", ""),
+		S3LibrarySecretAccessKey: getEnv("S3_LIBRARY_SECRET_ACCESS_KEY", ""),
+		S3LibraryBucket:          getEnv("S3_LIBRARY_BUCKET", ""),
+		S3LibraryUsePathStyle:    getEnvAsBool("S3_LIBRARY_USE_PATH_STYLE", false),
+		S3PresignGetTTL:          getEnvAsDuration("S3_PRESIGN_GET_TTL", 15*time.Minute),
+		S3PresignPutTTL:          getEnvAsDuration("S3_PRESIGN_PUT_TTL", 30*time.Minute),
+		S3LibraryInstallGetTTL:   getEnvAsDuration("S3_LIBRARY_INSTALL_GET_TTL", time.Hour),
 	}
 
 	AppConfig = cfg
@@ -185,6 +212,10 @@ func LoadConfig() *Config {
 		displayOrEmpty(cfg.S3Endpoint), cfg.S3Region, displayOrEmpty(cfg.S3Bucket), cfg.S3UsePathStyle, displayOrEmpty(cfg.S3PublicBaseURL))
 	log.Printf("[config] S3AccessKeyID=%s  S3SecretAccessKey=%s",
 		displayOrEmpty(cfg.S3AccessKeyID), maskSecret(cfg.S3SecretAccessKey))
+	log.Printf("[config] S3LibraryEndpoint=%s  S3LibraryRegion=%s  S3LibraryBucket=%s  S3LibraryUsePathStyle=%v",
+		displayOrEmpty(cfg.S3LibraryEndpoint), cfg.S3LibraryRegion, displayOrEmpty(cfg.S3LibraryBucket), cfg.S3LibraryUsePathStyle)
+	log.Printf("[config] S3LibraryAccessKeyID=%s  S3LibrarySecretAccessKey=%s  S3PresignGetTTL=%s  S3PresignPutTTL=%s",
+		displayOrEmpty(cfg.S3LibraryAccessKeyID), maskSecret(cfg.S3LibrarySecretAccessKey), cfg.S3PresignGetTTL, cfg.S3PresignPutTTL)
 
 	if cfg.JWTSecret == "change-me-in-production" {
 		log.Println("[config] ⚠️  正在使用默认 JWT_SECRET，请在生产环境务必改为强随机值！")
@@ -260,6 +291,25 @@ func getEnvAsInt(key string, defaultValue int) int {
 		log.Fatalf("环境变量 %s 转换为 int 失败: %v", key, err)
 	}
 	return v
+}
+
+// getEnvAsDuration 解析 Go duration 形式的环境变量（如 15m / 1h30m）。
+// 未设置、解析失败或 <=0 时回退默认值（不致命，仅记一条提示，便于配错时仍可启动）。
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	s := strings.TrimSpace(os.Getenv(key))
+	if s == "" {
+		return defaultValue
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		log.Printf("[config] ⚠️  环境变量 %s=%q 解析为 duration 失败，回退默认值 %s: %v", key, s, defaultValue, err)
+		return defaultValue
+	}
+	if d <= 0 {
+		log.Printf("[config] ⚠️  环境变量 %s=%q <= 0，回退默认值 %s", key, s, defaultValue)
+		return defaultValue
+	}
+	return d
 }
 
 func getEnvAsBool(key string, defaultValue bool) bool {

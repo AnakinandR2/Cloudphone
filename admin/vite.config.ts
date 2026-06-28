@@ -30,8 +30,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5666,
+      port: 5667,
       host: true,
+      // 开发环境放开所有 Host 头校验（反代/自定义域名访问，如 vibe06.u4a.cn）
+      allowedHosts: true,
       proxy: {
         // 真实后端 Go/Gin 服务（BasePath /api/v1，端口 9981）。开启 Mock 时走 /mock-api，不经此代理。
         '/api': {

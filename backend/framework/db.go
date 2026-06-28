@@ -44,7 +44,16 @@ func InitDB() error {
 			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 		dialector = postgres.Open(dsn)
 	case "sqlite":
-		dialector = sqlite.Open(cfg.DBName)
+		// pragma 必须写进 DSN：busy_timeout 等是「按连接」生效的，写在 DSN 里才能让
+		// 连接池里每条连接打开时都带上；否则只有 DB.Exec 命中的那一条连接生效，
+		// 池中其余连接 busy_timeout=0，结算等并发写一争用就立刻报 database is locked。
+		//   _busy_timeout=5000  写锁被占时最多等 5s 再报 BUSY
+		//   _journal_mode=WAL   读写分离，多读一写
+		//   _txlock=immediate   事务一开始就 BEGIN IMMEDIATE 拿写锁，
+		//                       避免 read-then-write 的写锁升级死锁（busy_timeout 对升级死锁无效）
+		//   _synchronous=NORMAL WAL 下的安全档位，缩短写事务持锁时间
+		dialector = sqlite.Open(cfg.DBName +
+			"?_busy_timeout=5000&_journal_mode=WAL&_txlock=immediate&_synchronous=NORMAL")
 	default:
 		return fmt.Errorf("不支持的数据库类型: %s", dbType)
 	}
@@ -81,9 +90,7 @@ func InitDB() error {
 		return fmt.Errorf("获取数据库实例失败: %v", err)
 	}
 	if dbType == "sqlite" {
-		// WAL 模式：允许并发读（多读一写），写等待最多 5 秒再报 BUSY。
-		DB.Exec("PRAGMA journal_mode=WAL")
-		DB.Exec("PRAGMA busy_timeout=5000")
+		// WAL + busy_timeout + _txlock=immediate 已在 DSN 内对每条连接生效（见上）。
 		sqlDB.SetMaxOpenConns(10)
 		sqlDB.SetMaxIdleConns(5)
 		sqlDB.SetConnMaxLifetime(time.Hour)

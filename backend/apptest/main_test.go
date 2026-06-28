@@ -13,6 +13,7 @@ import (
 	_ "manager-backend/modules/billing"
 	_ "manager-backend/modules/cloudphone"
 	_ "manager-backend/modules/example"
+	_ "manager-backend/modules/library"
 	_ "manager-backend/modules/mcp"
 	_ "manager-backend/modules/note"
 	_ "manager-backend/modules/openapi"
