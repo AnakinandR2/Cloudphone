@@ -2,34 +2,48 @@ package app
 
 import "time"
 
-// 应用本地状态（中台异步创建：先「创建中」，应用就绪出现在 /app/page 后转「正常」）。
+// 解析状态：上传后旁挂元数据的服务端解析进度（finalize/上传时落定）。
 const (
-	StatusCreating = "CREATING"
-	StatusNormal   = "NORMAL"
+	ParseStatusParsing = "parsing"
+	ParseStatusReady   = "ready"
+	ParseStatusFailed  = "failed"
 )
 
-// CustomerApp 是「上传应用 ↔ 本地绑定」。两类来源共用此表，用 Store 区分：
-//   - Store=false：前台用户上传的「我的应用」，按 UserID 属主隔离；
-//   - Store=true ：admin 上传的「应用商店」应用，面向全部用户，UserID=0。
-//
-// 应用库在中台是租户全局资源（无 owner），这张表让我们能按属主隔离、展示创建状态、
-// 删除时校验归属（避免误删他人/全局应用），并把商店应用与用户上传区分开。
-type CustomerApp struct {
-	ID uint `gorm:"primaryKey" json:"id"`
-	// 上传者前台用户 ID；应用商店(Store=true)由 admin 上传、无前台属主，UserID=0。
-	UserID uint `gorm:"index;not null" json:"-"`
-	// 应用商店标记：admin 上传 = true，面向全部用户；普通用户上传 = false。
-	Store       bool      `gorm:"index;default:false" json:"store"`
-	CpAppID     int64     `gorm:"index" json:"cpAppId"` // 中台 app_info 主键，删除/匹配用
-	AppMD5      string    `gorm:"size:64;index" json:"appMd5"`
-	AppName     string    `gorm:"size:255" json:"appName"`
-	PackageName string    `gorm:"size:255" json:"packageName"`
-	Version     string    `gorm:"size:64" json:"version"`
-	FileSize    string    `gorm:"size:32" json:"fileSize"`
-	IconPath    string    `gorm:"size:1024" json:"iconPath"`
-	Status      string    `gorm:"size:16" json:"status"` // CREATING / NORMAL
-	CreatedAt   time.Time `json:"createTime"`
-	UpdatedAt   time.Time `json:"updateTime"`
+// AppUserMeta 是「用户应用」素材库文件的旁挂元数据，与 library 文件一对一
+// （PK = library_files.id）。属主与配额由 library 保证，这里只存解析所得的
+// 应用元信息（名称/版本/包名/图标/MD5/解析状态），供列表展示与按 URL 安装组载荷。
+// 删除素材库文件即应用消失，本行随 file_id 一并清理。
+type AppUserMeta struct {
+	LibraryFileID uint   `gorm:"primaryKey"`     // = library_files.id
+	UserID        uint   `gorm:"index;not null"` // 上传者（与 library 文件属主一致）
+	PackageName   string `gorm:"size:255;index"`
+	Version       string `gorm:"size:64"`
+	AppName       string `gorm:"size:255"`  // 解析所得，可与文件名不同
+	IconURL       string `gorm:"size:1024"` // 公有桶图标 URL
+	MD5           string `gorm:"size:64;index"`
+	ParseStatus   string `gorm:"size:16"` // parsing|ready|failed
+	ParseError    string `gorm:"size:512"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
-func (CustomerApp) TableName() string { return "customer_apps" }
+func (AppUserMeta) TableName() string { return "app_user_meta" }
+
+// AppMarket 是应用市场应用：平台资产，二进制存平台公有桶，不计任何用户配额。
+// admin 经后端 multipart 上传 → 解析 → PutObject → 落本行；用户端只读浏览。
+type AppMarket struct {
+	ID          uint   `gorm:"primaryKey"`
+	S3Key       string `gorm:"size:512;uniqueIndex"` // 公有桶对象键
+	AppName     string `gorm:"size:255"`
+	PackageName string `gorm:"size:255;index"`
+	Version     string `gorm:"size:64"`
+	IconURL     string `gorm:"size:1024"`
+	MD5         string `gorm:"size:64"`
+	FileSize    int64  `gorm:"not null;default:0"`
+	ParseStatus string `gorm:"size:16"` // parsing|ready|failed
+	ParseError  string `gorm:"size:512"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (AppMarket) TableName() string { return "app_market" }

@@ -151,6 +151,49 @@ func (c *Client) Exists(ctx context.Context, key string) (bool, error) {
 	return false, fmt.Errorf("s3: 查询对象 %s 失败: %w", key, err)
 }
 
+// SizeOf 通过 HeadObject 返回对象真实大小（字节）。对象不存在或查询失败返回错误。
+func (c *Client) SizeOf(ctx context.Context, key string) (int64, error) {
+	out, err := c.api.HeadObject(ctx, &awss3.HeadObjectInput{
+		Bucket: aws.String(c.cfg.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("s3: 查询对象大小 %s 失败: %w", key, err)
+	}
+	if out.ContentLength == nil {
+		return 0, nil
+	}
+	return *out.ContentLength, nil
+}
+
+// HeadResult 是 Head 的返回：对象大小（字节）+ ETag。
+// 单段 PUT 上传时 ETag 即对象内容的 md5（32-hex，已去除两端引号）；
+// 分段上传时 ETag 形如 "<hex>-<n>"，调用方需自行回退到流式算 md5。
+type HeadResult struct {
+	Size int64
+	ETag string
+}
+
+// Head 通过 HeadObject 返回对象大小与 ETag（去除 ETag 两端引号）。
+// 对象不存在或查询失败返回错误。
+func (c *Client) Head(ctx context.Context, key string) (HeadResult, error) {
+	out, err := c.api.HeadObject(ctx, &awss3.HeadObjectInput{
+		Bucket: aws.String(c.cfg.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return HeadResult{}, fmt.Errorf("s3: 查询对象 %s 失败: %w", key, err)
+	}
+	res := HeadResult{}
+	if out.ContentLength != nil {
+		res.Size = *out.ContentLength
+	}
+	if out.ETag != nil {
+		res.ETag = strings.Trim(*out.ETag, "\"")
+	}
+	return res, nil
+}
+
 // ListObjects 列出指定前缀下的对象 key（最多 limit 个；limit<=0 时由服务端默认上限决定）。
 func (c *Client) ListObjects(ctx context.Context, prefix string, limit int32) ([]string, error) {
 	in := &awss3.ListObjectsV2Input{

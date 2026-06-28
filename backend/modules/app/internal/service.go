@@ -1,12 +1,518 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"io"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"manager-backend/framework"
 	"manager-backend/framework/apperr"
-	"manager-backend/framework/midplat"
+	"manager-backend/modules/app/internal/apkparse"
+	"manager-backend/modules/library"
+
+	"github.com/google/uuid"
 )
+
+// AppService 模块内服务实例，由 module.Init 注入后装配。
+var AppService *serviceImpl
+
+type serviceImpl struct {
+	repo repository
+}
+
+func newService(repo repository) *serviceImpl { return &serviceImpl{repo: repo} }
+
+func opCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 30*time.Second)
+}
+
+// installTTL 从配置取应用按 URL 安装专用的 presigned GET 有效期（见 §7.4）；缺配置回退 1h。
+func installTTL() time.Duration {
+	if framework.AppConfig != nil && framework.AppConfig.S3LibraryInstallGetTTL > 0 {
+		return framework.AppConfig.S3LibraryInstallGetTTL
+	}
+	return time.Hour
+}
+
+// ---- DTO ----
+
+// UserAppDTO 是「我的应用」列表/详情条目（library app 文件 + app_user_meta）。
+type UserAppDTO struct {
+	FileID      uint   `json:"file_id"`
+	AppName     string `json:"app_name"`
+	PackageName string `json:"package_name"`
+	Version     string `json:"version"`
+	IconURL     string `json:"icon_url"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ParseStatus string `json:"parse_status"`
+	ParseError  string `json:"parse_error"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// MarketAppDTO 是应用市场条目（用户端浏览 / admin 管理共用）。
+type MarketAppDTO struct {
+	ID          uint   `json:"id"`
+	AppName     string `json:"app_name"`
+	PackageName string `json:"package_name"`
+	Version     string `json:"version"`
+	IconURL     string `json:"icon_url"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ParseStatus string `json:"parse_status"`
+	ParseError  string `json:"parse_error"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// AdminUserAppDTO 是运营治理条目：用户应用文件 + 上传者 + 解析元数据。
+type AdminUserAppDTO struct {
+	UserAppDTO
+	UserID       uint   `json:"user_id"`
+	UserPhone    string `json:"user_phone"`
+	UserNickname string `json:"user_nickname"`
+}
+
+func fmtTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
+}
+
+// ---- 用户应用 ----
+
+// ListUserApps 列出当前用户的 app 类型素材库文件，LEFT JOIN app_user_meta 组 DTO。
+func (s *serviceImpl) ListUserApps(userID, page, size int) ([]UserAppDTO, error) {
+	files, err := library.ListUsableFiles(userID, library.UsableFilter{
+		FileType: "app", Page: page, Size: size,
+	})
+	if err != nil {
+		return nil, err
+	}
+	fileIDs := make([]uint, 0, len(files))
+	for i := range files {
+		fileIDs = append(fileIDs, files[i].FileID)
+	}
+	metas, err := s.repo.getUserMetaByIDs(fileIDs)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[uint]AppUserMeta, len(metas))
+	for i := range metas {
+		byID[metas[i].LibraryFileID] = metas[i]
+	}
+	out := make([]UserAppDTO, 0, len(files))
+	for i := range files {
+		f := files[i]
+		dto := UserAppDTO{
+			FileID:      f.FileID,
+			AppName:     f.Name,
+			SizeBytes:   f.SizeBytes,
+			ParseStatus: ParseStatusParsing, // 尚未 finalize 的文件默认「解析中」
+		}
+		if m, ok := byID[f.FileID]; ok {
+			dto.AppName = firstNonEmpty(m.AppName, f.Name)
+			dto.PackageName = m.PackageName
+			dto.Version = m.Version
+			dto.IconURL = m.IconURL
+			dto.ParseStatus = m.ParseStatus
+			dto.ParseError = m.ParseError
+			dto.CreatedAt = fmtTime(m.CreatedAt)
+		} else {
+			// 尚无 meta（经「素材」上传 / 直传等未显式 finalize 的入口，或历史卡在「解析中」）
+			// → 异步触发一次解析使其自愈；本次仍返回「解析中」，前端轮询后收敛。
+			s.ensureFinalized(userID, f.FileID)
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+// finalizingApps 去重在途的异步 finalize（key=fileID），避免列表轮询期间对同一文件重复触发解析。
+var finalizingApps sync.Map
+
+// ensureFinalized 对「尚无 app_user_meta」的 app 文件异步触发一次解析使其自愈：
+// 覆盖经「素材」上传 / 直传等未显式调 finalize 的入口，以及历史卡在「解析中」的文件。
+// 解析成功落 ready（含图标），失败落 failed —— 两者都会写出 meta，下次列表不再触发。
+// 仅 OpenFileContent 阶段的瞬时错误（如对象未就绪）不写 meta，允许下次列表重试。
+func (s *serviceImpl) ensureFinalized(userID int, fileID uint) {
+	if _, inflight := finalizingApps.LoadOrStore(fileID, struct{}{}); inflight {
+		return
+	}
+	go func() {
+		defer finalizingApps.Delete(fileID)
+		_, _ = s.FinalizeUserApp(userID, fileID)
+	}()
+}
+
+// FinalizeUserApp 回读素材库对象 → 解析元数据/图标 → 落 app_user_meta（ready/failed），返回该应用 DTO。
+func (s *serviceImpl) FinalizeUserApp(userID int, fileID uint) (*UserAppDTO, error) {
+	content, err := library.OpenFileContent(userID, fileID)
+	if err != nil {
+		return nil, err // 属主/锁定/不存在/未配置 → 透传 library 门面错误
+	}
+	defer content.Reader.Close()
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(content.Name), "."))
+	tmp, err := os.CreateTemp("", "appfinalize-*."+ext)
+	if err != nil {
+		return nil, apperr.Internal("创建临时文件失败")
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := io.Copy(tmp, content.Reader); err != nil {
+		_ = tmp.Close()
+		return nil, apperr.Internal("回读文件失败")
+	}
+	_ = tmp.Close()
+
+	meta := &AppUserMeta{
+		LibraryFileID: fileID,
+		UserID:        uint(userID),
+		AppName:       content.Name,
+	}
+	parsed, perr := apkparse.Parse(tmpPath, ext)
+	if perr != nil {
+		meta.ParseStatus = ParseStatusFailed
+		meta.ParseError = truncate(perr.Error(), 512)
+		if err := s.repo.upsertUserMeta(meta); err != nil {
+			return nil, err
+		}
+		return s.userAppDTO(fileID, content.Name, content.SizeBytes), nil
+	}
+
+	iconURL, err := s.uploadIcon(parsed.IconPNG)
+	if err != nil {
+		return nil, err
+	}
+	meta.AppName = firstNonEmpty(parsed.AppName, content.Name)
+	meta.PackageName = parsed.PackageName
+	meta.Version = parsed.Version
+	meta.IconURL = iconURL
+	meta.MD5 = parsed.MD5
+	meta.ParseStatus = ParseStatusReady
+	meta.ParseError = ""
+	if err := s.repo.upsertUserMeta(meta); err != nil {
+		return nil, err
+	}
+	return s.userAppDTO(fileID, content.Name, content.SizeBytes), nil
+}
+
+// userAppDTO 取最新 meta 组装 DTO（finalize 后回读自身）。
+func (s *serviceImpl) userAppDTO(fileID uint, fallbackName string, size int64) *UserAppDTO {
+	dto := &UserAppDTO{FileID: fileID, AppName: fallbackName, SizeBytes: size, ParseStatus: ParseStatusParsing}
+	if m, _ := s.repo.getUserMeta(fileID); m != nil {
+		dto.AppName = firstNonEmpty(m.AppName, fallbackName)
+		dto.PackageName = m.PackageName
+		dto.Version = m.Version
+		dto.IconURL = m.IconURL
+		dto.ParseStatus = m.ParseStatus
+		dto.ParseError = m.ParseError
+		dto.CreatedAt = fmtTime(m.CreatedAt)
+	}
+	return dto
+}
+
+// BatchDeleteUserApps 删除当前用户的应用：逐个 library 删文件（释放配额）+ 删 meta。
+func (s *serviceImpl) BatchDeleteUserApps(userID int, fileIDs []uint) error {
+	if len(fileIDs) == 0 {
+		return apperr.BadRequest("未选择应用")
+	}
+	for _, id := range fileIDs {
+		if err := library.DeleteFileForUser(userID, id); err != nil {
+			return err
+		}
+		if err := s.repo.deleteUserMeta(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ---- 运营治理 ----
+
+// AdminListUserApps 跨用户列出用户应用文件 + 上传者 + 解析元数据（按 meta.user_id 定属主）。
+// 列表以 app_user_meta 为权威集合（已 finalize 的用户应用都有 meta），再补上传者信息。
+func (s *serviceImpl) AdminListUserApps() ([]AdminUserAppDTO, error) {
+	all, err := s.repo.listAllUserMeta()
+	if err != nil {
+		return nil, err
+	}
+	userIDs := make([]uint, 0, len(all))
+	seen := map[uint]bool{}
+	for i := range all {
+		if !seen[all[i].UserID] {
+			seen[all[i].UserID] = true
+			userIDs = append(userIDs, all[i].UserID)
+		}
+	}
+	uploaders, err := s.repo.listUploaders(userIDs)
+	if err != nil {
+		return nil, err
+	}
+	byUser := make(map[uint]uploaderInfo, len(uploaders))
+	for i := range uploaders {
+		byUser[uploaders[i].UserID] = uploaders[i]
+	}
+	out := make([]AdminUserAppDTO, 0, len(all))
+	for i := range all {
+		m := all[i]
+		dto := AdminUserAppDTO{
+			UserAppDTO: UserAppDTO{
+				FileID:      m.LibraryFileID,
+				AppName:     m.AppName,
+				PackageName: m.PackageName,
+				Version:     m.Version,
+				IconURL:     m.IconURL,
+				ParseStatus: m.ParseStatus,
+				ParseError:  m.ParseError,
+				CreatedAt:   fmtTime(m.CreatedAt),
+			},
+			UserID: m.UserID,
+		}
+		if u, ok := byUser[m.UserID]; ok {
+			dto.UserPhone = u.UserPhone
+			dto.UserNickname = u.UserNickname
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+// AdminBatchDeleteUserApps 跨用户删除：按 meta.user_id 定属主 → library 删文件 + 删 meta。
+func (s *serviceImpl) AdminBatchDeleteUserApps(fileIDs []uint) error {
+	if len(fileIDs) == 0 {
+		return apperr.BadRequest("未选择应用")
+	}
+	for _, id := range fileIDs {
+		m, err := s.repo.getUserMeta(id)
+		if err != nil {
+			return err
+		}
+		if m == nil {
+			continue // 无 meta 无法定属主，跳过（library 删除需属主）
+		}
+		if err := library.DeleteFileForUser(int(m.UserID), id); err != nil {
+			return err
+		}
+		if err := s.repo.deleteUserMeta(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ---- 应用市场 ----
+
+// ListMarket 列出应用市场（readyOnly=true 仅就绪，供用户端浏览）。
+func (s *serviceImpl) ListMarket(readyOnly bool) ([]MarketAppDTO, error) {
+	rows, err := s.repo.listMarket(readyOnly)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]MarketAppDTO, 0, len(rows))
+	for i := range rows {
+		out = append(out, marketDTO(rows[i]))
+	}
+	return out, nil
+}
+
+func marketDTO(a AppMarket) MarketAppDTO {
+	return MarketAppDTO{
+		ID:          a.ID,
+		AppName:     a.AppName,
+		PackageName: a.PackageName,
+		Version:     a.Version,
+		IconURL:     a.IconURL,
+		SizeBytes:   a.FileSize,
+		ParseStatus: a.ParseStatus,
+		ParseError:  a.ParseError,
+		CreatedAt:   fmtTime(a.CreatedAt),
+	}
+}
+
+// MarketUpload admin 上传市场应用：临时文件 → 解析 → PutObject 公有桶 + 图标 → 落 app_market。
+func (s *serviceImpl) MarketUpload(tmpPath, ext string) (*MarketAppDTO, error) {
+	if framework.S3 == nil {
+		return nil, apperr.Internal("平台对象存储未配置")
+	}
+	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
+	if ext != "apk" && ext != "xapk" {
+		return nil, apperr.BadRequest("仅支持 apk / xapk")
+	}
+
+	rec := &AppMarket{}
+	parsed, perr := apkparse.Parse(tmpPath, ext)
+	if perr != nil {
+		// 解析失败仍落一行 failed 记录；S3Key 有唯一索引，给个占位键避免多次失败上传撞唯一约束。
+		rec.S3Key = "parse-failed/" + uuid.NewString()
+		rec.ParseStatus = ParseStatusFailed
+		rec.ParseError = truncate(perr.Error(), 512)
+		if err := s.repo.createMarket(rec); err != nil {
+			return nil, err
+		}
+		dto := marketDTO(*rec)
+		return &dto, nil
+	}
+
+	// 上传二进制到公有桶 app-market/<uuid>.<ext>。
+	key := "app-market/" + uuid.NewString() + "." + ext
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		return nil, apperr.Internal("读取上传文件失败")
+	}
+	defer f.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	if err := framework.S3.PutObject(ctx, key, f, "application/vnd.android.package-archive"); err != nil {
+		return nil, apperr.Internal("上传应用文件失败")
+	}
+	iconURL, err := s.uploadIcon(parsed.IconPNG)
+	if err != nil {
+		return nil, err
+	}
+	rec = &AppMarket{
+		S3Key:       key,
+		AppName:     firstNonEmpty(parsed.AppName, "应用"),
+		PackageName: parsed.PackageName,
+		Version:     parsed.Version,
+		IconURL:     iconURL,
+		MD5:         parsed.MD5,
+		FileSize:    parsed.SizeBytes,
+		ParseStatus: ParseStatusReady,
+	}
+	if err := s.repo.createMarket(rec); err != nil {
+		return nil, err
+	}
+	dto := marketDTO(*rec)
+	return &dto, nil
+}
+
+// MarketBatchDelete 删除市场应用：删公有桶对象 + 行。
+func (s *serviceImpl) MarketBatchDelete(ids []uint) error {
+	if len(ids) == 0 {
+		return apperr.BadRequest("未选择应用")
+	}
+	rows, err := s.repo.getMarketByIDs(ids)
+	if err != nil {
+		return err
+	}
+	if framework.S3 != nil {
+		ctx, cancel := opCtx()
+		defer cancel()
+		for i := range rows {
+			if rows[i].S3Key != "" {
+				_ = framework.S3.DeleteObject(ctx, rows[i].S3Key)
+			}
+		}
+	}
+	return s.repo.deleteMarketByIDs(ids)
+}
+
+// ---- 安装载荷解析（§7.2）----
+
+// AppRef / InstallSpec 是安装载荷解析的入参/出参，由公开门面 app.go 同名结构按字段转换暴露。
+type AppRef struct {
+	Source string
+	ID     uint
+}
+
+type InstallSpec struct {
+	AppName     string
+	DownloadURL string
+	MD5         string
+	PackageName string
+	Version     string
+	FileSize    string
+}
+
+// ResolveInstallSpecs 把应用引用解析为按 URL 安装载荷：
+//   - user：校验 app_user_meta.parse_status=ready → library.OpenFileWithTTL(installTTL) 取 presigned GET。
+//   - market：取 app_market(ready) 行 → DownloadURL = PublicBaseURL + "/" + S3Key。
+//
+// 任一未就绪/不存在/锁定 → 整请求失败。
+func (s *serviceImpl) ResolveInstallSpecs(userID int, refs []AppRef) ([]InstallSpec, error) {
+	if len(refs) == 0 {
+		return nil, apperr.BadRequest("未选择应用")
+	}
+	out := make([]InstallSpec, 0, len(refs))
+	for _, ref := range refs {
+		switch ref.Source {
+		case "user":
+			m, err := s.repo.getUserMeta(ref.ID)
+			if err != nil {
+				return nil, err
+			}
+			if m == nil {
+				return nil, apperr.NotFound("应用不存在")
+			}
+			if m.ParseStatus != ParseStatusReady {
+				return nil, apperr.BadRequest("应用尚未就绪，无法安装")
+			}
+			fr, err := library.OpenFileWithTTL(userID, ref.ID, installTTL())
+			if err != nil {
+				return nil, err // 属主/锁定/不存在 → 透传
+			}
+			out = append(out, InstallSpec{
+				AppName:     m.AppName,
+				DownloadURL: fr.URL,
+				MD5:         m.MD5,
+				PackageName: m.PackageName,
+				Version:     m.Version,
+				FileSize:    strconv.FormatInt(fr.SizeBytes, 10),
+			})
+		case "market":
+			a, err := s.repo.getMarketByID(ref.ID)
+			if err != nil {
+				return nil, err
+			}
+			if a == nil {
+				return nil, apperr.NotFound("应用不存在")
+			}
+			if a.ParseStatus != ParseStatusReady {
+				return nil, apperr.BadRequest("应用尚未就绪，无法安装")
+			}
+			downloadURL := a.S3Key
+			if framework.S3 != nil {
+				downloadURL = framework.S3.PublicURL(a.S3Key) // = PublicBaseURL + "/" + S3Key
+			}
+			out = append(out, InstallSpec{
+				AppName:     a.AppName,
+				DownloadURL: downloadURL,
+				MD5:         a.MD5,
+				PackageName: a.PackageName,
+				Version:     a.Version,
+				FileSize:    strconv.FormatInt(a.FileSize, 10),
+			})
+		default:
+			return nil, apperr.BadRequest("未知应用来源")
+		}
+	}
+	return out, nil
+}
+
+// ---- helpers ----
+
+// uploadIcon 把解析出的图标 PNG 上传公有桶 app-icons/<uuid>.png，返回 IconURL。图标为空则返回空串。
+func (s *serviceImpl) uploadIcon(png []byte) (string, error) {
+	if len(png) == 0 {
+		return "", nil
+	}
+	if framework.S3 == nil {
+		return "", nil // 无公有桶时容忍无图标，不阻断解析落库
+	}
+	key := "app-icons/" + uuid.NewString() + ".png"
+	ctx, cancel := opCtx()
+	defer cancel()
+	if err := framework.S3.PutObject(ctx, key, bytes.NewReader(png), "image/png"); err != nil {
+		return "", apperr.Internal("上传图标失败")
+	}
+	return framework.S3.PublicURL(key), nil // = PublicBaseURL + "/" + key
+}
 
 // firstNonEmpty 返回第一个非空白字符串。
 func firstNonEmpty(vals ...string) string {
@@ -18,339 +524,9 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// AppService 模块内服务实例，由 module.Init 注入后装配。
-var AppService *serviceImpl
-
-type serviceImpl struct {
-	repo repository
-	ops  midplatPort
-}
-
-func newService(repo repository, ops midplatPort) *serviceImpl {
-	return &serviceImpl{repo: repo, ops: ops}
-}
-
-// refreshStatus 用中台应用库按 md5 把一批本地应用的「创建中 → 正常」状态刷新并回写变化。
-// 中台暂不可用时原样返回，不改状态。
-func (s *serviceImpl) refreshStatus(apps []CustomerApp) []CustomerApp {
-	if len(apps) == 0 || s.ops == nil {
-		return apps
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	resp, err := s.ops.ListApps(ctx, midplat.ListAppsRequest{Page: 1, PageSize: 500})
-	if err != nil || resp == nil {
-		return apps
-	}
-	byMD5 := make(map[string]midplat.AppInfo, len(resp.List))
-	for _, a := range resp.List {
-		byMD5[a.AppMD5] = a
-	}
-	for i := range apps {
-		mid, ok := byMD5[apps[i].AppMD5]
-		if !ok {
-			// 不在中台列表 = 仍在创建中（中台异步处理）。
-			if apps[i].Status != StatusCreating {
-				apps[i].Status = StatusCreating
-				_ = s.repo.update(&apps[i])
-			}
-			continue
-		}
-		// 命中中台 = 已就绪，转正常并回填可能变化的字段。
-		changed := apps[i].Status != StatusNormal
-		apps[i].Status = StatusNormal
-		if mid.ID != 0 && apps[i].CpAppID != mid.ID {
-			apps[i].CpAppID = mid.ID
-			changed = true
-		}
-		if mid.IconPath != "" && apps[i].IconPath != mid.IconPath {
-			apps[i].IconPath = mid.IconPath
-			changed = true
-		}
-		if mid.Version != "" && apps[i].Version != mid.Version {
-			apps[i].Version = mid.Version
-			changed = true
-		}
-		if changed {
-			_ = s.repo.update(&apps[i])
-		}
-	}
-	return apps
-}
-
-// List 返回当前用户上传的应用（本地绑定），并按 md5 刷新「创建中 → 正常」状态。
-func (s *serviceImpl) List(userID int) ([]CustomerApp, error) {
-	apps, err := s.repo.listByUser(userID)
-	if err != nil {
-		return nil, err
-	}
-	return s.refreshStatus(apps), nil
-}
-
-// StoreList 返回应用商店应用（admin 上传，面向全部用户），并刷新创建状态。
-// 同时服务于 my 的「应用市场」标签页与 admin 的应用商店管理页。
-func (s *serviceImpl) StoreList() ([]CustomerApp, error) {
-	apps, err := s.repo.listStore()
-	if err != nil {
-		return nil, err
-	}
-	return s.refreshStatus(apps), nil
-}
-
-// StoreUpload 由 admin 整链上传 APK 到中台应用库，并落一条「应用商店」绑定（Store=true，UserID=0）。
-func (s *serviceImpl) StoreUpload(path string, opts midplat.UploadAppOptions) (*CustomerApp, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	created, err := s.ops.UploadAppFromFile(ctx, path, opts)
-	if err != nil {
-		return nil, err
-	}
-	rec := &CustomerApp{
-		UserID:      0,
-		Store:       true,
-		CpAppID:     created.ID,
-		AppMD5:      created.MD5,
-		AppName:     created.AppName,
-		PackageName: created.PackageName,
-		Version:     created.Version,
-		FileSize:    created.FileSize,
-		IconPath:    created.IconPath,
-		Status:      StatusCreating,
-	}
-	if err := s.repo.create(rec); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
-// StoreDelete 删除应用商店应用（按本地绑定 id，仅限 Store=true），并软删对应中台应用。
-func (s *serviceImpl) StoreDelete(ids []int) error {
-	if len(ids) == 0 {
-		return apperr.BadRequest("未选择应用")
-	}
-	apps, err := s.repo.getStoreByIDs(ids)
-	if err != nil {
-		return err
-	}
-	if len(apps) == 0 {
-		return apperr.NotFound("应用不存在")
-	}
-	cpIDs := make([]int64, 0, len(apps))
-	localIDs := make([]int, 0, len(apps))
-	for i := range apps {
-		if apps[i].CpAppID > 0 {
-			cpIDs = append(cpIDs, apps[i].CpAppID)
-		}
-		localIDs = append(localIDs, int(apps[i].ID))
-	}
-	if s.ops != nil && len(cpIDs) > 0 {
-		ctx, cancel := opCtx()
-		defer cancel()
-		if err := s.ops.BatchDeleteApps(ctx, cpIDs); err != nil {
-			return err
-		}
-	}
-	return s.repo.deleteStoreByIDs(localIDs)
-}
-
-// Upload 整链上传到中台应用库，并落一条本地绑定（初始「创建中」）。
-func (s *serviceImpl) Upload(userID int, path string, opts midplat.UploadAppOptions) (*CustomerApp, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	created, err := s.ops.UploadAppFromFile(ctx, path, opts)
-	if err != nil {
-		return nil, err
-	}
-	rec := &CustomerApp{
-		UserID:      uint(userID),
-		CpAppID:     created.ID,
-		AppMD5:      created.MD5,
-		AppName:     created.AppName,
-		PackageName: created.PackageName,
-		Version:     created.Version,
-		FileSize:    created.FileSize,
-		IconPath:    created.IconPath,
-		Status:      StatusCreating,
-	}
-	if err := s.repo.create(rec); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
-// ── 浏览器驱动的分片上传流水线（前台 my 用） ─────────────────────────────────
-// 这些方法是中台分片接口的薄代理；唯一带本地副作用的是 CreateFromUpload（落本地绑定）。
-
-// InitiateUpload §1.3 协商分片参数（命中秒传时直接返回 appInfo）。
-func (s *serviceImpl) InitiateUpload(req midplat.InitiateUploadRequest) (*midplat.InitiateUploadResponse, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	return s.ops.InitiateAppUpload(ctx, req)
-}
-
-// UploadPart §1.4 透传单个分片。
-func (s *serviceImpl) UploadPart(uploadID int64, partNumber int, contentMD5 string, part io.Reader, fileName string) (*midplat.UploadPartResponse, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	return s.ops.UploadPart(ctx, uploadID, partNumber, contentMD5, part, fileName)
-}
-
-// CompleteUpload §1.5 触发分片合并，返回下载 URL。
-func (s *serviceImpl) CompleteUpload(uploadID int64) (string, error) {
-	if s.ops == nil {
-		return "", apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	return s.ops.CompleteAppUpload(ctx, uploadID)
-}
-
-// ParseUpload §1.6 解析已上传 APK 的元信息。
-func (s *serviceImpl) ParseUpload(uploadID int64) (*midplat.ParsedAppInfo, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	return s.ops.GetAppInfoFromFile(ctx, uploadID)
-}
-
-// QueryUploadStatus §1.9 查询上传任务状态（OSS_UPLOADING / OSS_SUCCESS / OSS_FAILED）。
-func (s *serviceImpl) QueryUploadStatus(uploadID int64) (string, error) {
-	if s.ops == nil {
-		return "", apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	return s.ops.QueryUploadStatus(ctx, uploadID)
-}
-
-// CreateFromUpload §1.8 由已上传文件创建中台应用，并落一条「我的应用」本地绑定（初始「创建中」）。
-// 本地展示字段优先用中台返回值，缺失时回退到前端确认面板传来的元信息（解析/秒传得到的）。
-func (s *serviceImpl) CreateFromUpload(userID int, req midplat.CreateFromUploadedFileRequest) (*CustomerApp, error) {
-	if s.ops == nil {
-		return nil, apperr.Internal("云手机中台未配置")
-	}
-	ctx, cancel := opCtxUpload()
-	defer cancel()
-	created, err := s.ops.CreateAppFromUploadedFile(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if created == nil {
-		created = &midplat.CreatedApp{}
-	}
-	rec := &CustomerApp{
-		UserID:      uint(userID),
-		CpAppID:     created.ID,
-		AppMD5:      firstNonEmpty(created.MD5, req.MD5),
-		AppName:     firstNonEmpty(created.AppName, req.AppName),
-		PackageName: firstNonEmpty(created.PackageName, req.PackageName),
-		Version:     firstNonEmpty(created.Version, req.Version),
-		FileSize:    firstNonEmpty(created.FileSize, req.FileSize),
-		IconPath:    firstNonEmpty(created.IconPath, req.IconPath),
-		Status:      StatusCreating,
-	}
-	if err := s.repo.create(rec); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
-// AdminList 运营查看全部用户上传的应用，并用中台列表按 md5 判定状态（只读，不写回）。
-func (s *serviceImpl) AdminList() ([]AdminApp, error) {
-	apps, err := s.repo.listAll()
-	if err != nil || len(apps) == 0 || s.ops == nil {
-		return apps, err
-	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	resp, err := s.ops.ListApps(ctx, midplat.ListAppsRequest{Page: 1, PageSize: 500})
-	if err != nil || resp == nil {
-		return apps, nil
-	}
-	have := make(map[string]bool, len(resp.List))
-	for _, a := range resp.List {
-		have[a.AppMD5] = true
-	}
-	for i := range apps {
-		if have[apps[i].AppMD5] {
-			apps[i].Status = StatusNormal
-		} else {
-			apps[i].Status = StatusCreating
-		}
-	}
-	return apps, nil
-}
-
-// AdminBatchDelete 运营删除任意用户的应用（按本地绑定 id；不做归属校验），并软删中台应用。
-func (s *serviceImpl) AdminBatchDelete(ids []int) error {
-	if len(ids) == 0 {
-		return apperr.BadRequest("未选择应用")
-	}
-	apps, err := s.repo.getAllByIDs(ids)
-	if err != nil {
-		return err
-	}
-	if len(apps) == 0 {
-		return apperr.NotFound("应用不存在")
-	}
-	cpIDs := make([]int64, 0, len(apps))
-	localIDs := make([]int, 0, len(apps))
-	for i := range apps {
-		if apps[i].CpAppID > 0 {
-			cpIDs = append(cpIDs, apps[i].CpAppID)
-		}
-		localIDs = append(localIDs, int(apps[i].ID))
-	}
-	if s.ops != nil && len(cpIDs) > 0 {
-		ctx, cancel := opCtx()
-		defer cancel()
-		if err := s.ops.BatchDeleteApps(ctx, cpIDs); err != nil {
-			return err
-		}
-	}
-	return s.repo.deleteAllByIDs(localIDs)
-}
-
-// BatchDelete 仅删除属于当前用户的本地绑定，并把对应中台应用一并软删。
-func (s *serviceImpl) BatchDelete(userID int, ids []int) error {
-	if len(ids) == 0 {
-		return apperr.BadRequest("未选择应用")
-	}
-	owned, err := s.repo.getByIDs(userID, ids)
-	if err != nil {
-		return err
-	}
-	if len(owned) == 0 {
-		return apperr.NotFound("应用不存在或不属于你")
-	}
-	cpIDs := make([]int64, 0, len(owned))
-	localIDs := make([]int, 0, len(owned))
-	for i := range owned {
-		if owned[i].CpAppID > 0 {
-			cpIDs = append(cpIDs, owned[i].CpAppID)
-		}
-		localIDs = append(localIDs, int(owned[i].ID))
-	}
-	if s.ops != nil && len(cpIDs) > 0 {
-		ctx, cancel := opCtx()
-		defer cancel()
-		if err := s.ops.BatchDeleteApps(ctx, cpIDs); err != nil {
-			return err
-		}
-	}
-	return s.repo.deleteByIDs(userID, localIDs)
+	return s[:n]
 }
