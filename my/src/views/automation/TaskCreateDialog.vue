@@ -68,11 +68,23 @@ const hasParams = computed(() => {
   }
 })
 
-// 切换脚本时清空已填参数（schema 不同）。
-watch(scriptId, () => {
-  sharedParams.value = {}
+// schema 变化（切换脚本/脚本加载完成）时，按默认值预填共用参数。
+// 必须在父层 seed：ParamsForm 内的 shadcn Input 用 useVModel(passive)，挂载后才到达的
+// model-value 变更不会回显，所以要保证子组件「挂载即带默认值」。配合 ParamsForm 的 :key
+// 让切换脚本时整表重挂载。
+watch(schema, (s) => {
   perPhone.value = {}
   showOverride.value = false
+  const next: Record<string, unknown> = {}
+  try {
+    const specs = JSON.parse(s || '[]') as { key: string, default?: unknown }[]
+    for (const sp of specs) {
+      if (sp.default !== undefined)
+        next[sp.key] = sp.default
+    }
+  }
+  catch {}
+  sharedParams.value = next
 })
 
 function setPhoneParams(cp: string, v: Record<string, unknown>) {
@@ -233,7 +245,7 @@ async function submit() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-xl">
+    <DialogContent class="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-3xl">
       <DialogHeader class="border-b p-4">
         <DialogTitle>{{ t('taskSchedule.newTask') }}</DialogTitle>
         <DialogDescription>{{ t('taskSchedule.newDesc') }}</DialogDescription>
@@ -326,7 +338,7 @@ async function submit() {
         <!-- 脚本参数 -->
         <div v-if="hasParams" class="grid gap-2 rounded-md border p-3">
           <Label class="text-sm font-semibold">{{ t('taskSchedule.paramsTitle') }}</Label>
-          <ParamsForm ref="sharedFormRef" v-model="sharedParams" :schema="schema" />
+          <ParamsForm :key="scriptId" ref="sharedFormRef" v-model="sharedParams" :schema="schema" />
 
           <!-- 逐台覆盖（仅一次性） -->
           <template v-if="mode === 'once' && selected.size > 0">
@@ -338,7 +350,7 @@ async function submit() {
               <span>{{ showOverride ? '▾' : '▸' }}</span> {{ t('taskSchedule.overrideToggle') }}
             </button>
             <div v-if="showOverride" class="space-y-3">
-              <div v-for="cp in [...selected]" :key="cp" class="rounded-md border border-dashed p-2">
+              <div v-for="cp in [...selected]" :key="`${scriptId}:${cp}`" class="rounded-md border border-dashed p-2">
                 <p class="mb-2 font-mono text-xs text-muted-foreground">
                   {{ cp }}
                 </p>

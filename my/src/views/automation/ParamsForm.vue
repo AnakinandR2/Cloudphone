@@ -4,8 +4,6 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 
 const props = withDefaults(defineProps<{
@@ -30,7 +28,7 @@ const specs = computed<ParamSpec[]>(() => {
   }
 })
 
-// schema 变化时按默认值初始化（enum 无默认）。
+// schema 变化时按默认值初始化。
 watch(specs, (list) => {
   const next: Record<string, unknown> = {}
   for (const s of list) {
@@ -39,6 +37,9 @@ watch(specs, (list) => {
       next[s.key] = cur
     else if (props.seedDefaults && s.default !== undefined)
       next[s.key] = s.default
+    // bool 始终具体：无默认时 seed false（复选框显示与提交一致；规避必填误判）。
+    else if (props.seedDefaults && s.type === 'boolean')
+      next[s.key] = false
   }
   model.value = next
 }, { immediate: true })
@@ -47,8 +48,8 @@ function setVal(key: string, v: unknown) {
   model.value = { ...model.value, [key]: v }
 }
 
-function onNumber(key: string, e: Event) {
-  const raw = (e.target as HTMLInputElement).value
+function onNumber(key: string, v: unknown) {
+  const raw = String(v ?? '')
   if (raw === '') {
     const { [key]: _omit, ...rest } = model.value
     model.value = rest
@@ -63,7 +64,8 @@ function onNumber(key: string, e: Event) {
 const lastError = ref('')
 function validate(): string {
   for (const s of specs.value) {
-    if (s.required) {
+    // bool 跳过必填校验：false 是合法值，复选框无「未填」态。
+    if (s.required && s.type !== 'boolean') {
       const v = model.value[s.key]
       const empty = v === undefined || v === null || v === ''
       if (empty) {
@@ -80,65 +82,62 @@ defineExpose({ validate })
 </script>
 
 <template>
-  <div v-if="specs.length" class="space-y-3">
-    <div v-for="s in specs" :key="s.key" class="grid gap-1.5">
-      <Label class="text-sm">
-        <span class="font-mono">{{ s.key }}</span>
-        <span v-if="s.required" class="ml-0.5 text-destructive">*</span>
-        <span class="ml-1 text-xs text-muted-foreground">{{ s.type }}</span>
-      </Label>
+  <table v-if="specs.length" class="w-full border-separate border-spacing-x-2 border-spacing-y-1 text-sm">
+    <thead>
+      <tr class="text-left text-xs text-muted-foreground">
+        <th class="whitespace-nowrap font-medium">{{ t('script.params.key') }}</th>
+        <th class="whitespace-nowrap font-medium">{{ t('script.params.type') }}</th>
+        <th class="w-full font-medium">{{ t('script.params.value') }}</th>
+        <th class="whitespace-nowrap font-medium">{{ t('script.params.desc') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="s in specs" :key="s.key" class="align-top">
+        <td class="whitespace-nowrap pt-2">
+          <span class="font-mono">{{ s.key }}</span>
+          <!-- bool 无必填概念（与 validate/编辑器一致），不显示必填星号。 -->
+          <span v-if="s.required && s.type !== 'boolean'" class="ml-0.5 text-destructive">*</span>
+        </td>
+        <td class="whitespace-nowrap pt-2 text-xs text-muted-foreground">{{ s.type }}</td>
+        <td>
+          <!-- boolean -->
+          <label v-if="s.type === 'boolean'" class="flex h-8 items-center gap-2">
+            <Checkbox
+              :model-value="model[s.key] === true"
+              @update:model-value="(v) => setVal(s.key, v === true)"
+            />
+            <span class="text-muted-foreground">{{ model[s.key] === true ? 'true' : 'false' }}</span>
+          </label>
 
-      <!-- boolean -->
-      <label v-if="s.type === 'boolean'" class="flex items-center gap-2 text-sm">
-        <Checkbox
-          :model-value="model[s.key] === true"
-          @update:model-value="(v) => setVal(s.key, v === true)"
-        />
-        <span class="text-muted-foreground">{{ model[s.key] === true ? 'true' : 'false' }}</span>
-      </label>
+          <!-- number -->
+          <Input
+            v-else-if="s.type === 'number'"
+            type="number"
+            class="h-8"
+            :model-value="(model[s.key] as number) ?? ''"
+            @update:model-value="(v) => onNumber(s.key, v)"
+          />
 
-      <!-- enum -->
-      <NativeSelect
-        v-else-if="s.type === 'enum'"
-        :model-value="(model[s.key] as string) ?? ''"
-        @update:model-value="(v?: unknown) => setVal(s.key, v)"
-      >
-        <NativeSelectOption value="" disabled>
-          {{ t('script.params.choose') }}
-        </NativeSelectOption>
-        <NativeSelectOption v-for="o in (s.options ?? [])" :key="o" :value="o">
-          {{ o }}
-        </NativeSelectOption>
-      </NativeSelect>
+          <!-- table：直接写 Lua table 字面量文本（数组或 {[k]=v} 均可） -->
+          <Textarea
+            v-else-if="s.type === 'table'"
+            :model-value="(model[s.key] as string) ?? ''"
+            :rows="1"
+            class="min-h-8 font-mono text-xs"
+            placeholder="{1, 2} 或 {[1]=2, [26]=5}"
+            @update:model-value="(v) => setVal(s.key, String(v))"
+          />
 
-      <!-- number -->
-      <Input
-        v-else-if="s.type === 'number'"
-        type="number"
-        :value="(model[s.key] as number) ?? ''"
-        @input="(e: Event) => onNumber(s.key, e)"
-      />
-
-      <!-- table：直接写 Lua table 字面量文本 -->
-      <Textarea
-        v-else-if="s.type === 'table'"
-        :model-value="(model[s.key] as string) ?? ''"
-        :rows="2"
-        class="font-mono text-xs"
-        placeholder="{1, 2, 3}"
-        @update:model-value="(v) => setVal(s.key, String(v))"
-      />
-
-      <!-- string -->
-      <Input
-        v-else
-        :model-value="(model[s.key] as string) ?? ''"
-        @update:model-value="(v) => setVal(s.key, v)"
-      />
-
-      <p v-if="s.description" class="text-xs text-muted-foreground">
-        {{ s.description }}
-      </p>
-    </div>
-  </div>
+          <!-- string -->
+          <Input
+            v-else
+            class="h-8"
+            :model-value="(model[s.key] as string) ?? ''"
+            @update:model-value="(v) => setVal(s.key, v)"
+          />
+        </td>
+        <td class="pt-2 text-xs text-muted-foreground">{{ s.description }}</td>
+      </tr>
+    </tbody>
+  </table>
 </template>

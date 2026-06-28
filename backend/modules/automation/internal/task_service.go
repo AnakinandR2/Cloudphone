@@ -42,7 +42,7 @@ func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, tas
 	if err != nil {
 		return nil, err
 	}
-	sharedJSON := serializeParams(sharedEff)
+	sharedJSON := serializeParams(specs, sharedEff)
 	paramsByCp := make(map[string]string, len(valid))
 	for _, cp := range valid {
 		ov := perPhone[cp]
@@ -54,7 +54,7 @@ func (s *serviceImpl) RunNow(userID int, scriptLocalID uint, cpIDs []string, tas
 		if berr != nil {
 			return nil, apperr.Validation("云手机 " + cp + "：" + berr.Error())
 		}
-		paramsByCp[cp] = serializeParams(eff)
+		paramsByCp[cp] = serializeParams(specs, eff)
 	}
 
 	ctx, cancel := opCtx()

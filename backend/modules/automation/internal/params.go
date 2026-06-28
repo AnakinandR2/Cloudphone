@@ -18,13 +18,11 @@ const (
 	ParamString  ParamType = "string"
 	ParamNumber  ParamType = "number"
 	ParamBoolean ParamType = "boolean"
-	ParamEnum    ParamType = "enum"
 	ParamTable   ParamType = "table"
 )
 
 var validParamTypes = map[ParamType]bool{
-	ParamString: true, ParamNumber: true, ParamBoolean: true,
-	ParamEnum: true, ParamTable: true,
+	ParamString: true, ParamNumber: true, ParamBoolean: true, ParamTable: true,
 }
 
 // ParamSpec 是单个参数定义（脚本顶部注释里的一项）。
@@ -34,7 +32,6 @@ type ParamSpec struct {
 	Required    bool      `json:"required,omitempty"`
 	Default     any       `json:"default,omitempty"` // 默认值（table 为 Lua 字面量文本）
 	Description string    `json:"description,omitempty"`
-	Options     []string  `json:"options,omitempty"` // 仅 enum：候选值
 }
 
 var paramKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -61,17 +58,7 @@ func validateSchema(raw string) ([]ParamSpec, error) {
 		if !validParamTypes[sp.Type] {
 			return nil, apperr.Validation("参数类型非法：" + sp.Key)
 		}
-		if sp.Type == ParamEnum {
-			if len(sp.Options) == 0 {
-				return nil, apperr.Validation("enum 参数需要候选项：" + sp.Key)
-			}
-			if sp.Default != nil {
-				dv, ok := sp.Default.(string)
-				if !ok || !containsStr(sp.Options, dv) {
-					return nil, apperr.Validation("enum 参数默认值不在候选项内：" + sp.Key)
-				}
-			}
-		} else if sp.Default != nil && !valueMatchesType(sp.Type, sp.Default) {
+		if sp.Default != nil && !valueMatchesType(sp.Type, sp.Default) {
 			return nil, apperr.Validation("参数默认值类型不匹配：" + sp.Key)
 		}
 	}
@@ -81,7 +68,7 @@ func validateSchema(raw string) ([]ParamSpec, error) {
 // valueMatchesType 判断一个（JSON 反序列化得到的）值是否符合参数类型。
 func valueMatchesType(t ParamType, v any) bool {
 	switch t {
-	case ParamString, ParamEnum:
+	case ParamString:
 		_, ok := v.(string)
 		return ok
 	case ParamNumber:
@@ -104,15 +91,6 @@ func valueMatchesType(t ParamType, v any) bool {
 	return false
 }
 
-func containsStr(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 func labelOf(sp ParamSpec) string {
 	return sp.Key
 }
@@ -128,17 +106,17 @@ func buildParams(specs []ParamSpec, values map[string]any) (map[string]any, erro
 				out[sp.Key] = sp.Default
 				continue
 			}
+			// boolean 天生总有值：缺省即 false，不因 required 报错（复选框无「未填」态）。
+			if sp.Type == ParamBoolean {
+				out[sp.Key] = false
+				continue
+			}
 			if sp.Required {
 				return nil, apperr.Validation(labelOf(sp) + " 为必填")
 			}
 			continue
 		}
-		if sp.Type == ParamEnum {
-			sv, ok := v.(string)
-			if !ok || !containsStr(sp.Options, sv) {
-				return nil, apperr.Validation(labelOf(sp) + " 取值不在候选项内")
-			}
-		} else if !valueMatchesType(sp.Type, v) {
+		if !valueMatchesType(sp.Type, v) {
 			return nil, apperr.Validation(labelOf(sp) + " 类型应为 " + string(sp.Type))
 		}
 		out[sp.Key] = v
@@ -158,32 +136,77 @@ func mergeParams(base, override map[string]any) map[string]any {
 	return out
 }
 
-// serializeParams 把最终参数序列化为中台 scriptParams 字符串（key → 待替换文本）。
+// midScriptParam 是中台 scriptParams 里的单个参数项（实测控制台下发格式）。
+// 中台靠 type 决定注入方式（int→裸、string→进引号、array→Lua 表），value 始终是字符串。
+type midScriptParam struct {
+	Desc     string `json:"desc"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	Value    string `json:"value"`
+}
+
+// serializeParams 把最终参数序列化为中台 scriptParams 字符串。
 //
-// 中台是纯 ${} 文本替换、替换值是 Lua 字面量（见 docs/external_params_example.lua）：
-//   - string/enum：原文（脚本里写 '${x}'，模板自带引号）
-//   - number/boolean：JSON 原生（替换成裸 3 / true）
-//   - array/object：渲染成 Lua table 文本字符串（如 "{'a', 'b'}"），脚本里写裸 ${x}
+// 关键（实测控制台抓包）：中台要的是「每个参数带完整定义 + value」的嵌套结构，
+// 而不是扁平的 {key:value}：
 //
+//	{"int_param":{"desc":"...","type":"int","required":true,"value":"11"}, ...}
+//
+// 中台据此对脚本里的 ${key} 做替换：type 决定注入形态、value 是字符串值。
+// 扁平 {key:value} 中台找不到 .value，不会替换，裸 ${} 进 Lua 编译报错。
 // 空则返回 ""（透传 omitempty 丢弃）。
-func serializeParams(params map[string]any) string {
-	if len(params) == 0 {
-		return ""
-	}
-	out := make(map[string]any, len(params))
-	for k, v := range params {
-		switch v.(type) {
-		case []any, map[string]any:
-			out[k] = luaTableLiteral(v) // 复杂类型 → Lua table 文本
-		default:
-			out[k] = v // 标量保持 JSON 原生
+func serializeParams(specs []ParamSpec, values map[string]any) string {
+	out := make(map[string]midScriptParam, len(specs))
+	for _, sp := range specs {
+		v, ok := values[sp.Key]
+		if !ok || v == nil {
+			continue
 		}
+		desc := sp.Description
+		if desc == "" {
+			desc = sp.Key
+		}
+		out[sp.Key] = midScriptParam{
+			Desc:     desc,
+			Type:     midType(sp.Type),
+			Required: sp.Required,
+			Value:    luaText(v),
+		}
+	}
+	if len(out) == 0 {
+		return ""
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
 		return ""
 	}
 	return string(b)
+}
+
+// luaText 把一个值渲染为「注入脚本的 Lua 字面量文本」（不含字符串外层引号——
+// 那由脚本自身的 '${x}' 提供）。string 原样透传（也覆盖 table 已是 Lua 文本的情况）。
+func luaText(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case []any, map[string]any:
+		return luaTableLiteral(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // ===== Lua 字面量渲染（array/object → Lua table 文本）=====
@@ -272,17 +295,17 @@ func extractSchemaComment(lua string) string {
 
 // midParamEntry 是中台 object 格式注释里的单项（+ 我们的扩展字段）。
 type midParamEntry struct {
-	Desc        string   `json:"desc"`
-	Description string   `json:"description"`
-	Label       string   `json:"label"`
-	Type        string   `json:"type"`
-	UIType      string   `json:"uiType"` // 我们的真实类型（enum/object/number），用于无损回环
-	Required    bool     `json:"required"`
-	Default     any      `json:"default"`
-	Options     []string `json:"options"`
+	Desc        string `json:"desc"`
+	Description string `json:"description"`
+	Label       string `json:"label"`
+	Type        string `json:"type"`
+	UIType      string `json:"uiType"` // 我们的真实类型（number/table），用于无损回环
+	Required    bool   `json:"required"`
+	Default     any    `json:"default"`
 }
 
 // mapMidType 把中台/通用类型词映射到我们的内部类型。
+// 旧的 enum 已移除：未知/enum 一律落 string（旧 enum 脚本退化为普通字符串输入）。
 func mapMidType(t string) ParamType {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "int", "integer", "number", "float", "double", "long":
@@ -290,9 +313,7 @@ func mapMidType(t string) ParamType {
 	case "bool", "boolean":
 		return ParamBoolean
 	case "array", "table", "list", "object", "map":
-		return ParamTable // 旧的 array/object 统一并入 table
-	case "enum":
-		return ParamEnum
+		return ParamTable // array/object 统一并入 table
 	default:
 		return ParamString
 	}
@@ -333,7 +354,6 @@ func parseSchema(jsonText string) ([]ParamSpec, error) {
 			Required:    e.Required,
 			Default:     e.Default,
 			Description: desc,
-			Options:     e.Options,
 		})
 	}
 	// 复用数组校验逻辑：序列化回数组再校验。
@@ -411,3 +431,19 @@ func deriveSchema(lua, fallbackSchema string) (string, []ParamSpec, error) {
 	norm, _ := json.Marshal(specs)
 	return string(norm), specs, nil
 }
+
+// midType 把内部类型映射到中台 scriptParams 里的类型词（见 docs/external_params_example.lua）。
+// 中台据此决定 ${} 的注入形态：int→裸数字、bool→裸布尔、array→Lua 表、string→进引号。
+func midType(t ParamType) string {
+	switch t {
+	case ParamNumber:
+		return "int"
+	case ParamBoolean:
+		return "bool"
+	case ParamTable:
+		return "array"
+	default:
+		return "string"
+	}
+}
+

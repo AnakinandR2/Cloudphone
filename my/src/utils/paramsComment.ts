@@ -5,15 +5,14 @@ import type { ParamSpec, ParamType } from '@/types/automation'
 // 替换机制是纯 ${} 文本替换（见 docs/external_params_example.lua）。
 
 const COMMENT_RE = /^\s*--\[\[([\s\S]*?)\]\]/
-const OUR_TYPES: ParamType[] = ['string', 'number', 'boolean', 'enum', 'table']
+const OUR_TYPES: ParamType[] = ['string', 'number', 'boolean', 'table']
 
-// 中台/通用类型词 → 我们的内部类型（旧 array/object 并入 table）。
+// 中台/通用类型词 → 我们的内部类型（array/object 并入 table；已移除 enum → 落 string）。
 function mapMidType(t: string): ParamType {
   switch ((t || '').toLowerCase().trim()) {
     case 'int': case 'integer': case 'number': case 'float': case 'double': case 'long': return 'number'
     case 'bool': case 'boolean': return 'boolean'
     case 'array': case 'table': case 'list': case 'object': case 'map': return 'table'
-    case 'enum': return 'enum'
     default: return 'string'
   }
 }
@@ -23,7 +22,6 @@ function toMidType(t: ParamType): string {
   switch (t) {
     case 'number': return 'int'
     case 'boolean': return 'bool'
-    case 'enum': return 'string'
     case 'table': return 'table'
     default: return 'string'
   }
@@ -56,8 +54,6 @@ function normalizeSpec(s: Record<string, unknown>): ParamSpec {
     spec.default = s.default
   if (s.description)
     spec.description = String(s.description)
-  if (type === 'enum' && Array.isArray(s.options))
-    spec.options = (s.options as unknown[]).map(String)
   return spec
 }
 
@@ -88,14 +84,13 @@ export function parseSchema(jsonText: string): ParamSpec[] {
         required: !!e.required,
         default: e.default,
         description: e.description || e.desc || '',
-        options: e.options,
       })
     })
   }
   return []
 }
 
-// 由 specs 生成中台 object 格式的注释块（带 uiType/options 扩展，便于无损回环）。
+// 由 specs 生成中台 object 格式的注释块（带 uiType 扩展，便于无损回环）。
 export function buildSchemaComment(specs: ParamSpec[]): string {
   const obj: Record<string, Record<string, unknown>> = {}
   for (const s of specs) {
@@ -111,8 +106,6 @@ export function buildSchemaComment(specs: ParamSpec[]): string {
       entry.default = s.default
     if (s.description)
       entry.description = s.description
-    if (s.type === 'enum' && s.options?.length)
-      entry.options = s.options
     obj[s.key] = entry
   }
   return `--[[\n${JSON.stringify(obj, null, 2)}\n]]`

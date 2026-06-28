@@ -54,7 +54,7 @@ func (s *serviceImpl) CreatePlan(userID int, in PlanInput) (*AutomationPlan, err
 	if err != nil {
 		return nil, err
 	}
-	scriptParams := serializeParams(eff)
+	scriptParams := serializeParams(specs, eff)
 	valid, err := s.filterOwned(userID, in.CpIDs)
 	if err != nil {
 		return nil, err

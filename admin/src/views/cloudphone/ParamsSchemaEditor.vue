@@ -6,9 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 
 // v-model 是参数定义的 JSON 字符串（我们的数组格式）。
@@ -20,23 +18,17 @@ interface Row {
   key: string
   type: ParamType
   required: boolean
-  optionsText: string // 仅 enum：候选项（逗号分隔）
-  // 「值」列=默认值：string/number/table → 文本/数字/Lua 文本；enum → 选中的默认；bool 用 valueBool
+  // 「值」列=默认值：string/number/table → 文本/数字/Lua 文本；bool 用 valueBool
   valueText: string
   valueBool: boolean
   description: string
 }
 
-// 解析某行 enum 的候选项。
-function optionsOf(r: Row): string[] {
-  return String(r.optionsText ?? '').split(/[,\n]/).map(s => s.trim()).filter(Boolean)
-}
-
+// 编辑器只暴露这四种直观类型（int/array 等中台词只在下发 scriptParams 时映射，用户不可见）。
 const types: { value: ParamType, label: string }[] = [
   { value: 'string', label: 'string' },
   { value: 'number', label: 'number' },
   { value: 'boolean', label: 'bool' },
-  { value: 'enum', label: 'enum' },
   { value: 'table', label: 'table' },
 ]
 
@@ -50,7 +42,6 @@ function specToRow(s: ParamSpec): Row {
     key: s.key ?? '',
     type: s.type ?? 'string',
     required: !!s.required,
-    optionsText: (s.options ?? []).join(', '),
     valueText: '',
     valueBool: false,
     description: s.description ?? '',
@@ -77,8 +68,7 @@ function parse(raw: string) {
 }
 
 watch(model, (v) => {
-  // 只在外部变化时 re-parse；自己 emit 的值（与 lastEmitted 相同）跳过，
-  // 否则输入候选项时整表会被重建、popover/输入框消失。
+  // 只在外部变化时 re-parse；自己 emit 的值（与 lastEmitted 相同）跳过，否则输入时整表会被重建。
   if ((v ?? '') === lastEmitted)
     return
   parse(v ?? '')
@@ -86,16 +76,11 @@ watch(model, (v) => {
 
 function rowToSpec(r: Row): ParamSpec {
   const spec: ParamSpec = { key: r.key.trim(), type: r.type }
-  if (r.required)
+  // bool 不支持「必填」（复选框无未填态），故只对非 bool 写 required。
+  if (r.required && r.type !== 'boolean')
     spec.required = true
   const valTxt = String(r.valueText ?? '').trim() // 数字输入可能给到 number，统一转字符串
-  if (r.type === 'enum') {
-    const opts = optionsOf(r)
-    spec.options = opts
-    if (valTxt && opts.includes(valTxt))
-      spec.default = valTxt
-  }
-  else if (r.type === 'boolean') {
+  if (r.type === 'boolean') {
     spec.default = r.valueBool
   }
   else if (valTxt) {
@@ -122,7 +107,7 @@ function emitSchema() {
 watch(rows, emitSchema, { deep: true })
 
 function addRow() {
-  rows.value.push({ rid: ++seq, key: '', type: 'string', required: false, optionsText: '', valueText: '', valueBool: false, description: '' })
+  rows.value.push({ rid: ++seq, key: '', type: 'string', required: false, valueText: '', valueBool: false, description: '' })
 }
 function removeRow(rid: number) {
   rows.value = rows.value.filter(r => r.rid !== rid)
@@ -152,27 +137,11 @@ function removeRow(rid: number) {
             <Input v-model="r.key" class="h-8 font-mono" :placeholder="t('scriptStore.params.key')" />
           </td>
           <td>
-            <div class="flex items-center gap-1">
-              <NativeSelect v-model="r.type" class="h-8 w-24">
-                <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
-                  {{ ty.label }}
-                </NativeSelectOption>
-              </NativeSelect>
-              <!-- enum：候选项用 popover 编辑 -->
-              <Popover v-if="r.type === 'enum'">
-                <PopoverTrigger as-child>
-                  <Button variant="outline" size="sm" class="h-8 px-2 text-xs">
-                    {{ t('scriptStore.params.optionsCol') }}<span class="ml-1 text-muted-foreground">({{ optionsOf(r).length }})</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent class="w-64" align="start">
-                  <div class="grid gap-1.5">
-                    <Label class="text-xs">{{ t('scriptStore.params.optionsCol') }}</Label>
-                    <Textarea v-model="r.optionsText" :rows="3" class="text-xs" :placeholder="t('scriptStore.params.enumPh')" />
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+            <NativeSelect v-model="r.type" class="h-8 w-24">
+              <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
+                {{ ty.label }}
+              </NativeSelectOption>
+            </NativeSelect>
           </td>
           <td>
             <label v-if="r.type === 'boolean'" class="flex h-8 items-center gap-2">
@@ -180,26 +149,20 @@ function removeRow(rid: number) {
               <span class="text-muted-foreground">{{ r.valueBool ? 'true' : 'false' }}</span>
             </label>
             <Input v-else-if="r.type === 'number'" v-model="r.valueText" type="number" class="h-8" />
-            <NativeSelect v-else-if="r.type === 'enum'" :model-value="r.valueText" class="h-8" @update:model-value="(v?: unknown) => (r.valueText = String(v ?? ''))">
-              <NativeSelectOption value="">
-                {{ t('scriptStore.params.choose') }}
-              </NativeSelectOption>
-              <NativeSelectOption v-for="o in optionsOf(r)" :key="o" :value="o">
-                {{ o }}
-              </NativeSelectOption>
-            </NativeSelect>
             <Textarea
               v-else-if="r.type === 'table'"
               :model-value="r.valueText"
               :rows="2"
               class="font-mono text-xs"
-              placeholder="{1, 2, 3}"
+              placeholder="{1, 2} 或 {[1]=2, [26]=5}"
               @update:model-value="(v) => (r.valueText = String(v))"
             />
             <Input v-else v-model="r.valueText" class="h-8" />
           </td>
           <td class="w-12 text-center">
-            <Checkbox :model-value="r.required" class="mt-1.5" @update:model-value="(v) => (r.required = v === true)" />
+            <!-- bool 无「必填」概念：复选框总有 true/false 值，故不渲染。 -->
+            <Checkbox v-if="r.type !== 'boolean'" :model-value="r.required" class="mt-1.5" @update:model-value="(v) => (r.required = v === true)" />
+            <span v-else class="text-muted-foreground">—</span>
           </td>
           <td>
             <Input v-model="r.description" class="h-8" />
