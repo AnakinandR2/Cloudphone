@@ -117,18 +117,22 @@ func TestProxyToolsClosure(t *testing.T) {
 	assert.Empty(t, list)
 }
 
-// list_apps：我的应用库 ∪ 应用商店，appId 即 CpAppID。
+// list_apps?source=store：应用市场（app_market, ready）→ source=market、refId=market 行 id。
 func TestListAppsTool(t *testing.T) {
-	t.Cleanup(func() { framework.DB.Exec("DELETE FROM customer_apps") })
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM app_market") })
 	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (?,0,1092,?,?,?,?)",
-		userA, "微信", "com.tencent.mm", "8.0", "NORMAL").Error)
+		"INSERT INTO app_market (s3_key, app_name, package_name, version, md5, file_size, parse_status) VALUES (?,?,?,?,?,?,?)",
+		"app-market/wx.apk", "微信", "com.tencent.mm", "8.0",
+		"00000000000000000000000000000000", 4096, "ready").Error)
+	var mk struct{ ID uint }
+	require.NoError(t, framework.DB.Raw("SELECT id FROM app_market WHERE s3_key=?", "app-market/wx.apk").Scan(&mk).Error)
 
-	var mine []appView
-	call(t, userA, "list_apps", map[string]any{"source": "mine"}, &mine)
-	require.Len(t, mine, 1)
-	assert.Equal(t, int64(1092), mine[0].AppID)
-	assert.Equal(t, "com.tencent.mm", mine[0].PackageName)
+	var store []appView
+	call(t, userA, "list_apps", map[string]any{"source": "store"}, &store)
+	require.Len(t, store, 1)
+	assert.Equal(t, "market", store[0].Source)
+	assert.Equal(t, mk.ID, store[0].RefID)
+	assert.Equal(t, "com.tencent.mm", store[0].PackageName)
 }
 
 // list_scripts：只返回启用脚本，scriptId 可直接喂 run_script。

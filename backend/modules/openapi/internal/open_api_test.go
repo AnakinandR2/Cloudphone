@@ -53,31 +53,25 @@ func callBody(userID int, method, body string, idParam string, h gin.HandlerFunc
 	return env.Code
 }
 
-// /apps：我的应用库 ∪ 应用商店，appId 等于 CpAppID；source 过滤生效。
+// /apps?source=store：应用市场（app_market, ready）→ refId 等于 market 行 id，Store=true。
+// 我的应用（source=mine）走素材库 + 解析元数据，依赖私有 S3，单测此处只验市场闭环。
 func TestOpenListAppsClosesInstallLoop(t *testing.T) {
-	t.Cleanup(func() { framework.DB.Exec("DELETE FROM customer_apps") })
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM app_market") })
 	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (?,0,1092,?,?,?,?)",
-		userA, "微信", "com.tencent.mm", "8.0", "NORMAL").Error)
-	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (0,1,2050,?,?,?,?)",
-		"TikTok", "com.ss.android.ugc.trill", "40", "NORMAL").Error)
+		"INSERT INTO app_market (s3_key, app_name, package_name, version, md5, file_size, parse_status) VALUES (?,?,?,?,?,?,?)",
+		"app-market/tiktok.apk", "TikTok", "com.ss.android.ugc.trill", "40",
+		"00000000000000000000000000000000", 4096, "ready").Error)
+	var mk struct{ ID uint }
+	require.NoError(t, framework.DB.Raw("SELECT id FROM app_market WHERE s3_key=?", "app-market/tiktok.apk").Scan(&mk).Error)
 
-	var all []OpenApp
-	callOpen(userA, "?source=all", OpenListApps, &all)
-	ids := map[int64]bool{}
-	for _, a := range all {
-		ids[a.AppID] = true
-	}
-	assert.True(t, ids[1092], "应含我的应用，appId=CpAppID")
-	assert.True(t, ids[2050], "应含商店应用")
-
-	var mine []OpenApp
-	callOpen(userA, "?source=mine", OpenListApps, &mine)
-	require.Len(t, mine, 1)
-	assert.Equal(t, int64(1092), mine[0].AppID)
-	assert.Equal(t, "com.tencent.mm", mine[0].PackageName)
-	assert.False(t, mine[0].Store)
+	var store []OpenApp
+	callOpen(userA, "?source=store", OpenListApps, &store)
+	require.Len(t, store, 1)
+	assert.Equal(t, "market", store[0].Source)
+	assert.Equal(t, mk.ID, store[0].RefID)
+	assert.Equal(t, "com.ss.android.ugc.trill", store[0].PackageName)
+	assert.True(t, store[0].Store)
+	assert.Equal(t, "ready", store[0].Status)
 }
 
 // /scripts：只返回启用脚本，scriptId 可直接喂 run-script。

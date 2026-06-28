@@ -35,12 +35,13 @@ func toOpenProxy(p *proxy.Proxy) OpenProxy {
 
 // OpenApp 是开放 API 的可安装应用视图：appId 即「装应用」接口 {appIds} 用的值。
 type OpenApp struct {
-	AppID       int64  `json:"appId" example:"1092"`
+	Source      string `json:"source" example:"user"` // user(我的应用) | market(应用市场)，安装时与 refId 一起传
+	RefID       uint   `json:"refId" example:"1092"`  // 来源内的引用 id：user=素材库文件 id，market=市场应用 id
 	Name        string `json:"name" example:"微信"`
 	PackageName string `json:"packageName" example:"com.tencent.mm"`
 	Version     string `json:"version" example:"8.0.49"`
 	Store       bool   `json:"store" example:"false"`
-	Status      string `json:"status" example:"NORMAL"`
+	Status      string `json:"status" example:"ready"` // parsing|ready|failed
 }
 
 // OpenScript 是开放 API 的可运行脚本视图：scriptId 即「跑脚本」接口 {scriptId} 用的值。
@@ -78,8 +79,14 @@ type powerReq struct {
 	Operation string `json:"operation" example:"on" enums:"on,off"`
 }
 
+// installReq 按 URL 安装（自有 S3）：apps 引用「我的应用/应用市场」，来自 list_apps 的 source/refId。
 type installReq struct {
-	AppIDs []int64 `json:"appIds" example:"1092,1093"`
+	Apps []installAppRef `json:"apps"`
+}
+
+type installAppRef struct {
+	Source string `json:"source" example:"user"` // user(我的应用) | market(应用市场)
+	RefID  uint   `json:"refId" example:"1092"`  // 来源内引用 id：user=素材库文件 id，market=市场应用 id
 }
 
 type uninstallReq struct {
@@ -278,9 +285,9 @@ func OpenListApps(c *gin.Context) {
 		return
 	}
 	source := c.DefaultQuery("source", "all")
-	var apps []app.CustomerApp
+	var apps []app.AppListItem
 	if source == "mine" || source == "all" {
-		mine, err := app.List(uid)
+		mine, err := app.ListUserApps(uid)
 		if err != nil {
 			framework.FailErr(c, err)
 			return
@@ -288,7 +295,7 @@ func OpenListApps(c *gin.Context) {
 		apps = append(apps, mine...)
 	}
 	if source == "store" || source == "all" {
-		store, err := app.StoreList()
+		store, err := app.ListMarketApps()
 		if err != nil {
 			framework.FailErr(c, err)
 			return
@@ -298,8 +305,8 @@ func OpenListApps(c *gin.Context) {
 	out := make([]OpenApp, 0, len(apps))
 	for _, a := range apps {
 		out = append(out, OpenApp{
-			AppID: a.CpAppID, Name: a.AppName, PackageName: a.PackageName,
-			Version: a.Version, Store: a.Store, Status: a.Status,
+			Source: a.Ref.Source, RefID: a.Ref.ID, Name: a.Name, PackageName: a.PackageName,
+			Version: a.Version, Store: a.Store, Status: a.ParseStatus,
 		})
 	}
 	framework.OKWithData(c, out)
@@ -502,7 +509,7 @@ func OpenApps(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "云手机 ID"
-// @Param body body installReq true "安装的中台 appId 列表"
+// @Param body body installReq true "按 URL 安装：apps 引用（source/refId，来自 list_apps）"
 // @Success 200 {object} framework.Response
 // @Router /phones/{id}/apps/install [post]
 func OpenInstall(c *gin.Context) {
@@ -512,11 +519,16 @@ func OpenInstall(c *gin.Context) {
 	}
 	var body installReq
 	_ = c.ShouldBindJSON(&body)
-	if err := phone.InstallApp(uid, id, body.AppIDs); err != nil {
+	refs := make([]phone.AppRef, 0, len(body.Apps))
+	for _, a := range body.Apps {
+		refs = append(refs, phone.AppRef{Source: a.Source, ID: a.RefID})
+	}
+	tasks, err := phone.InstallByURL(uid, []int{id}, refs)
+	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
-	framework.OK(c)
+	framework.OKWithData(c, gin.H{"task_info_list": tasks})
 }
 
 // OpenUninstall 卸载应用

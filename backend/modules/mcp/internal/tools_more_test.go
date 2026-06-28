@@ -170,15 +170,15 @@ func TestPhoneActionsNotFound(t *testing.T) {
 	}
 }
 
-// install_app：缺 appIds → 校验失败。
+// install_app：缺 source/refIds → 校验失败。
 func TestInstallAppMissingAppIDs(t *testing.T) {
 	res := call(t, userA, "install_app", map[string]any{"id": 1}, nil)
 	assert.True(t, res.IsError)
 }
 
-// install_app：带 appIds 但机器不存在 → service NotFound。
+// install_app：带 source/refIds 但机器不存在 → service NotFound（属主校验先于解析/下发）。
 func TestInstallAppNotFound(t *testing.T) {
-	res := call(t, userA, "install_app", map[string]any{"id": 999999, "appIds": []any{1, 2}}, nil)
+	res := call(t, userA, "install_app", map[string]any{"id": 999999, "source": "user", "refIds": []any{1, 2}}, nil)
 	assert.True(t, res.IsError)
 }
 
@@ -196,29 +196,32 @@ func TestUninstallAppNotFound(t *testing.T) {
 
 // ===== 应用工具 =====
 
-// list_apps：source=store（仅商店）路径。
+// list_apps：source=store（仅市场，app_market）路径。
 func TestListAppsStoreSource(t *testing.T) {
-	t.Cleanup(func() { framework.DB.Exec("DELETE FROM customer_apps WHERE app_name='store-only'") })
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM app_market WHERE app_name='store-only'") })
 	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (?,1,7777,?,?,?,?)",
-		userA, "store-only", "com.store.x", "1.0", "NORMAL").Error)
+		"INSERT INTO app_market (s3_key, app_name, package_name, version, md5, file_size, parse_status) VALUES (?,?,?,?,?,?,?)",
+		"app-market/store-only.apk", "store-only", "com.store.x", "1.0",
+		"00000000000000000000000000000000", 1024, "ready").Error)
+	var mk struct{ ID uint }
+	require.NoError(t, framework.DB.Raw("SELECT id FROM app_market WHERE s3_key=?", "app-market/store-only.apk").Scan(&mk).Error)
 
 	var store []appView
 	res := call(t, userA, "list_apps", map[string]any{"source": "store"}, &store)
 	require.False(t, res.IsError)
 	found := false
 	for _, a := range store {
-		if a.AppID == 7777 {
+		if a.RefID == mk.ID && a.Source == "market" {
 			found = true
 		}
 	}
-	assert.True(t, found, "store source 应含商店应用")
+	assert.True(t, found, "store source 应含市场应用")
 }
 
-// list_apps：默认 source=all（不传 source）。
+// list_apps：source=store（不触发依赖私有 S3 的素材库 mine 路径）。
 func TestListAppsDefaultAll(t *testing.T) {
 	var all []appView
-	res := call(t, userA, "list_apps", map[string]any{}, &all)
+	res := call(t, userA, "list_apps", map[string]any{"source": "store"}, &all)
 	assert.False(t, res.IsError)
 }
 

@@ -37,12 +37,13 @@ type regTool struct {
 // ===== 输出视图（与开放 API 形态一致，便于 AI 直接取 id 喂下一步）=====
 
 type appView struct {
-	AppID       int64  `json:"appId"`
+	Source      string `json:"source"` // user | market（安装时与 refId 一起传）
+	RefID       uint   `json:"refId"`  // 来源内引用 id：user=素材库文件 id，market=市场应用 id
 	Name        string `json:"name"`
 	PackageName string `json:"packageName"`
 	Version     string `json:"version"`
 	Store       bool   `json:"store"`
-	Status      string `json:"status"`
+	Status      string `json:"status"` // parsing|ready|failed
 }
 
 type scriptView struct {
@@ -299,16 +300,16 @@ func appTools() []regTool {
 					return errRes, nil
 				}
 				source := req.GetString("source", "all")
-				var apps []app.CustomerApp
+				var apps []app.AppListItem
 				if source == "mine" || source == "all" {
-					mine, err := app.List(uid)
+					mine, err := app.ListUserApps(uid)
 					if err != nil {
 						return fail(err)
 					}
 					apps = append(apps, mine...)
 				}
 				if source == "store" || source == "all" {
-					store, err := app.StoreList()
+					store, err := app.ListMarketApps()
 					if err != nil {
 						return fail(err)
 					}
@@ -317,8 +318,8 @@ func appTools() []regTool {
 				out := make([]appView, 0, len(apps))
 				for _, a := range apps {
 					out = append(out, appView{
-						AppID: a.CpAppID, Name: a.AppName, PackageName: a.PackageName,
-						Version: a.Version, Store: a.Store, Status: a.Status,
+						Source: a.Ref.Source, RefID: a.Ref.ID, Name: a.Name, PackageName: a.PackageName,
+						Version: a.Version, Store: a.Store, Status: a.ParseStatus,
 					})
 				}
 				return jsonResult(out)
@@ -347,9 +348,10 @@ func appTools() []regTool {
 		},
 		{
 			mcp.NewTool("install_app",
-				mcp.WithDescription("在某台云手机上安装应用（按中台 appId，来自 list_apps）。"),
+				mcp.WithDescription("在某台云手机上按 URL 安装应用（自有 S3）。source/refId 来自 list_apps。"),
 				mcp.WithNumber("id", mcp.Required(), mcp.Description("云手机 ID")),
-				mcp.WithArray("appIds", mcp.Required(), mcp.WithNumberItems(), mcp.Description("要安装的 appId 列表")),
+				mcp.WithString("source", mcp.Required(), mcp.Description("应用来源：user(我的应用) | market(应用市场)")),
+				mcp.WithArray("refIds", mcp.Required(), mcp.WithNumberItems(), mcp.Description("来源内引用 id 列表（user=素材库文件 id，market=市场应用 id）")),
 			),
 			func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				uid, errRes := auth(ctx)
@@ -360,14 +362,23 @@ func appTools() []regTool {
 				if err != nil {
 					return fail(apperr.Validation("id 必填"))
 				}
-				ids := toInt64Slice(req.GetIntSlice("appIds", nil))
-				if len(ids) == 0 {
-					return fail(apperr.Validation("appIds 必填"))
+				source, err := req.RequireString("source")
+				if err != nil {
+					return fail(apperr.Validation("source 必填"))
 				}
-				if err := phone.InstallApp(uid, id, ids); err != nil {
+				refIDs := req.GetIntSlice("refIds", nil)
+				if len(refIDs) == 0 {
+					return fail(apperr.Validation("refIds 必填"))
+				}
+				refs := make([]phone.AppRef, 0, len(refIDs))
+				for _, rid := range refIDs {
+					refs = append(refs, phone.AppRef{Source: source, ID: uint(rid)})
+				}
+				tasks, err := phone.InstallByURL(uid, []int{id}, refs)
+				if err != nil {
 					return fail(err)
 				}
-				return ok()
+				return jsonResult(map[string]any{"task_info_list": tasks})
 			},
 		},
 		{

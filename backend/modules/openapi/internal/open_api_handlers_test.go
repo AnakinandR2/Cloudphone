@@ -234,8 +234,8 @@ func TestOpenAppsInstallUninstall(t *testing.T) {
 	status, _ := callRaw(true, userOpen, "GET", "/x", "", idParams(id), OpenApps)
 	assert.NotEqual(t, http.StatusOK, status)
 
-	// 安装：未开通 → 非 200。
-	status, _ = callRaw(true, userOpen, "POST", "/x", `{"appIds":[1092]}`, idParams(id), OpenInstall)
+	// 安装：未开通 → 非 200（属主/开通校验先于解析与下发）。
+	status, _ = callRaw(true, userOpen, "POST", "/x", `{"apps":[{"source":"user","refId":1092}]}`, idParams(id), OpenInstall)
 	assert.NotEqual(t, http.StatusOK, status)
 
 	// 卸载：未开通 → 非 200。
@@ -305,29 +305,24 @@ func TestOpenProxyValidation(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, status)
 }
 
-// ===== ListApps source 分支：mine / store / all =====
+// ===== ListApps source=store 分支（市场应用，app_market） =====
 
 func TestOpenListAppsSources(t *testing.T) {
-	t.Cleanup(func() { framework.DB.Exec("DELETE FROM customer_apps") })
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM app_market") })
 	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (?,0,3001,?,?,?,?)",
-		userOpen, "我的应用", "com.mine", "1.0", "NORMAL").Error)
-	require.NoError(t, framework.DB.Exec(
-		"INSERT INTO customer_apps (user_id, store, cp_app_id, app_name, package_name, version, status) VALUES (0,1,3002,?,?,?,?)",
-		"商店应用", "com.store", "2.0", "NORMAL").Error)
-
-	var mine []OpenApp
-	callOpen(userOpen, "?source=mine", OpenListApps, &mine)
-	require.Len(t, mine, 1)
-	assert.Equal(t, int64(3001), mine[0].AppID)
+		"INSERT INTO app_market (s3_key, app_name, package_name, version, md5, file_size, parse_status) VALUES (?,?,?,?,?,?,?)",
+		"app-market/store.apk", "商店应用", "com.store", "2.0",
+		"00000000000000000000000000000000", 2048, "ready").Error)
+	var mk struct{ ID uint }
+	require.NoError(t, framework.DB.Raw("SELECT id FROM app_market WHERE s3_key=?", "app-market/store.apk").Scan(&mk).Error)
 
 	var store []OpenApp
 	callOpen(userOpen, "?source=store", OpenListApps, &store)
 	found := false
 	for _, a := range store {
-		if a.AppID == 3002 {
+		if a.RefID == mk.ID && a.Source == "market" {
 			found = true
 		}
 	}
-	assert.True(t, found, "store 来源应含商店应用")
+	assert.True(t, found, "store 来源应含市场应用")
 }
