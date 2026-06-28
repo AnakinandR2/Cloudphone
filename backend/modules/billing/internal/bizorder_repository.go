@@ -16,7 +16,7 @@ type bizOrderRepository interface {
 	markPaid(id int) error
 	setGift(id, minutes int) error
 	itemsByOrders(orderIDs []uint) (map[uint][]BizOrderItem, error)
-	listOwned(userID, offset, limit int, status string, from, to time.Time) ([]BizOrder, int64, error)
+	listOwned(userID, offset, limit int, status, bizType string, from, to time.Time) ([]BizOrder, int64, error)
 	listAll(offset, limit, userID int, status string) ([]BizOrder, int64, error)
 }
 
@@ -90,10 +90,13 @@ func (r *gormBizOrderRepository) itemsByOrders(orderIDs []uint) (map[uint][]BizO
 	return out, nil
 }
 
-func (r *gormBizOrderRepository) listOwned(userID, offset, limit int, status string, from, to time.Time) ([]BizOrder, int64, error) {
+func (r *gormBizOrderRepository) listOwned(userID, offset, limit int, status, bizType string, from, to time.Time) ([]BizOrder, int64, error) {
 	q := r.db.Model(&BizOrder{}).Where("user_id = ?", userID)
 	if status != "" {
 		q = q.Where("status = ?", status)
+	}
+	if bizType != "" {
+		q = q.Where("biz_type = ?", bizType)
 	}
 	if !from.IsZero() {
 		q = q.Where("created_at >= ?", from)

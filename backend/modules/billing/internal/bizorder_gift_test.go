@@ -101,12 +101,12 @@ func TestBizOrder_BootSlotNew_NoGift(t *testing.T) {
 
 func TestBizOrder_QuoteSeat_IncludesGift(t *testing.T) {
 	setSeatGift(t, 200)
-	q, err := BizOrderService.Quote(&BizQuoteRequest{BizType: BizSeatNew, Quantity: 2, DurationValue: 3})
+	q, err := BizOrderService.Quote(0, &BizQuoteRequest{BizType: BizSeatNew, Quantity: 2, DurationValue: 3})
 	require.NoError(t, err)
 	assert.Equal(t, 1200, q.GiftRuntimeMinutes)
 
 	// 包月开机数不赠送。
-	q2, err := BizOrderService.Quote(&BizQuoteRequest{BizType: BizBootSlotNew, Quantity: 2, DurationValue: 7})
+	q2, err := BizOrderService.Quote(0, &BizQuoteRequest{BizType: BizBootSlotNew, Quantity: 2, DurationValue: 7})
 	require.NoError(t, err)
 	assert.Equal(t, 0, q2.GiftRuntimeMinutes)
 }
@@ -120,7 +120,7 @@ func TestBizOrder_ListOrders_ItemsGiftAndFilters(t *testing.T) {
 	require.NoError(t, err)
 
 	// 随单返回明细 + 赠送量。
-	list, total, err := BizOrderService.ListOrders(uid, 1, 20, "", time.Time{}, time.Time{})
+	list, total, err := BizOrderService.ListOrders(uid, 1, 20, "", "", time.Time{}, time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, list, 1)
@@ -130,12 +130,12 @@ func TestBizOrder_ListOrders_ItemsGiftAndFilters(t *testing.T) {
 	assert.Equal(t, 1200, list[0].GiftRuntimeMinutes)
 
 	// 状态过滤：无 unpaid。
-	_, t2, err := BizOrderService.ListOrders(uid, 1, 20, BizOrderUnpaid, time.Time{}, time.Time{})
+	_, t2, err := BizOrderService.ListOrders(uid, 1, 20, BizOrderUnpaid, "", time.Time{}, time.Time{})
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), t2)
 
 	// 时间过滤：from 在未来 → 排除。
-	_, t3, err := BizOrderService.ListOrders(uid, 1, 20, "", time.Now().Add(time.Hour), time.Time{})
+	_, t3, err := BizOrderService.ListOrders(uid, 1, 20, "", "", time.Now().Add(time.Hour), time.Time{})
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), t3)
 }

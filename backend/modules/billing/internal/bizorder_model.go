@@ -1,6 +1,9 @@
 package billing
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // 新购买模型订单（与旧 Order 并存；旧表 billing_orders 保留给 catalog/order_service 切换期使用）。
 
@@ -72,6 +75,8 @@ type BizOrderItem struct {
 	DurationDiscountBps int    `gorm:"not null;default:10000" json:"duration_discount_bps"`
 	AmountCents         int64  `gorm:"not null" json:"amount_cents"`
 	RenewUnitIDs        string `gorm:"type:varchar(512)" json:"renew_unit_ids"` // 续费单元 ID（逗号分隔）
+	// MetaJSON 不透明业务载荷：billing 不解析，存各已注册业务类型自己的载荷（如 library 套餐 meta）。
+	MetaJSON string `gorm:"type:text" json:"meta_json"`
 }
 
 func (BizOrderItem) TableName() string { return "billing_biz_order_items" }
@@ -97,6 +102,8 @@ type BizOrderCreate struct {
 	Minutes       int    `json:"minutes"`
 	AmountCents   int64  `json:"amount_cents"`
 	PayMethod     string `json:"pay_method" binding:"required"`
+	// Params 可扩展参数：承载已注册业务类型的不透明请求载荷（如 library 套餐 {action,tier_code,days}）。
+	Params json.RawMessage `json:"params"`
 }
 
 // BizQuoteRequest 报价请求（契约 §1.3）。
@@ -105,6 +112,8 @@ type BizQuoteRequest struct {
 	Quantity      int    `json:"quantity"`
 	DurationValue int    `json:"duration_value"`
 	Minutes       int    `json:"minutes"`
+	// Params 可扩展参数：承载已注册业务类型的不透明报价载荷。
+	Params json.RawMessage `json:"params"`
 }
 
 // PayResult 支付结果。当前余额与第三方（桩网关）均即时 paid；接入真实网关后第三方

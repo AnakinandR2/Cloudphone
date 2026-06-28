@@ -82,6 +82,23 @@ func RecycleRetentionDays() (int, error) {
 	return billinginternal.PricingConfigService.RecycleRetentionDays()
 }
 
+// ---- 业务类型可扩展（依赖反转，供 library 等装配时注册）----
+
+// BizQuoteResult 已注册业务类型报价结果（总价 + 不透明 meta_json 载荷）。
+type BizQuoteResult = billinginternal.BizQuoteResult
+
+// BizQuoteFunc 报价函数：按 userID + 不透明 params 算权威价并产出 meta_json。
+type BizQuoteFunc = billinginternal.BizQuoteFunc
+
+// BizFulfillFunc 履约函数：支付成功后按 meta_json 落地业务变更。
+type BizFulfillFunc = billinginternal.BizFulfillFunc
+
+// RegisterBizType 注册外部业务类型（library 装配时调用）。
+// billing 仅持有函数指针，无对 library 的编译期依赖（依赖反转，遵守 Modulith 边界）。
+func RegisterBizType(bizType string, quote BizQuoteFunc, fulfill BizFulfillFunc) {
+	billinginternal.RegisterBizType(bizType, quote, fulfill)
+}
+
 // InitForTest 测试用：供其他模块装配 billing。
 func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }
 

@@ -108,12 +108,17 @@ func GetPurchaseConfig(c *gin.Context) {
 
 // BizQuote POST /billing/quote —— 服务端权威报价。
 func BizQuote(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
 	var req BizQuoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
 		return
 	}
-	q, err := BizOrderService.Quote(&req)
+	q, err := BizOrderService.Quote(uid, &req)
 	if err != nil {
 		framework.FailErr(c, err)
 		return
@@ -192,7 +197,7 @@ func ListBizOrders(c *gin.Context) {
 	if p := parseTimeQuery(c.Query("to")); p != nil {
 		to = *p
 	}
-	list, total, err := BizOrderService.ListOrders(uid, page, size, c.Query("status"), from, to)
+	list, total, err := BizOrderService.ListOrders(uid, page, size, c.Query("status"), c.Query("biz_type"), from, to)
 	if err != nil {
 		framework.FailErr(c, err)
 		return

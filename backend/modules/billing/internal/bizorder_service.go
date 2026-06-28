@@ -38,10 +38,25 @@ func isRenew(bizType string) bool {
 	return bizType == BizSeatRenew || bizType == BizBootSlotRenew
 }
 
-// Quote 服务端权威报价。
-func (s *bizOrderServiceImpl) Quote(req *BizQuoteRequest) (PriceQuote, error) {
-	if !validBizTypes[req.BizType] {
+// Quote 服务端权威报价。userID 供已注册业务类型计算依赖当前用户状态的价格（如套餐补差价）。
+func (s *bizOrderServiceImpl) Quote(userID int, req *BizQuoteRequest) (PriceQuote, error) {
+	if !isValidBizType(req.BizType) {
 		return PriceQuote{}, apperr.Validation("非法的业务类型")
+	}
+	// 已注册业务类型：委托其 quote 算权威价，包成 PriceQuote 供前端预览（meta_json 在下单时再算）。
+	if rb, ok := lookupBizType(req.BizType); ok {
+		res, err := rb.quote(userID, req.Params)
+		if err != nil {
+			return PriceQuote{}, err
+		}
+		return PriceQuote{
+			Quantity:            1,
+			PayableCents:        res.TotalCents,
+			OriginalCents:       res.TotalCents,
+			UnitPriceCents:      res.TotalCents,
+			QtyDiscountBps:      DiscountBpsFull,
+			DurationDiscountBps: DiscountBpsFull,
+		}, nil
 	}
 	if req.BizType == BizRuntimePack {
 		return s.pricing.QuoteRuntimePack(req.Minutes)
@@ -75,7 +90,7 @@ func (s *bizOrderServiceImpl) seatGiftMinutes(seatQty, months int) int {
 
 // CreateOrder 下单：组装订单项 + 计价 → 入库；余额支付即时扣款并履约，第三方返回待支付。
 func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*BizOrderResult, error) {
-	if !validBizTypes[req.BizType] {
+	if !isValidBizType(req.BizType) {
 		return nil, apperr.Validation("非法的业务类型")
 	}
 	if !validPayMethods[req.PayMethod] {
@@ -131,6 +146,23 @@ func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*Biz
 		order.TotalCents = q.PayableCents
 		item = bizItemFromQuote(kind, q, joinIDs(req.UnitIDs))
 		item.DurationUnit = s.durationUnit(kind)
+	default:
+		// 已注册业务类型：调其 quote 得权威价 + meta_json，组装单行订单项（quantity=1）。
+		rb, ok := lookupBizType(req.BizType)
+		if !ok {
+			return nil, apperr.Validation("非法的业务类型")
+		}
+		res, err := rb.quote(userID, req.Params)
+		if err != nil {
+			return nil, err
+		}
+		order.TotalCents = res.TotalCents
+		item = BizOrderItem{
+			TargetKind: req.BizType, Quantity: 1,
+			UnitPriceCents: res.TotalCents, AmountCents: res.TotalCents,
+			QtyDiscountBps: DiscountBpsFull, DurationDiscountBps: DiscountBpsFull,
+			MetaJSON: string(res.MetaJSON),
+		}
 	}
 
 	// 在 create 之前固化手续费（create 用 tx.Create 一次性按当前字段入库，之后无 Update 回写）。
@@ -180,7 +212,8 @@ func (s *bizOrderServiceImpl) PayOrder(userID, id int) (*BizOrderResult, error) 
 //     钱由外部网关收取）。后续接入真实网关时，这里改回返回 pending + 走 MarkPaid 回调。
 func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
 	// 余额支付才从钱包扣款；第三方由外部网关收款，不动余额。
-	if o.PayMethod == PayBalance && o.BizType != BizRecharge {
+	// TotalCents==0（如套餐降级）跳过扣款，避免无谓的 0 元钱包流水。
+	if o.PayMethod == PayBalance && o.BizType != BizRecharge && o.TotalCents > 0 {
 		// 实付 = 商品金额 + 手续费（余额方式 fee 恒 0，等价于扣 TotalCents，行为不变）。
 		if err := s.wallet.Charge(userID, o.TotalCents+o.FeeCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID)); err != nil {
 			return PayResult{}, err
@@ -248,6 +281,14 @@ func (s *bizOrderServiceImpl) fulfillOrder(userID int, o *BizOrder, items []BizO
 		}
 		return nil
 	}
+	// 已注册业务类型：调其 fulfill，回传订单项 meta_json 落地业务变更。
+	if rb, ok := lookupBizType(o.BizType); ok {
+		var meta []byte
+		if len(items) > 0 {
+			meta = []byte(items[0].MetaJSON)
+		}
+		return rb.fulfill(userID, o.ID, meta)
+	}
 	return apperr.Validation("未知业务类型")
 }
 
@@ -275,9 +316,9 @@ func (s *bizOrderServiceImpl) durationUnit(kind string) string {
 }
 
 // ListOrders 订单历史：按状态 + 创建时间区间过滤，随单返回订单项明细。
-func (s *bizOrderServiceImpl) ListOrders(userID, page, size int, status string, from, to time.Time) ([]BizOrderWithItems, int64, error) {
+func (s *bizOrderServiceImpl) ListOrders(userID, page, size int, status, bizType string, from, to time.Time) ([]BizOrderWithItems, int64, error) {
 	off, lim := pageOffset(page, size)
-	orders, total, err := s.repo.listOwned(userID, off, lim, status, from, to)
+	orders, total, err := s.repo.listOwned(userID, off, lim, status, bizType, from, to)
 	if err != nil {
 		return nil, 0, err
 	}

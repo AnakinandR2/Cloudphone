@@ -11,11 +11,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fmtDiscountBps } from '@/utils/money'
+import LibraryPricingForm from '@/views/library/LibraryPricingForm.vue'
 
 const { t } = useI18n()
 
-type TabKey = BillingKind | 'runtime' | 'recharge'
+type TabKey = BillingKind | 'runtime' | 'recharge' | 'library'
 const activeTab = ref<TabKey>('seat')
+const libraryForm = ref<InstanceType<typeof LibraryPricingForm> | null>(null)
 
 // ── seat / boot_slot 表单态：单价用「元」编辑，存「分」。
 interface KindForm {
@@ -126,6 +128,17 @@ function buildKind(kind: BillingKind): KindPricing {
 }
 
 async function save() {
+  // 素材库 tab：委托子组件保存（独立后端），共用本按钮触发。
+  if (activeTab.value === 'library') {
+    saving.value = true
+    try {
+      await libraryForm.value?.save()
+    }
+    finally {
+      saving.value = false
+    }
+    return
+  }
   saving.value = true
   try {
     if (activeTab.value === 'runtime') {
@@ -223,6 +236,9 @@ const saveLabel = computed(() => (saving.value ? t('common.loading') : t('crud.s
             </TabsTrigger>
             <TabsTrigger value="recharge">
               {{ t('billing.rechargeTitle') }}
+            </TabsTrigger>
+            <TabsTrigger value="library">
+              {{ t('menu.libraryPricing') }}
             </TabsTrigger>
           </TabsList>
 
@@ -435,6 +451,11 @@ const saveLabel = computed(() => (saving.value ? t('common.loading') : t('crud.s
             <p v-else class="text-muted-foreground py-6 text-center text-sm">
               {{ t('billing.noPresets') }}
             </p>
+          </TabsContent>
+
+          <!-- library tab：素材库定价（自带保存，独立后端） -->
+          <TabsContent value="library" class="pt-4">
+            <LibraryPricingForm ref="libraryForm" />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { BillingOverview, PurchaseConfig } from '@/types/billing'
-import { Clock, Power, Smartphone, Wallet } from 'lucide-vue-next'
+import type { LibraryOverview } from '@/types/library'
+import { Clock, HardDrive, Power, Smartphone, Wallet } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
+import libraryApi from '@/api/modules/library'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { fmtBytes } from '@/utils/bytes'
 import { fmtCents } from '@/utils/money'
+import PackagePanel from '@/views/library/PackagePanel.vue'
 import OrderHistoryPanel from './purchase/OrderHistoryPanel.vue'
 import ProductBuyPanel from './purchase/ProductBuyPanel.vue'
 import ProductRenewPanel from './purchase/ProductRenewPanel.vue'
@@ -18,13 +22,14 @@ import RuntimePackPanel from './purchase/RuntimePackPanel.vue'
 const { t } = useI18n()
 
 // KPI 下方固定显示订单历史；充值/购买/续费等表单点 KPI 按钮后在右侧抽屉展示。
-type Panel = 'recharge' | 'seat_new' | 'seat_renew' | 'boot_slot_new' | 'boot_slot_renew' | 'runtime'
+type Panel = 'recharge' | 'seat_new' | 'seat_renew' | 'boot_slot_new' | 'boot_slot_renew' | 'runtime' | 'library'
 const active = ref<Panel | null>(null)
 const open = ref(false)
 
 const loading = ref(false)
 const overview = ref<BillingOverview | null>(null)
 const config = ref<PurchaseConfig | null>(null)
+const libraryOverview = ref<LibraryOverview | null>(null)
 const orderHistory = ref<InstanceType<typeof OrderHistoryPanel> | null>(null)
 
 const balanceCents = computed(() => overview.value?.balance_cents ?? 0)
@@ -40,8 +45,19 @@ async function loadOverview() {
   }
 }
 
+async function loadLibraryOverview() {
+  try {
+    const res = await libraryApi.overview()
+    libraryOverview.value = res.data
+  }
+  catch {
+    // 素材库概览非关键，静默
+  }
+}
+
 onMounted(async () => {
   loading.value = true
+  loadLibraryOverview()
   try {
     const [ovRes, cfgRes] = await Promise.all([
       billingApi.overview(),
@@ -64,6 +80,7 @@ function openPanel(p: Panel) {
 // 抽屉内面板支付成功后：刷新 KPI + 订单列表，并关闭抽屉。
 async function onPaid() {
   await loadOverview()
+  await loadLibraryOverview()
   await orderHistory.value?.reload()
   open.value = false
 }
@@ -81,10 +98,10 @@ async function onPaid() {
     </div>
 
     <!-- ===== 4 KPI 卡片 ===== -->
-    <div v-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Skeleton v-for="i in 4" :key="i" class="h-28 rounded-xl" />
+    <div v-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+      <Skeleton v-for="i in 5" :key="i" class="h-28 rounded-xl" />
     </div>
-    <div v-else-if="overview" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div v-else-if="overview" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
       <!-- 余额 -->
       <Card>
         <CardContent class="flex flex-col gap-3 py-4">
@@ -182,6 +199,28 @@ async function onPaid() {
           </Button>
         </CardContent>
       </Card>
+
+      <!-- 素材库容量 -->
+      <Card v-if="libraryOverview">
+        <CardContent class="flex flex-col gap-3 py-4">
+          <div class="flex items-center gap-3">
+            <div class="flex size-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+              <HardDrive class="size-5" />
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">
+                {{ t('billing.purchase2.kpiLibrary') }}
+              </div>
+              <div class="text-xl font-semibold tabular-nums">
+                {{ fmtBytes(libraryOverview.usage.used_bytes) }}<span class="text-muted-foreground text-sm font-normal"> / {{ fmtBytes(libraryOverview.usage.capacity_bytes) }}</span>
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" @click="openPanel('library')">
+            {{ t('billing.purchase2.kpiBuyLibrary') }}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
 
     <!-- ===== KPI 下方：固定显示订单历史 ===== -->
@@ -212,6 +251,7 @@ async function onPaid() {
             <ProductRenewPanel v-else-if="active === 'boot_slot_renew'" kind="boot_slot" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
             <RuntimePackPanel v-else-if="active === 'runtime'" :config="config" :balance-cents="balanceCents" @paid="onPaid" />
           </template>
+          <PackagePanel v-if="active === 'library' && libraryOverview" :overview="libraryOverview" @paid="onPaid" />
         </div>
       </SheetContent>
     </Sheet>

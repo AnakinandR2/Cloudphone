@@ -171,6 +171,8 @@ export interface OrderCreateReq2 {
   minutes?: number
   amount_cents?: number
   pay_method: string
+  /** 已注册业务类型（如 library 套餐 lib_*）的不透明请求载荷；内置类型不传。 */
+  params?: Record<string, unknown>
 }
 export interface PayInfo { status: OrderStatus2, [k: string]: unknown }
 export interface OrderCreateResult { order: Order2, pay: PayInfo }
