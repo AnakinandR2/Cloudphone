@@ -2,6 +2,7 @@ package framework
 
 import (
 	"net/http"
+	"reflect"
 
 	"manager-backend/framework/apperr"
 
@@ -33,8 +34,21 @@ func OKWithPage(c *gin.Context, list interface{}, total int64) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "成功",
-		Data:    PageResponse{List: list, Total: total},
+		Data:    PageResponse{List: emptyIfNilSlice(list), Total: total},
 	})
+}
+
+// emptyIfNilSlice 把 nil 切片归一为长度 0 的同类型切片，避免序列化成 JSON null。
+// 与前端「list 始终是数组」的约定一致；非切片或非 nil 原样返回。
+func emptyIfNilSlice(v interface{}) interface{} {
+	if v == nil {
+		return []interface{}{}
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		return reflect.MakeSlice(rv.Type(), 0, 0).Interface()
+	}
+	return v
 }
 
 func Fail(c *gin.Context, httpCode int, message string) {

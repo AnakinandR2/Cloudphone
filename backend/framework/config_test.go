@@ -58,6 +58,60 @@ func TestLoadConfigSetsGlobal(t *testing.T) {
 	assert.Equal(t, cfg, framework.AppConfig)
 }
 
+// STATEFUL / ENABLE_MIGRATIONS：默认值、环境变量覆盖、nil 语义与 ShouldRunSetup 真值表。
+func TestStatefulAndMigrationsDefaults(t *testing.T) {
+	saveConfig(t)
+	os.Clearenv()
+	cfg := framework.LoadConfig()
+	// 默认都为 true：单实例 / 本地开发开箱即用。
+	assert.True(t, cfg.Stateful)
+	assert.True(t, cfg.EnableMigrations)
+	assert.True(t, framework.IsStateful())
+	assert.True(t, framework.MigrationsEnabled())
+	assert.True(t, framework.ShouldRunSetup())
+}
+
+func TestStatefulAndMigrationsFromEnv(t *testing.T) {
+	saveConfig(t)
+	os.Clearenv()
+	os.Setenv("STATEFUL", "false")
+	os.Setenv("ENABLE_MIGRATIONS", "false")
+	defer os.Clearenv()
+
+	cfg := framework.LoadConfig()
+	assert.False(t, cfg.Stateful)
+	assert.False(t, cfg.EnableMigrations)
+	assert.False(t, framework.IsStateful())
+	assert.False(t, framework.MigrationsEnabled())
+}
+
+// AppConfig 为 nil 时（如仅测纯函数的单测）保留「默认承担」语义。
+func TestStatefulHelpersNilConfig(t *testing.T) {
+	saveConfig(t)
+	framework.AppConfig = nil
+	assert.True(t, framework.IsStateful())
+	assert.True(t, framework.MigrationsEnabled())
+	assert.True(t, framework.ShouldRunSetup())
+}
+
+// ShouldRunSetup = Stateful && EnableMigrations 的 4 组合真值表。
+func TestShouldRunSetupTruthTable(t *testing.T) {
+	saveConfig(t)
+	cases := []struct {
+		stateful, migrations, want bool
+	}{
+		{true, true, true},
+		{true, false, false},
+		{false, true, false},
+		{false, false, false},
+	}
+	for _, c := range cases {
+		framework.AppConfig = &framework.Config{Stateful: c.stateful, EnableMigrations: c.migrations}
+		assert.Equal(t, c.want, framework.ShouldRunSetup(),
+			"Stateful=%v EnableMigrations=%v", c.stateful, c.migrations)
+	}
+}
+
 // getEnvAsDuration 经 LoadConfig 间接覆盖（函数本身未导出）：
 // 合法值解析、空值/非法值/<=0 三种情形回退默认。
 func TestLoadConfigPresignTTL_Defaults(t *testing.T) {

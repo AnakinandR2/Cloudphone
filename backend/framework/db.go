@@ -29,8 +29,12 @@ func InitDB() error {
 		dbType = "sqlite"
 	}
 
-	if err := ensureDatabase(cfg, dbType); err != nil {
-		return err
+	// 仅在「单例角色且允许迁移」时自动建库；外管 schema（ENABLE_MIGRATIONS=false）或非 stateful
+	// 实例不创建数据库——库缺失会在下面 gorm.Open/Ping 时 fail-fast（外管 schema 的契约）。
+	if ShouldRunSetup() {
+		if err := ensureDatabase(cfg, dbType); err != nil {
+			return err
+		}
 	}
 
 	var dialector gorm.Dialector

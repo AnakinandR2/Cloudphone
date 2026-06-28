@@ -24,6 +24,9 @@ func SetupTestDB(m *testing.M) (*TestDB, int) {
 
 	os.Setenv("GIN_MODE", "test")
 	os.Setenv("LOG_LEVEL", "silent")
+	// 测试始终承担建表角色：不受外部 STATEFUL/ENABLE_MIGRATIONS 环境影响，确保隔离库被建好。
+	os.Setenv("STATEFUL", "true")
+	os.Setenv("ENABLE_MIGRATIONS", "true")
 
 	LoadConfig()
 

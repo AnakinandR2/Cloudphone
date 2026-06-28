@@ -23,6 +23,8 @@ func TestConstructorsSetKindAndMsg(t *testing.T) {
 		{"Unauthorized", Unauthorized("x"), KindUnauthorized},
 		{"Forbidden", Forbidden("x"), KindForbidden},
 		{"Internal", Internal("x"), KindInternal},
+		{"PayloadTooLarge", PayloadTooLarge("x"), KindPayloadTooLarge},
+		{"Upstream", Upstream("x"), KindUpstream},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -58,5 +60,8 @@ func TestHTTPStatus(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, HTTPStatus(KindUnauthorized))
 	assert.Equal(t, http.StatusForbidden, HTTPStatus(KindForbidden))
 	assert.Equal(t, http.StatusInternalServerError, HTTPStatus(KindInternal))
+	assert.Equal(t, http.StatusServiceUnavailable, HTTPStatus(KindUnavailable))
+	assert.Equal(t, http.StatusRequestEntityTooLarge, HTTPStatus(KindPayloadTooLarge))
+	assert.Equal(t, http.StatusBadGateway, HTTPStatus(KindUpstream))
 	assert.Equal(t, http.StatusInternalServerError, HTTPStatus(Kind(999)), "未知 Kind → 500")
 }

@@ -58,8 +58,14 @@ func main() {
 		log.Fatalf("对象存储初始化失败: %v", err)
 	}
 
-	if err := framework.RunSetup(framework.DB); err != nil {
-		log.Fatalf("数据库建表与初始化失败: %v", err)
+	// 仅「单例角色且允许迁移」的实例建表与 seed；HA 无状态实例 / 外管 schema 时跳过。
+	if framework.ShouldRunSetup() {
+		if err := framework.RunSetup(framework.DB); err != nil {
+			log.Fatalf("数据库建表与初始化失败: %v", err)
+		}
+	} else {
+		log.Printf("[setup] 跳过建表与 seed（Stateful=%v EnableMigrations=%v）",
+			framework.IsStateful(), framework.MigrationsEnabled())
 	}
 
 	for _, module := range framework.GlobalModule.GetAll() {
@@ -79,7 +85,8 @@ func main() {
 	}
 	r.Use(framework.SecurityHeaders())
 	r.Use(framework.CORSMiddleware(framework.AppConfig.CORSAllowedOrigins))
-	r.GET("/health", healthCheck)
+	// 运维探针挂在根路径（不经访问日志/鉴权）：/livez /readyz /health + /debug/*。
+	framework.RegisterProbes(r)
 
 	framework.SetupRouter(r)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -127,8 +134,4 @@ func main() {
 	}
 
 	log.Println("已优雅关闭")
-}
-
-func healthCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

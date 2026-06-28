@@ -12,14 +12,16 @@ import (
 type Kind int
 
 const (
-	KindInternal     Kind = iota // 未归类的内部错误 → 500
-	KindBadRequest               // 一般性请求错误 → 400
-	KindNotFound                 // 资源不存在 → 404
-	KindConflict                 // 唯一性/状态冲突 → 409
-	KindValidation               // 入参/业务校验失败 → 422
-	KindUnauthorized             // 未认证 → 401
-	KindForbidden                // 已认证但无权限 → 403
-	KindUnavailable              // 依赖未配置/暂不可用 → 503
+	KindInternal        Kind = iota // 未归类的内部错误 → 500
+	KindBadRequest                  // 一般性请求错误 → 400
+	KindNotFound                    // 资源不存在 → 404
+	KindConflict                    // 唯一性/状态冲突 → 409
+	KindValidation                  // 入参/业务校验失败 → 422
+	KindUnauthorized                // 未认证 → 401
+	KindForbidden                   // 已认证但无权限 → 403
+	KindUnavailable                 // 依赖未配置/暂不可用 → 503
+	KindPayloadTooLarge             // 请求体超限 → 413
+	KindUpstream                    // 上游依赖（如 S3）失败 → 502
 )
 
 // Error 携带类别与可直接展示给调用方的消息。
@@ -41,6 +43,12 @@ func Validation(msg string) *Error   { return &Error{Kind: KindValidation, Msg: 
 func Unauthorized(msg string) *Error { return &Error{Kind: KindUnauthorized, Msg: msg} }
 func Forbidden(msg string) *Error    { return &Error{Kind: KindForbidden, Msg: msg} }
 func Internal(msg string) *Error     { return &Error{Kind: KindInternal, Msg: msg} }
+
+// PayloadTooLarge 请求体超限（如上传文件超过限额）→ 413。
+func PayloadTooLarge(msg string) *Error { return &Error{Kind: KindPayloadTooLarge, Msg: msg} }
+
+// Upstream 上游依赖（如对象存储/中台）失败 → 502。
+func Upstream(msg string) *Error { return &Error{Kind: KindUpstream, Msg: msg} }
 
 // KindOf 提取错误类别；非领域错误一律视为内部错误。
 func KindOf(err error) Kind {
@@ -68,6 +76,10 @@ func HTTPStatus(k Kind) int {
 		return http.StatusForbidden
 	case KindUnavailable:
 		return http.StatusServiceUnavailable
+	case KindPayloadTooLarge:
+		return http.StatusRequestEntityTooLarge
+	case KindUpstream:
+		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
 	}

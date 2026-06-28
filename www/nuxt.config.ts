@@ -1,4 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import process from 'node:process'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 
 // 把 Scalar 的 standalone 浏览器构建拷到 public/，以 <script> 方式自托管加载，
@@ -44,7 +45,8 @@ export default defineNuxtConfig({
   // Listen on all network interfaces (LAN access / containers).
   devServer: {
     host: '0.0.0.0',
-    port: 3000,
+    // 开发服务端口：从环境变量 NUXT_DEV_PORT 读取，缺省 3000（Nuxt 在评估 config 前自动载入 .env）。
+    port: Number(process.env.NUXT_DEV_PORT) || 3000,
   },
 
   modules: [

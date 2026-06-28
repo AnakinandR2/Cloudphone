@@ -25,6 +25,15 @@ type Config struct {
 	GinMode    string
 	LogLevel   string // debug, info, warn, error, silent
 
+	// 部署 / 运行角色（HA 多实例）
+	// Stateful：本实例是否承担单例后台工作（建表/seed/迁移、定时清理等）。HA 多实例时恰好让一个为 true，
+	//   其余为 false，避免多实例并发 DDL / 重复 seed。默认 true：单实例与本地开发开箱即用。
+	Stateful bool
+	// EnableMigrations：是否允许本实例执行「建库 + 建表(AutoMigrate) + 启动期 seed」。默认 true。
+	//   置 false 用于 schema 由 DBA/CI 外部管理、应用账号无 DDL 权限的生产场景——此时即使 Stateful=true
+	//   也不建库建表；库/表缺失会在连接期 fail-fast（外管 schema 的契约）。
+	EnableMigrations bool
+
 	// CORS 允许的来源白名单；为空或含 "*" 表示放行任意来源（仅建议开发环境）。
 	CORSAllowedOrigins []string
 
@@ -102,6 +111,17 @@ type Config struct {
 
 var AppConfig *Config
 
+// IsStateful 报告本实例是否承担单例后台工作（建表/seed/迁移、定时清理等）。
+// AppConfig 未初始化（如部分仅测纯函数的单测）视为 true，保留「默认承担」语义。
+func IsStateful() bool { return AppConfig == nil || AppConfig.Stateful }
+
+// MigrationsEnabled 报告本实例是否允许「建库 + 建表 + seed」。AppConfig 未初始化视为 true。
+func MigrationsEnabled() bool { return AppConfig == nil || AppConfig.EnableMigrations }
+
+// ShouldRunSetup 仅当本实例既是单例角色（Stateful）、又允许迁移（EnableMigrations）时为真。
+// 建库（ensureDatabase）与建表/seed（RunSetup）都以它为门控：外管 schema 时全部跳过。
+func ShouldRunSetup() bool { return IsStateful() && MigrationsEnabled() }
+
 // loadDotEnv 把工作目录下的 .env 灌进进程环境变量（已存在的不覆盖）。
 // 无外部依赖；让 `go run .` 与 air（air 自带 env_files=[".env"]）行为一致，
 // 否则 `go run` 读不到 MIDPLAT_* → 中台未配置 → 创建走降级假成功，极具迷惑性。
@@ -147,6 +167,8 @@ func LoadConfig() *Config {
 		ServerPort:           getEnv("SERVER_PORT", "9981"),
 		GinMode:              getEnv("GIN_MODE", "release"),
 		LogLevel:             getEnv("LOG_LEVEL", "info"),
+		Stateful:             getEnvAsBool("STATEFUL", true),
+		EnableMigrations:     getEnvAsBool("ENABLE_MIGRATIONS", true),
 		CORSAllowedOrigins:   getEnvAsList("CORS_ALLOWED_ORIGINS"),
 		TrustedProxies:       getEnvAsList("TRUSTED_PROXIES"),
 		AccessLogUserEnabled: getEnvAsBool("ACCESS_LOG_USER_ENABLED", false),
@@ -196,6 +218,7 @@ func LoadConfig() *Config {
 		cfg.BaseURL, cfg.DBType, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBUser, maskSecret(cfg.DBPassword))
 	log.Printf("[config] ServerPort=%s  GinMode=%s  LogLevel=%s",
 		cfg.ServerPort, cfg.GinMode, cfg.LogLevel)
+	log.Printf("[config] Stateful=%v  EnableMigrations=%v", cfg.Stateful, cfg.EnableMigrations)
 	log.Printf("[config] JWTSecret=%s  JWTExpireHours=%d  JWTCookieName=%s  JWTCookieSecure=%v",
 		maskSecret(cfg.JWTSecret), cfg.JWTExpireHours, displayOrEmpty(cfg.JWTCookieName), cfg.JWTCookieSecure)
 	log.Printf("[config] UserJWTSecret=%s  UserJWTCookieName=%s",

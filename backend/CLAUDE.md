@@ -65,6 +65,14 @@ swag init -g internal/swagger_doc.go --dir ./modules/openapi --instanceName open
 登记自己的建表（`AutoMigrate`）+ 初始 seed；启动时 `main.go` 调 `framework.RunSetup(framework.DB)` 按注册顺序执行。
 **实现必须幂等**：`AutoMigrate` 已存在则补列，seed 先查后插（重复启动不重复插）。无 `schema_migrations` 表、无版本号。
 sqlite 下索引名全局唯一，跨表别用重名索引。改 schema 直接改 model，下次启动 `AutoMigrate` 补列；开发期如需重置删库文件即可。
+**建表门控（HA / 外管 schema）**：建库（`ensureDatabase`）与建表/seed（`RunSetup`）都受 `framework.ShouldRunSetup()`
+（= `STATEFUL && ENABLE_MIGRATIONS`，二者默认 true）门控。HA 多实例只让一个 `STATEFUL=true`；schema 由 DBA/CI 外管时
+设 `ENABLE_MIGRATIONS=false`（库/表缺失启动 fail-fast）。`RunSetup` 外层有按库名的咨询锁（mysql `GET_LOCK`/pg `pg_advisory_lock`，
+sqlite 不加锁）防多实例并发 DDL。
+
+**运维探针**：`main.go` 用 `framework.RegisterProbes(r)` 在根路径挂 `/livez`（存活，恒 200）、`/readyz`（就绪，ping 主库，
+不通 503）、`/health`（`/readyz` 兼容别名）、`/debug/panic`、`/debug/status/:code`。`/debug/*` 默认不鉴权，生产需要可在
+`RegisterProbes` 内给该组加中间件。
 
 **访问日志**：全局中间件按 `scope` 记录；前台请求默认**不入库**（`ACCESS_LOG_USER_ENABLED=false`，前台量大建议走数仓）。
 异步批量写入 + 定时清理；`OnStop` 会 drain 写入器，配合 `main` 的优雅关闭不丢日志。

@@ -30,7 +30,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5667,
+      // 开发服务端口：从环境变量 VITE_DEV_PORT 读取，缺省 5667（my 用 5666，避免冲突）。
+      port: Number(env.VITE_DEV_PORT) || 5667,
       host: true,
       // 开发环境放开所有 Host 头校验（反代/自定义域名访问，如 vibe06.u4a.cn）
       allowedHosts: true,
