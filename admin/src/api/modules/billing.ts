@@ -59,7 +59,7 @@ export default {
   getRechargePresets: () => api.get<unknown, R<RechargePresets>>('admin/billing/recharge-presets'),
   saveRechargePresets: (presets_cents: number[]) => api.put<unknown, R<RechargePresets>>('admin/billing/recharge-presets', { presets_cents }),
   // 新模型订单（biz-orders，status ∈ unpaid/paid/expired）。列表与 mark-paid 均不含订单项。
-  billingOrders: (params: { page?: number, size?: number, userId?: number, status?: string }) =>
+  billingOrders: (params: { page?: number, size?: number, userId?: number, phone?: string, status?: string }) =>
     api.get<unknown, R<Page<BillingOrder>>>('admin/billing/biz-orders', { params }),
   billingMarkPaid: (id: number) => api.post<unknown, R<BillingOrder>>(`admin/billing/biz-orders/${id}/mark-paid`),
   // 订单详情（含 items，订单项明细）。后端返回扁平订单字段 + items。

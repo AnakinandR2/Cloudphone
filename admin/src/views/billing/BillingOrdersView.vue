@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/vue-table'
 import type { BillingOrder, BillingOrderItem } from '@/types/billing'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
 import DataTable from '@/components/DataTable.vue'
@@ -28,6 +29,7 @@ import { formatDateTime } from '@/utils/date'
 import { fmtCents } from '@/utils/money'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const data = ref<BillingOrder[]>([])
 const total = ref(0)
@@ -37,6 +39,7 @@ const pageSize = ref(20)
 
 const filters = reactive({
   userId: '' as string,
+  phone: '' as string,
   status: 'all',
 })
 
@@ -68,7 +71,7 @@ function fmtBps(bps: number): string {
 const columns = computed<ColumnDef<BillingOrder>[]>(() => [
   { id: 'expander', header: '', enableHiding: false, meta: { label: '' } },
   { accessorKey: 'id', id: 'id', header: t('billing.colOrderNo'), meta: { label: 'billing.colOrderNo' } },
-  { accessorKey: 'user_id', id: 'user_id', header: t('billing.colUserId'), meta: { label: 'billing.colUserId' } },
+  { accessorKey: 'user_id', id: 'user_id', header: t('billing.colUser'), meta: { label: 'billing.colUser' } },
   { accessorKey: 'biz_type', id: 'biz_type', header: t('billing.colBizType'), meta: { label: 'billing.colBizType' } },
   { accessorKey: 'pay_method', id: 'pay_method', header: t('billing.colPay'), meta: { label: 'billing.colPay' } },
   { accessorKey: 'total_cents', id: 'total_cents', header: t('billing.colAmount'), meta: { label: 'billing.colAmount' } },
@@ -82,11 +85,12 @@ const columns = computed<ColumnDef<BillingOrder>[]>(() => [
 async function load() {
   loading.value = true
   try {
-    const params: { page: number, size: number, userId?: number, status?: string } = {
+    const params: { page: number, size: number, userId?: number, phone?: string, status?: string } = {
       page: page.value,
       size: pageSize.value,
     }
     if (filters.userId.trim()) params.userId = Number(filters.userId.trim())
+    if (filters.phone.trim()) params.phone = filters.phone.trim()
     if (filters.status !== 'all') params.status = filters.status
     const res = await billingApi.billingOrders(params)
     data.value = res.data.list
@@ -159,6 +163,12 @@ onMounted(load)
             :placeholder="t('billing.filterUserId')"
             @change="onFilter"
           />
+          <Input
+            v-model="filters.phone"
+            class="h-9 w-36"
+            :placeholder="t('billing.filterPhone')"
+            @change="onFilter"
+          />
           <Select v-model="filters.status" @update:model-value="onFilter">
             <SelectTrigger class="h-9 w-36">
               <SelectValue :placeholder="t('billing.allStatus')" />
@@ -187,7 +197,16 @@ onMounted(load)
           <span class="font-mono text-xs">#{{ row.id }}</span>
         </template>
         <template #cell-user_id="{ row }">
-          <span class="tabular-nums text-muted-foreground">{{ row.user_id }}</span>
+          <div class="flex flex-col">
+            <span class="font-medium tabular-nums">{{ row.phone || '-' }}</span>
+            <Button
+              variant="link"
+              class="h-auto justify-start p-0 font-mono text-xs"
+              @click="router.push({ path: '/ops/users', query: { q: String(row.user_id) } })"
+            >
+              #{{ row.user_id }}
+            </Button>
+          </div>
         </template>
         <template #cell-biz_type="{ row }">
           <Badge variant="outline" class="text-xs">

@@ -4,13 +4,24 @@ function ok<T>(data: T, message = '成功') {
   return { code: 0, message, data }
 }
 
+// user_id → 手机号映射（mock 用，订单行/详情都带 phone）。
+const userPhones: Record<number, string> = {
+  101: '13800000101',
+  102: '13800000102',
+  103: '13800000103',
+  104: '13800000104',
+}
+function phoneOf(uid: number): string {
+  return userPhones[uid] || ''
+}
+
 // ---- Orders（购买与费用重构新形状：biz_type + status unpaid/paid/expired）----
 const orders: any[] = [
-  { id: 9001, user_id: 101, biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, fee_cents: 0, fee_percent_bps: 0, fee_fixed_cents: 0, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
-  { id: 9002, user_id: 102, biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, fee_cents: 300, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
-  { id: 9003, user_id: 101, biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, fee_cents: 316, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
-  { id: 9004, user_id: 103, biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, fee_cents: 352, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
-  { id: 9005, user_id: 104, biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, fee_cents: 160, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
+  { id: 9001, user_id: 101, phone: phoneOf(101), biz_type: 'seat_new', status: 'paid', pay_method: 'balance', total_cents: 226800, fee_cents: 0, fee_percent_bps: 0, fee_fixed_cents: 0, paid_at: '2026-06-01T10:00:00Z', created_at: '2026-06-01T09:55:00Z', expired_at: null },
+  { id: 9002, user_id: 102, phone: phoneOf(102), biz_type: 'recharge', status: 'unpaid', pay_method: 'wechat', total_cents: 10000, fee_cents: 300, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-01T11:00:00Z', expired_at: null },
+  { id: 9003, user_id: 101, phone: phoneOf(101), biz_type: 'runtime_pack', status: 'paid', pay_method: 'alipay', total_cents: 10800, fee_cents: 316, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: '2026-06-02T14:30:00Z', created_at: '2026-06-02T14:20:00Z', expired_at: null },
+  { id: 9004, user_id: 103, phone: phoneOf(103), biz_type: 'boot_slot_new', status: 'unpaid', pay_method: 'alipay', total_cents: 12600, fee_cents: 352, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-03T08:00:00Z', expired_at: null },
+  { id: 9005, user_id: 104, phone: phoneOf(104), biz_type: 'seat_renew', status: 'expired', pay_method: 'wechat', total_cents: 3000, fee_cents: 160, fee_percent_bps: 200, fee_fixed_cents: 100, paid_at: null, created_at: '2026-06-04T16:00:00Z', expired_at: '2026-06-04T17:00:00Z' },
 ]
 
 // ---- Biz Order Items（订单项明细，按订单 id 索引；GET /biz-orders/:id 返回）----
@@ -18,12 +29,17 @@ const orderItems: Record<number, any[]> = {
   9001: [
     { target_kind: 'seat', quantity: 10, duration_value: 12, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 9000, duration_discount_bps: 7000, amount_cents: 226800 },
   ],
-  9002: [], // recharge：无订单项
+  9002: [
+    // 余额充值样例（验证 kind_balance 标签）
+    { target_kind: 'balance', quantity: 1, duration_value: 0, duration_unit: '', unit_price_cents: 10000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 10000 },
+  ],
   9003: [
     { target_kind: 'runtime_minute', quantity: 600, duration_value: 0, duration_unit: '', unit_price_cents: 20, qty_discount_bps: 9000, duration_discount_bps: 10000, amount_cents: 10800 },
   ],
   9004: [
     { target_kind: 'boot_slot', quantity: 3, duration_value: 30, duration_unit: 'day', unit_price_cents: 2000, qty_discount_bps: 10000, duration_discount_bps: 9000, amount_cents: 12600 },
+    // 素材库新购样例（验证 kind_lib_new 标签）
+    { target_kind: 'lib_new', quantity: 1, duration_value: 1, duration_unit: 'month', unit_price_cents: 5000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 5000 },
   ],
   9005: [
     { target_kind: 'seat', quantity: 1, duration_value: 1, duration_unit: 'month', unit_price_cents: 3000, qty_discount_bps: 10000, duration_discount_bps: 10000, amount_cents: 3000 },
@@ -124,6 +140,11 @@ export default defineFakeRoute([
     response: ({ query }) => {
       let list = [...orders]
       if (query.userId) list = list.filter(o => o.user_id === Number(query.userId))
+      if (query.phone) {
+        // 按手机号精确过滤：先反查 user_id，找不到返回空。
+        const uid = Number(Object.keys(userPhones).find(k => userPhones[Number(k)] === String(query.phone)))
+        list = uid ? list.filter(o => o.user_id === uid) : []
+      }
       if (query.status) list = list.filter(o => o.status === query.status)
       const page = Number(query.page) || 1
       const size = Number(query.size) || 20

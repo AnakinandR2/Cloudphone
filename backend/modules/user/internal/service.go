@@ -1,11 +1,13 @@
 package user
 
 import (
+	"errors"
 	"regexp"
 
 	"manager-backend/framework/apperr"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // minPasswordLen 注册密码最小长度。
@@ -102,6 +104,27 @@ func (s *serviceImpl) AdminList(page, size int, phone string, active *bool) ([]U
 		list[i] = *dbToUser(&rows[i])
 	}
 	return list, total, nil
+}
+
+// IDByPhone 精确按手机号查用户 ID（跨模块门面用，如 billing 按手机号过滤订单）。
+// phone 为空或查不到返回 (0, false, nil)；其它库错误原样返回。
+func (s *serviceImpl) IDByPhone(phone string) (uint, bool, error) {
+	if phone == "" {
+		return 0, false, nil
+	}
+	c, err := s.repo.findByPhone(phone)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return c.ID, true, nil
+}
+
+// PhonesByIDs 批量按用户 ID 取手机号（跨模块门面用，如 billing 订单列表回填手机号）。
+func (s *serviceImpl) PhonesByIDs(ids []uint) (map[uint]string, error) {
+	return s.repo.phonesByIDs(ids)
 }
 
 // SetActive 启用/禁用前台用户；禁用时递增令牌版本，令其已签发令牌立即失效（强制下线）。

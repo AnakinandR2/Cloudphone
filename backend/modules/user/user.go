@@ -17,3 +17,15 @@ import (
 func AuthMiddleware() gin.HandlerFunc {
 	return userint.UserAuth()
 }
+
+// IDByPhone 精确按手机号查前台用户 ID。phone 为空或查不到返回 (0, false, nil)。
+// 供其他模块（如 billing 按手机号过滤订单）使用，避免直接查 users 表。
+func IDByPhone(phone string) (uint, bool, error) {
+	return userint.Service.IDByPhone(phone)
+}
+
+// PhonesByIDs 批量按前台用户 ID 取手机号，组装成 map[id]phone（缺失的 ID 不在 map 中）。
+// 供其他模块（如 billing 订单列表回填手机号）使用。空 ids 返回空 map。
+func PhonesByIDs(ids []uint) (map[uint]string, error) {
+	return userint.Service.PhonesByIDs(ids)
+}

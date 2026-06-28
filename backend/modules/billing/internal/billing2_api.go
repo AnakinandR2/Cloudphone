@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"manager-backend/framework"
+	"manager-backend/modules/user"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -500,17 +501,53 @@ func AdminSaveNotices(c *gin.Context) {
 	framework.OKWithData(c, cfg.Kinds)
 }
 
-// AdminListBizOrders GET /admin/billing/biz-orders?userId=&status=&page=&size=
+// AdminListBizOrders GET /admin/billing/biz-orders?userId=&phone=&status=&page=&size=
+// 支持按手机号精确过滤（经 user 门面解析为 user_id，覆盖 userId 参数）；列表每行回填下单用户手机号。
 func AdminListBizOrders(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
 	uid, _ := strconv.Atoi(c.DefaultQuery("userId", "0"))
+
+	// 按手机号精确过滤：解析为 user_id 覆盖 userId；查不到直接返回空页。
+	if phone := c.Query("phone"); phone != "" {
+		id, ok, err := user.IDByPhone(phone)
+		if err != nil {
+			framework.FailErr(c, err)
+			return
+		}
+		if !ok {
+			framework.OKWithPage(c, []any{}, 0)
+			return
+		}
+		uid = int(id)
+	}
+
 	list, total, err := BizOrderService.AdminListOrders(page, size, uid, c.Query("status"))
 	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
-	framework.OKWithPage(c, list, total)
+
+	// 收集去重 user_id，批量回填手机号。
+	seen := make(map[uint]bool, len(list))
+	ids := make([]uint, 0, len(list))
+	for i := range list {
+		if !seen[list[i].UserID] {
+			seen[list[i].UserID] = true
+			ids = append(ids, list[i].UserID)
+		}
+	}
+	phones, err := user.PhonesByIDs(ids)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	rows := make([]AdminBizOrderRow, len(list))
+	for i := range list {
+		rows[i] = AdminBizOrderRow{BizOrder: list[i], Phone: phones[list[i].UserID]}
+	}
+
+	framework.OKWithPage(c, rows, total)
 }
 
 // AdminMarkBizOrderPaid POST /admin/billing/biz-orders/:id/mark-paid

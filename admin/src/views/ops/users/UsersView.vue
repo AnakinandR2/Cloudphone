@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/vue-table'
 import type { User } from '@/types/user'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 import { toast } from 'vue-sonner'
 import userApi from '@/api/modules/user'
@@ -22,6 +23,7 @@ import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
 
 const { t } = useI18n()
+const router = useRouter()
 const data = ref<User[]>([])
 const filters = reactive({ q: '' })
 useQuerySync(filters, { q: '' })
@@ -95,6 +97,14 @@ onMounted(load)
           <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
         </template>
         <template #cell-actions="{ row }">
+          <Button
+            v-auth="'billing:view'"
+            variant="ghost"
+            size="sm"
+            @click="router.push({ path: '/billing/accounts', query: { userId: String(row.id) } })"
+          >
+            {{ t('users.resourceAction') }}
+          </Button>
           <Popconfirm
             :title="row.is_active ? t('users.disableConfirm', { name: row.phone }) : t('users.enableConfirm', { name: row.phone })"
             @confirm="toggleStatus(row)"

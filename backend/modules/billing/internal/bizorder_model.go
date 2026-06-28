@@ -82,6 +82,12 @@ type BizOrderWithItems struct {
 	Items []BizOrderItem `json:"items"`
 }
 
+// AdminBizOrderRow 后台订单列表行：订单本体 + 下单用户手机号（经 user 门面回填，缺失为空串）。
+type AdminBizOrderRow struct {
+	BizOrder
+	Phone string `json:"phone"`
+}
+
 // BizOrderCreate 下单请求（契约 §1.5）。
 type BizOrderCreate struct {
 	BizType       string `json:"biz_type" binding:"required"`

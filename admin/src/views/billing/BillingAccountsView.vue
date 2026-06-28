@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
 import type { AccountView, LedgerEntry } from '@/types/billing'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 import billingApi from '@/api/modules/billing'
+import userApi from '@/api/modules/user'
 import DataTable from '@/components/DataTable.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,6 +37,7 @@ import { formatDateTime } from '@/utils/date'
 import { fmtCents } from '@/utils/money'
 
 const { t } = useI18n()
+const route = useRoute()
 
 // 资源科目：调整入口用 seat/boot_slot/runtime_minute（对齐 adjust-resource V2 subject）。
 // 容量展示读后端新模型字段 capacities_v2.{seat,boot_slot,runtime_minute}（与科目同名）。
@@ -111,10 +114,34 @@ async function fetchAccount(uid: number) {
 }
 
 async function queryAccount() {
-  const uid = Number(userIdInput.value.trim())
-  if (!uid || uid <= 0) {
+  const s = userIdInput.value.trim()
+  if (!s) {
     toast.error(t('billing.errUserIdRequired'))
     return
+  }
+  let uid: number
+  if (/^1\d{10}$/.test(s)) {
+    // 11 位手机号：查用户列表精确匹配取 id
+    try {
+      const res = await userApi.list({ page: 1, size: 5, phone: s })
+      const hit = res.data.list.find(u => u.phone === s)
+      if (!hit) {
+        toast.error(t('billing.errUserNotFound'))
+        return
+      }
+      uid = hit.id
+    }
+    catch {
+      toast.error(t('billing.loadFail'))
+      return
+    }
+  }
+  else {
+    uid = Number(s)
+    if (!uid || uid <= 0) {
+      toast.error(t('billing.errUserIdRequired'))
+      return
+    }
   }
   currentUserId.value = uid
   accountView.value = null
@@ -124,6 +151,16 @@ async function queryAccount() {
 function reloadAccount() {
   if (currentUserId.value) fetchAccount(currentUserId.value)
 }
+
+onMounted(() => {
+  // 从用户管理跳转携带 userId：自动填入并查询。
+  const qid = route.query.userId
+  const uid = Array.isArray(qid) ? qid[0] : qid
+  if (uid) {
+    userIdInput.value = String(uid)
+    queryAccount()
+  }
+})
 
 function openBalanceDialog() {
   balanceForm.yuan = ''
@@ -220,9 +257,8 @@ async function submitResource() {
         <div class="flex items-center gap-2">
           <Input
             v-model="userIdInput"
-            type="number"
-            class="h-9 w-40"
-            :placeholder="t('billing.inputUserId')"
+            class="h-9 w-48"
+            :placeholder="t('billing.inputUserIdOrPhone')"
             @keyup.enter="queryAccount"
           />
           <Button size="sm" :disabled="loading" @click="queryAccount">

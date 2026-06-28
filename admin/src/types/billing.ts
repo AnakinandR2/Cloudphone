@@ -92,6 +92,8 @@ export interface RechargePresets { presets_cents: number[] }
 export interface BillingOrder {
   id: number
   user_id: number
+  /** 下单用户手机号（后端订单行新增）；空串表示无 */
+  phone: string
   biz_type: string
   status: string
   total_cents: number

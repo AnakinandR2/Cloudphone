@@ -18,6 +18,8 @@ type repository interface {
 	// 管理侧
 	list(offset, limit int, phone string, active *bool) ([]UserDB, int64, error)
 	setActive(id int, active bool) error
+	// 跨模块门面：按 ID 批量取手机号
+	phonesByIDs(ids []uint) (map[uint]string, error)
 }
 
 type gormRepository struct{ db *gorm.DB }
@@ -106,4 +108,21 @@ func (r *gormRepository) list(offset, limit int, phone string, active *bool) ([]
 
 func (r *gormRepository) setActive(id int, active bool) error {
 	return r.db.Model(&UserDB{}).Where("id = ?", id).Update("is_active", active).Error
+}
+
+// phonesByIDs 批量按用户 ID 取手机号，组装成 map[id]phone。
+// 空 ids 直接返回空 map（不查库），避免无谓 SQL。
+func (r *gormRepository) phonesByIDs(ids []uint) (map[uint]string, error) {
+	out := make(map[uint]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []UserDB
+	if err := r.db.Model(&UserDB{}).Select("id", "phone").Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		out[rows[i].ID] = rows[i].Phone
+	}
+	return out, nil
 }

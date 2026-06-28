@@ -798,6 +798,13 @@ func TestAdminBizOrders_ListAndDetailAndMarkPaid(t *testing.T) {
 	code, env := do(t, r, http.MethodGet, "/admin/billing/biz-orders?userId="+itoa(uid)+"&page=1&size=10", nil)
 	assert.Equal(t, http.StatusOK, code)
 	assert.Equal(t, float64(0), env["code"])
+	// 列表每行须含 phone 字段（无对应前台用户时为空串）。
+	page := env["data"].(map[string]any)
+	list := page["list"].([]any)
+	require.GreaterOrEqual(t, len(list), 1)
+	row := list[0].(map[string]any)
+	_, hasPhone := row["phone"]
+	assert.True(t, hasPhone, "订单列表行应含 phone 字段")
 
 	// 详情。
 	code, env = do(t, r, http.MethodGet, "/admin/billing/biz-orders/"+itoa(oid), nil)
@@ -808,6 +815,46 @@ func TestAdminBizOrders_ListAndDetailAndMarkPaid(t *testing.T) {
 	// mark-paid（已 paid，幂等/报错都接受非 panic；只验证 handler 不 500-空）。
 	code, _ = do(t, r, http.MethodPost, "/admin/billing/biz-orders/"+itoa(oid)+"/mark-paid", nil)
 	assert.Contains(t, []int{http.StatusOK, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusBadRequest}, code)
+}
+
+// 按手机号精确过滤：命中（回填正确 phone）与未命中（空页）。
+func TestAdminBizOrders_FilterByPhone(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items", "billing_license_units")
+		framework.CleanTable("users")
+	})
+
+	// 造一个前台用户（直接写 users 表，避开 user internal）：id 与手机号确定。
+	const phone = "13955550001"
+	uid := 970160
+	require.NoError(t, framework.DB.Exec(
+		"INSERT INTO users (id, phone, hashed_password, is_active, token_version) VALUES (?, ?, ?, ?, ?)",
+		uid, phone, "x", true, 0).Error)
+
+	// 为该用户下一笔订单。
+	_, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizSeatNew, Quantity: 1, DurationValue: 1, PayMethod: PayWechat,
+	})
+	require.NoError(t, err)
+
+	r := billingRouter(injectUser(1))
+
+	// 命中：?phone= 精确手机号 → 列表非空且行 phone 正确回填。
+	code, env := do(t, r, http.MethodGet, "/admin/billing/biz-orders?phone="+phone+"&page=1&size=10", nil)
+	require.Equal(t, http.StatusOK, code)
+	page := env["data"].(map[string]any)
+	assert.Equal(t, float64(1), page["total"])
+	list := page["list"].([]any)
+	require.Len(t, list, 1)
+	row := list[0].(map[string]any)
+	assert.Equal(t, float64(uid), row["user_id"])
+	assert.Equal(t, phone, row["phone"])
+
+	// 未命中：手机号不存在 → 空页。
+	code, env = do(t, r, http.MethodGet, "/admin/billing/biz-orders?phone=13900000000&page=1&size=10", nil)
+	require.Equal(t, http.StatusOK, code)
+	page = env["data"].(map[string]any)
+	assert.Equal(t, float64(0), page["total"])
 }
 
 func TestAdminMarkBizOrderPaid_BadID(t *testing.T) {
