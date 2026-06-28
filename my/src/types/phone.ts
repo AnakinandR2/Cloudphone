@@ -125,6 +125,13 @@ export interface RuntimeInfo {
   uptime_seconds: number // 服务端算 now-powerOnAt
 }
 
+/** 从素材库推送到一台云手机的结果（后端逐台收集，允许部分成功） */
+export interface PushResult {
+  phone_id: number
+  ok: boolean
+  error?: string
+}
+
 /** 自动化脚本任务状态/报告合并视图（中台 §7.6.2 + §7.6.8） */
 export interface ScriptTaskDetail {
   task_id: number

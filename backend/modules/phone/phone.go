@@ -80,9 +80,13 @@ func InstalledApps(userID, id int) ([]midplat.InstalledApp, error) {
 	return phoneinternal.PhoneService.InstalledApps(userID, id)
 }
 
-// InstallApp 安装应用（按中台 appId）。
-func InstallApp(userID, id int, appIDs []int64) error {
-	return phoneinternal.PhoneService.InstallApp(userID, id, appIDs)
+// AppRef 是按 URL 安装的单个应用引用（source:'user'|'market', id）。
+type AppRef = phoneinternal.AppRefInput
+
+// InstallByURL 按 URL 安装应用到一台或多台云手机（自有 S3，§7.3）。
+// 经 app 门面把应用引用解析为下载 URL 载荷后一次性下发，返回中台任务列表。
+func InstallByURL(userID int, phoneIDs []int, refs []AppRef) ([]phoneinternal.AppInstallTask, error) {
+	return phoneinternal.PhoneService.InstallByURL(userID, phoneIDs, refs)
 }
 
 // UninstallApp 卸载应用（按 appId 或包名）。

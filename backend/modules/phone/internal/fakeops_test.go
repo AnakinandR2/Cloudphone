@@ -48,7 +48,9 @@ func (f *fakeOps) FileDelete(_ context.Context, _, _, _ string) error { return n
 func (f *fakeOps) InstalledApps(_ context.Context, _ string) ([]midplat.InstalledApp, error) {
 	return nil, nil
 }
-func (f *fakeOps) InstallApp(_ context.Context, _ string, _ []int64) error { return nil }
+func (f *fakeOps) InstallAppByURL(_ context.Context, _ midplat.InstallByURLRequest) (*midplat.InstallAppResponse, error) {
+	return &midplat.InstallAppResponse{}, nil
+}
 func (f *fakeOps) UninstallApp(_ context.Context, _ string, _ []int64, _ []string) error {
 	return nil
 }

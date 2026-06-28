@@ -3,6 +3,7 @@ package phone
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -53,7 +54,8 @@ type midplatPort interface {
 	FileDelete(ctx context.Context, vmID, cpID, path string) error
 
 	InstalledApps(ctx context.Context, cpID string) ([]midplat.InstalledApp, error)
-	InstallApp(ctx context.Context, cpID string, appIDs []int64) error
+	// InstallAppByURL 按 URL 批量下发安装到多台云手机（§7.3 自有 S3 安装）。
+	InstallAppByURL(ctx context.Context, req midplat.InstallByURLRequest) (*midplat.InstallAppResponse, error)
 	UninstallApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error
 	StartApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error
 	StopApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error
@@ -297,7 +299,9 @@ func (a *sdkAdapter) FileUpload(ctx context.Context, vmID, cpID, folderPath stri
 	// 去掉 /sdcard 前缀转成相对：/sdcard/Download -> Download；/sdcard -> ""（空则中台落默认 /sdcard/Download）。
 	rel := strings.TrimPrefix(folderPath, "/sdcard")
 	rel = strings.TrimPrefix(rel, "/")
-	return a.c.BatchUploadPhoneFiles(ctx, vmID, cpID, rel, true, files)
+	err := a.c.BatchUploadPhoneFiles(ctx, vmID, cpID, rel, true, files)
+	log.Printf("[push-lib] BatchUploadPhoneFiles vmID=%s cpID=%s rel=%q files=%d err=%v", vmID, cpID, rel, len(files), err)
+	return err
 }
 
 func (a *sdkAdapter) FileDelete(ctx context.Context, vmID, cpID, path string) error {
@@ -320,9 +324,8 @@ func (a *sdkAdapter) InstalledApps(ctx context.Context, cpID string) ([]midplat.
 	return nil, nil
 }
 
-func (a *sdkAdapter) InstallApp(ctx context.Context, cpID string, appIDs []int64) error {
-	_, err := a.c.InstallApp(ctx, midplat.InstallAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs})
-	return err
+func (a *sdkAdapter) InstallAppByURL(ctx context.Context, req midplat.InstallByURLRequest) (*midplat.InstallAppResponse, error) {
+	return a.c.InstallAppByURL(ctx, req)
 }
 
 func (a *sdkAdapter) UninstallApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error {

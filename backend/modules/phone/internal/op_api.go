@@ -295,27 +295,34 @@ type appOpBody struct {
 	PackageNames []string `json:"packageNames"`
 }
 
-// InstallAppCloudPhone 安装应用
-// @Summary 安装应用
+// InstallByURLCloudPhone 按 URL 安装应用到一台或多台云手机（§7.3 自有 S3 安装）。
+// @Summary 按 URL 安装应用
 // @Tags 我的云手机
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "ID"
-// @Param body body appOpBody true "{appIds}"
-// @Router /phone/{id}/apps/install [post]
-func InstallAppCloudPhone(c *gin.Context) {
-	uid, id, ok := opCloudPhone(c)
+// @Param body body object true "{phone_ids: number[], apps: [{source: 'user'|'market', id: number}]}"
+// @Router /phone/apps/install-by-url [post]
+func InstallByURLCloudPhone(c *gin.Context) {
+	uid, ok := currentUserID(c)
 	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
 		return
 	}
-	var req appOpBody
-	_ = c.ShouldBindJSON(&req)
-	if err := PhoneService.InstallApp(uid, id, req.AppIDs); err != nil {
+	var req struct {
+		PhoneIDs []int         `json:"phone_ids"`
+		Apps     []AppRefInput `json:"apps"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	tasks, err := PhoneService.InstallByURL(uid, dedupeInts(req.PhoneIDs), req.Apps)
+	if err != nil {
 		framework.FailErr(c, err)
 		return
 	}
-	framework.OK(c)
+	framework.OKWithData(c, gin.H{"task_info_list": tasks})
 }
 
 // UninstallAppCloudPhone 卸载应用
@@ -714,6 +721,74 @@ func FileUploadCloudPhone(c *gin.Context) {
 		return
 	}
 	framework.OK(c)
+}
+
+// dedupeInts 去重 int 切片（保持首次出现顺序）。
+func dedupeInts(in []int) []int {
+	seen := make(map[int]struct{}, len(in))
+	out := make([]int, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// dedupeUints 去重 uint 切片（保持首次出现顺序）。
+func dedupeUints(in []uint) []uint {
+	seen := make(map[uint]struct{}, len(in))
+	out := make([]uint, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// PushFromLibrary 从素材库选择若干文件推送到一台或多台云手机的 /sdcard/Download（远控/群控复用）。
+// @Summary 从素材库推送文件到云机
+// @Tags 我的云手机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "{phone_ids: number[], file_ids: number[]}"
+// @Router /phone/files/push-from-library [post]
+func PushFromLibrary(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		framework.Fail(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	var req struct {
+		PhoneIDs []int  `json:"phone_ids"`
+		FileIDs  []uint `json:"file_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		framework.Fail(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	phoneIDs := dedupeInts(req.PhoneIDs)
+	fileIDs := dedupeUints(req.FileIDs)
+	if len(fileIDs) < 1 || len(fileIDs) > 10 {
+		framework.Fail(c, http.StatusBadRequest, "请选择 1-10 个文件")
+		return
+	}
+	if len(phoneIDs) < 1 {
+		framework.Fail(c, http.StatusBadRequest, "请选择至少一台云手机")
+		return
+	}
+	results, err := PhoneService.PushFromLibrary(uid, phoneIDs, fileIDs)
+	if err != nil {
+		framework.FailErr(c, err)
+		return
+	}
+	framework.OKWithData(c, gin.H{"results": results})
 }
 
 // ListPhoneTags 列出当前用户已有的云手机标签（去重，供选择）

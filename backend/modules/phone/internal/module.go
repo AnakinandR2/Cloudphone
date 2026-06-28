@@ -63,23 +63,24 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 		g.DELETE("/delete/:id", DeleteCloudPhone)
 
 		// 操作类（透传云手机中台，需本人拥有且已开通 cpId）
-		g.POST("/:id/power", PowerCloudPhone)                 // 开机/关机
-		g.POST("/:id/restart", RestartCloudPhone)             // 重启
-		g.POST("/:id/reset", ResetCloudPhone)                 // 重置
-		g.POST("/:id/new-device", NewDeviceCloudPhone)        // 一键新机
-		g.POST("/:id/destroy", DestroyCloudPhone)             // 销毁（并移除本地档案）
-		g.POST("/:id/webrtc-auth", WebRTCAuthCloudPhone)      // 远程控制：申请 WebRTC 凭证
-		g.GET("/:id/webrtc-state", WebRTCStateCloudPhone)     // 远程控制：查询串流状态
-		g.POST("/:id/screenshot", ScreenshotCloudPhone)       // 截屏
-		g.POST("/:id/volume", VolumeCloudPhone)               // 音量
-		g.POST("/:id/rotate", RotateCloudPhone)               // 屏幕旋转
-		g.POST("/:id/shake", ShakeCloudPhone)                 // 摇一摇
-		g.POST("/:id/files/list", FileListCloudPhone)         // 文件管理：列目录
-		g.POST("/:id/files/download", FileDownloadCloudPhone) // 文件管理：下载
-		g.POST("/:id/files/delete", FileDeleteCloudPhone)     // 文件管理：删除
-		g.POST("/:id/files/upload", FileUploadCloudPhone)     // 文件管理：上传
-		g.GET("/:id/apps", InstalledAppsCloudPhone)           // 已装应用
-		g.POST("/:id/apps/install", InstallAppCloudPhone)
+		g.POST("/:id/power", PowerCloudPhone)                  // 开机/关机
+		g.POST("/:id/restart", RestartCloudPhone)              // 重启
+		g.POST("/:id/reset", ResetCloudPhone)                  // 重置
+		g.POST("/:id/new-device", NewDeviceCloudPhone)         // 一键新机
+		g.POST("/:id/destroy", DestroyCloudPhone)              // 销毁（并移除本地档案）
+		g.POST("/:id/webrtc-auth", WebRTCAuthCloudPhone)       // 远程控制：申请 WebRTC 凭证
+		g.GET("/:id/webrtc-state", WebRTCStateCloudPhone)      // 远程控制：查询串流状态
+		g.POST("/:id/screenshot", ScreenshotCloudPhone)        // 截屏
+		g.POST("/:id/volume", VolumeCloudPhone)                // 音量
+		g.POST("/:id/rotate", RotateCloudPhone)                // 屏幕旋转
+		g.POST("/:id/shake", ShakeCloudPhone)                  // 摇一摇
+		g.POST("/:id/files/list", FileListCloudPhone)          // 文件管理：列目录
+		g.POST("/:id/files/download", FileDownloadCloudPhone)  // 文件管理：下载
+		g.POST("/:id/files/delete", FileDeleteCloudPhone)      // 文件管理：删除
+		g.POST("/:id/files/upload", FileUploadCloudPhone)      // 文件管理：上传
+		g.POST("/files/push-from-library", PushFromLibrary)    // 文件管理：从素材库推送（远控/群控，target ids 来自 body）
+		g.GET("/:id/apps", InstalledAppsCloudPhone)            // 已装应用
+		g.POST("/apps/install-by-url", InstallByURLCloudPhone) // 按 URL 安装（自有 S3，多台批量，§7.3）
 		g.POST("/:id/apps/uninstall", UninstallAppCloudPhone)
 		g.POST("/:id/apps/start", StartAppCloudPhone)
 		g.POST("/:id/apps/stop", StopAppCloudPhone)

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import phoneApi from '@/api/modules/phone'
 import { Button } from '@/components/ui/button'
+import LibraryPickerDialog from './LibraryPickerDialog.vue'
 
 const props = defineProps<{ phoneId: number, phones?: { id: number, name: string }[] }>()
 
@@ -83,9 +84,79 @@ function pickUpload() {
   fileInput.value?.click()
 }
 
-// 素材中心：功能开发中，仅提示。
-function openMaterial() {
-  toast.info(t('phone.rc.materialComingSoon'))
+// ---- 从素材库选择并推送 ----
+const pickerOpen = ref(false)
+function pickFromLibrary() {
+  pickerOpen.value = true
+}
+
+// 推送阶段失败可能整请求前置失败（锁定/文件失效）：从错误消息辨识锁定态以给精准提示。
+function isLockedErr(err: unknown): boolean {
+  const msg = err && typeof err === 'object'
+    ? ((err as { message?: string, response?: { data?: { message?: string } } }).response?.data?.message
+        ?? (err as { message?: string }).message
+        ?? '')
+    : ''
+  return /超限|超额|locked/i.test(msg)
+}
+
+// 选择器确认：复用现有 scope 决定目标手机，推送到 /sdcard/Download。
+async function pushFromLibrary(fileIds: number[]) {
+  if (!fileIds.length || uploading.value)
+    return
+  const tgts = scopeTargets.value
+  const phoneIds = tgts.map(t => t.id)
+  uploading.value = true
+  // 多台（群控「所有」）：用返回 results 填充 jobs（无逐台实时 %，最终态满格/红）。
+  if (tgts.length > 1) {
+    jobs.value = tgts.map(tg => ({ id: tg.id, name: tg.name, progress: 0, status: 'uploading' as const }))
+    try {
+      const res = await phoneApi.pushFromLibrary(phoneIds, fileIds)
+      const results = res.data.results ?? []
+      let okCount = 0
+      for (const job of jobs.value) {
+        const r = results.find(x => x.phone_id === job.id)
+        if (r?.ok) {
+          job.progress = 100
+          job.status = 'done'
+          okCount++
+        }
+        else {
+          job.status = 'error'
+        }
+      }
+      if (okCount === tgts.length)
+        toast.success(t('phone.rc.pushOk'))
+      else if (okCount > 0)
+        toast.warning(t('phone.rc.pushPartial', { ok: okCount, total: tgts.length }))
+      else
+        toast.error(t('phone.rc.pushFail'))
+    }
+    catch (err) {
+      // 整请求前置失败（锁定/文件失效/非属主）：全部标红。
+      jobs.value.forEach((job) => { job.status = 'error' })
+      toast.error(isLockedErr(err) ? t('phone.rc.pushLocked') : t('phone.rc.pushFail'))
+    }
+    finally {
+      uploading.value = false
+    }
+    return
+  }
+  // 单台（主控）
+  try {
+    const res = await phoneApi.pushFromLibrary(phoneIds, fileIds)
+    const ok = res.data.results?.[0]?.ok ?? false
+    if (ok)
+      toast.success(t('phone.rc.pushOk'), { description: t('phone.rc.fileUploadHint') })
+    else
+      toast.error(t('phone.rc.pushFail'))
+  }
+  catch (err) {
+    toast.error(isLockedErr(err) ? t('phone.rc.pushLocked') : t('phone.rc.pushFail'))
+  }
+  finally {
+    uploading.value = false
+  }
 }
 
 function onPicked(e: Event) {
@@ -159,18 +230,26 @@ function onPicked(e: Event) {
         </div>
       </div>
 
-      <!-- 素材（开发中） -->
+      <!-- 素材库 -->
       <div class="flex flex-col gap-1.5">
         <div class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.materialTitle') }}</div>
         <Button
           variant="outline"
-          class="w-full gap-2 opacity-60"
-          @click="openMaterial"
+          class="w-full gap-2"
+          :disabled="uploading"
+          @click="pickFromLibrary"
         >
           <Images class="size-4" />
-          {{ t('phone.rc.materialTitle') }}
+          {{ t('phone.rc.pickFromLibrary') }}
         </Button>
       </div>
     </div>
+
+    <!-- 素材库选择弹层 -->
+    <LibraryPickerDialog
+      v-model:open="pickerOpen"
+      :target-count="scopeTargets.length"
+      @confirm="pushFromLibrary"
+    />
   </div>
 </template>

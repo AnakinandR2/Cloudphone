@@ -6,6 +6,7 @@ import (
 
 	"manager-backend/framework"
 	"manager-backend/modules/billing"
+	"manager-backend/modules/library"
 )
 
 func TestMain(m *testing.M) {
@@ -17,6 +18,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	if err := billing.InitForTest(framework.DB); err != nil {
+		panic(err)
+	}
+	// PushFromLibrary 经 library 公开门面消费私有素材：测试需装配 library（建表 + 服务）。
+	if err := library.InitForTest(framework.DB); err != nil {
 		panic(err)
 	}
 

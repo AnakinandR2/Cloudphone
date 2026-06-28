@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"manager-backend/framework"
+	"manager-backend/modules/app"
 	"manager-backend/modules/billing"
 
 	"github.com/gin-gonic/gin"
@@ -56,7 +57,14 @@ func TestOpHandlersHappyPath(t *testing.T) {
 	assert.Equal(t, http.StatusOK, run(RotateCloudPhone, http.MethodPost, map[string]any{"orientation": "landscape"}).Code)
 	assert.Equal(t, http.StatusOK, run(ShakeCloudPhone, http.MethodPost, nil).Code)
 	assert.Equal(t, http.StatusOK, run(InstalledAppsCloudPhone, http.MethodGet, nil).Code)
-	assert.Equal(t, http.StatusOK, run(InstallAppCloudPhone, http.MethodPost, map[string]any{"appIds": []int64{7}}).Code)
+	// 按 URL 安装：集合路由（phone_ids 在 body，不走 :id）。stub app 门面解析，断言 handler 透传成功。
+	withStubInstallSpecs(t, func(_ int, _ []app.AppRef) ([]app.InstallSpec, error) {
+		return []app.InstallSpec{{AppName: "Demo", DownloadURL: "https://x", MD5: "m", PackageName: "com.demo", Version: "1"}}, nil
+	})
+	assert.Equal(t, http.StatusOK, run(InstallByURLCloudPhone, http.MethodPost, map[string]any{
+		"phone_ids": []int{int(p.ID)},
+		"apps":      []map[string]any{{"source": "user", "id": 1}},
+	}).Code)
 	assert.Equal(t, http.StatusOK, run(UninstallAppCloudPhone, http.MethodPost, map[string]any{"appIds": []int64{7}}).Code)
 	assert.Equal(t, http.StatusOK, run(StartAppCloudPhone, http.MethodPost, map[string]any{"packageNames": []string{"com.demo"}}).Code)
 	assert.Equal(t, http.StatusOK, run(StopAppCloudPhone, http.MethodPost, map[string]any{"packageNames": []string{"com.demo"}}).Code)

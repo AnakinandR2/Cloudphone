@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AppItem } from '@/types/app'
+import type { AppRef, MarketApp, UserApp } from '@/types/app'
 import type { InstalledApp } from '@/types/phone'
 import { Check, Download, Loader2, Package, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -11,6 +11,7 @@ import Popconfirm from '@/components/Popconfirm.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fmtBytes } from '@/utils/bytes'
 
 // phoneIds=安装/卸载的目标机（单机=[id]，群控=全部）；masterId=读取「已安装」列表的主控机。
 const props = defineProps<{ phoneIds: number[], masterId: number }>()
@@ -22,13 +23,13 @@ const isGroup = computed(() => props.phoneIds.length > 1)
 type Tab = 'mine' | 'market' | 'installed'
 const tab = ref<Tab>('mine')
 
-const mine = ref<AppItem[]>([])
-const market = ref<AppItem[]>([])
+const mine = ref<UserApp[]>([])
+const market = ref<MarketApp[]>([])
 const installed = ref<InstalledApp[]>([])
 const loading = ref(false)
 const search = ref('')
-// 正在安装的 appId / 正在卸载的 packageName，用于按钮 loading 与禁用。
-const installing = ref<Set<number>>(new Set())
+// 正在安装的 row.key（source-id）/ 正在卸载的 packageName，用于按钮 loading 与禁用。
+const installing = ref<Set<string>>(new Set())
 const uninstalling = ref<Set<string>>(new Set())
 
 // 主控已安装应用的包名集合，用于在「我的应用 / 应用市场」标记「已安装」。
@@ -36,33 +37,51 @@ const installedPkgs = computed(() => new Set(installed.value.map(a => a.packageN
 
 interface Row {
   key: string
-  appId: number
+  source: 'user' | 'market'
+  refId: number
   appName: string
   packageName: string
   version: string
   fileSize: string
   iconPath: string
-  creating: boolean
+  parsing: boolean
+  failed: boolean
   installed: boolean
 }
 
-function toRow(a: AppItem, src: Tab): Row {
+function userRow(a: UserApp): Row {
   return {
-    key: `${src}-${a.id}`,
-    appId: a.cpAppId,
-    appName: a.appName,
-    packageName: a.packageName,
+    key: `user-${a.file_id}`,
+    source: 'user',
+    refId: a.file_id,
+    appName: a.app_name,
+    packageName: a.package_name,
     version: a.version,
-    fileSize: a.fileSize,
-    iconPath: a.iconPath,
-    creating: a.status === 'CREATING',
-    installed: installedPkgs.value.has(a.packageName),
+    fileSize: a.size_bytes ? fmtBytes(a.size_bytes) : '',
+    iconPath: a.icon_url,
+    parsing: a.parse_status === 'parsing',
+    failed: a.parse_status === 'failed',
+    installed: installedPkgs.value.has(a.package_name),
+  }
+}
+function marketRow(a: MarketApp): Row {
+  return {
+    key: `market-${a.id}`,
+    source: 'market',
+    refId: a.id,
+    appName: a.app_name,
+    packageName: a.package_name,
+    version: a.version,
+    fileSize: a.size_bytes ? fmtBytes(a.size_bytes) : '',
+    iconPath: a.icon_url,
+    parsing: a.parse_status === 'parsing',
+    failed: a.parse_status === 'failed',
+    installed: installedPkgs.value.has(a.package_name),
   }
 }
 
 const rows = computed<Row[]>(() => {
-  const src = tab.value === 'market' ? market.value : mine.value
-  const list = src.map(a => toRow(a, tab.value))
+  const list = tab.value === 'market' ? market.value.map(marketRow) : mine.value.map(userRow)
   const kw = search.value.trim().toLowerCase()
   if (!kw)
     return list
@@ -83,7 +102,7 @@ async function load() {
   loading.value = true
   try {
     if (tab.value === 'mine')
-      mine.value = (await appApi.list()).data ?? []
+      mine.value = (await appApi.userList()).data ?? []
     else if (tab.value === 'market')
       market.value = (await appApi.market()).data ?? []
     else
@@ -123,20 +142,27 @@ function resultDesc(ok: number, total: number, name: string) {
 }
 
 async function install(row: Row) {
-  if (!row.appId || installing.value.has(row.appId))
+  // 仅就绪应用可安装。
+  if (row.parsing || row.failed || installing.value.has(row.key))
     return
-  installing.value = new Set(installing.value).add(row.appId)
+  installing.value = new Set(installing.value).add(row.key)
   try {
-    const { ok, total } = await broadcast(pid => phoneApi.installApp(pid, [row.appId]))
-    if (ok > 0)
-      toast.success(t('phone.rc.appInstallOk'), { description: resultDesc(ok, total, row.appName) })
+    const refs: AppRef[] = [{ source: row.source, id: row.refId }]
+    // 按 URL 安装：一次性下发到全部目标机（中台异步）。
+    const { data } = await phoneApi.installByUrl(props.phoneIds, refs)
+    const n = data?.task_info_list?.length ?? 0
+    if (n > 0)
+      toast.success(t('phone.rc.appDispatched'), { description: resultDesc(n, props.phoneIds.length, row.appName) })
     else
       toast.error(t('phone.rc.appInstallFail'))
     await refreshInstalled()
   }
+  catch {
+    toast.error(t('phone.rc.appInstallFail'))
+  }
   finally {
     const next = new Set(installing.value)
-    next.delete(row.appId)
+    next.delete(row.key)
     installing.value = next
   }
 }
@@ -300,12 +326,13 @@ onMounted(() => {
               variant="outline"
               size="sm"
               class="h-7 shrink-0 gap-1 px-2 text-xs"
-              :disabled="row.creating || installing.has(row.appId)"
+              :class="row.failed ? 'border-red-500 text-red-600 dark:text-red-400' : ''"
+              :disabled="row.parsing || row.failed || installing.has(row.key)"
               @click="install(row)"
             >
-              <Loader2 v-if="installing.has(row.appId)" class="size-3.5 animate-spin" />
+              <Loader2 v-if="installing.has(row.key)" class="size-3.5 animate-spin" />
               <Download v-else class="size-3.5" />
-              {{ row.creating ? t('app.statusCreating') : (row.installed ? t('phone.rc.appReinstall') : t('phone.rc.appInstall')) }}
+              {{ row.parsing ? t('app.statusParsing') : row.failed ? t('app.statusFailed') : (row.installed ? t('phone.rc.appReinstall') : t('phone.rc.appInstall')) }}
             </Button>
           </li>
         </ul>

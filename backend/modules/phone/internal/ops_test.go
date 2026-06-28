@@ -32,6 +32,9 @@ type fakePort struct {
 	scriptTask     *midplat.ScriptTaskVO // 非空则覆盖 ScriptTaskStatus 返回
 
 	runLogPage *midplat.RunLogPage // 非空则覆盖 RunLogs 返回（远控真实开机时长用）
+
+	lastInstallByURL midplat.InstallByURLRequest // 记录最近一次 InstallAppByURL 请求（断言 cpIds/apps 映射）
+	installByURLResp *midplat.InstallAppResponse // 非空则覆盖 InstallAppByURL 返回（断言 taskInfoList 透出）
 }
 
 func (f *fakePort) Create(_ context.Context, args CreateArgs) (*CreateResult, error) {
@@ -87,8 +90,16 @@ func (f *fakePort) InstalledApps(_ context.Context, cpID string) ([]midplat.Inst
 	}
 	return []midplat.InstalledApp{{PackageName: "com.demo", AppName: "Demo"}}, nil
 }
-func (f *fakePort) InstallApp(_ context.Context, cpID string, _ []int64) error {
-	return f.note(cpID, "install")
+func (f *fakePort) InstallAppByURL(_ context.Context, req midplat.InstallByURLRequest) (*midplat.InstallAppResponse, error) {
+	f.calls++
+	f.lastInstallByURL = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.installByURLResp != nil {
+		return f.installByURLResp, nil
+	}
+	return &midplat.InstallAppResponse{}, nil
 }
 func (f *fakePort) UninstallApp(_ context.Context, cpID string, _ []int64, _ []string) error {
 	return f.note(cpID, "uninstall")
@@ -352,9 +363,12 @@ func TestOpInvalidArgs(t *testing.T) {
 	withFakeOps(t, f)
 	id := provisionedPhone(t, userA, "cp-aaa")
 
-	assert.Error(t, PhoneService.Power(userA, id, "xx"))            // 非法 operation
-	assert.Error(t, PhoneService.Rotate(userA, id, "diagonal"))     // 非法 orientation
-	assert.Error(t, PhoneService.InstallApp(userA, id, nil))        // 空 appIds
+	assert.Error(t, PhoneService.Power(userA, id, "xx"))        // 非法 operation
+	assert.Error(t, PhoneService.Rotate(userA, id, "diagonal")) // 非法 orientation
+	_, err := PhoneService.InstallByURL(userA, []int{id}, nil)  // 空 apps
+	assert.Error(t, err)
+	_, err = PhoneService.InstallByURL(userA, nil, []AppRefInput{{Source: "user", ID: 1}}) // 空 phone_ids
+	assert.Error(t, err)
 	assert.Error(t, PhoneService.UninstallApp(userA, id, nil, nil)) // 都为空
 }
 

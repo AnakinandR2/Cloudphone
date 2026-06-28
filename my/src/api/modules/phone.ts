@@ -1,3 +1,4 @@
+import type { AppRef } from '@/types/app'
 import type {
   AdbInfo,
   CloudPhone,
@@ -7,6 +8,7 @@ import type {
   CloudPhoneUpdate,
   InstalledApp,
   PhoneFile,
+  PushResult,
   RunLog,
   RuntimeInfo,
   ScriptRunResult,
@@ -100,11 +102,24 @@ export default {
     })
   },
 
+  // 从素材库选定文件推送到一台或多台云手机（后端用 library 门面直读私有 S3 下发，
+  // 字节不经浏览器；允许部分成功，逐台返回 {phone_id, ok, error?}）。
+  pushFromLibrary: (phoneIds: number[], fileIds: number[]) =>
+    api.post<unknown, R<{ results: PushResult[] }>>('phone/files/push-from-library', {
+      phone_ids: phoneIds,
+      file_ids: fileIds,
+    }),
+
   // ---- 应用管理 ----
   apps: (id: number) => api.get<unknown, R<InstalledApp[]>>(`phone/${id}/apps`),
 
-  installApp: (id: number, appIds: number[]) =>
-    api.post<unknown, R<null>>(`phone/${id}/apps/install`, { appIds }),
+  // 按 URL 安装：给中台一个下载 URL（user=素材库私有桶 presigned / market=公有桶）。
+  // 异步下发，返回 task_info_list（taskId/instanceId）；前端提示「已下发」。
+  installByUrl: (phoneIds: number[], refs: AppRef[]) =>
+    api.post<unknown, R<{ task_info_list: { task_id: string, instance_id: string }[] }>>(
+      'phone/apps/install-by-url',
+      { phone_ids: phoneIds, apps: refs },
+    ),
 
   // 应用管理目前不做启停（start/stop/kill-all），只安装/卸载。
   uninstallApp: (id: number, payload: { appIds?: number[], packageNames?: string[] }) =>

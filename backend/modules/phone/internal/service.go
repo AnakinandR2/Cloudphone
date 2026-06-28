@@ -783,19 +783,6 @@ func (s *serviceImpl) InstalledApps(userID, id int) ([]midplat.InstalledApp, err
 	return s.ops.InstalledApps(ctx, p.CpID)
 }
 
-func (s *serviceImpl) InstallApp(userID, id int, appIDs []int64) error {
-	p, err := s.resolveCp(userID, id)
-	if err != nil {
-		return err
-	}
-	if len(appIDs) == 0 {
-		return apperr.BadRequest("appIds 不能为空")
-	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	return s.ops.InstallApp(ctx, p.CpID, appIDs)
-}
-
 func (s *serviceImpl) UninstallApp(userID, id int, appIDs []int64, pkgs []string) error {
 	p, err := s.resolveCp(userID, id)
 	if err != nil {

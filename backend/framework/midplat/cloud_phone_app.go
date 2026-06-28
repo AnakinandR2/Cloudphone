@@ -41,6 +41,41 @@ func (c *Client) InstallApp(ctx context.Context, req InstallAppRequest) (*Instal
 	return &out, nil
 }
 
+// InstallByURLApp 是 install-by-url 请求中的单个待安装应用。
+// 纯下发：中台不写入应用库、不创建 app_info，downloadUrl/md5 需调用方保证可访问且一致。
+type InstallByURLApp struct {
+	AppName     string `json:"appName,omitempty"`
+	DownloadURL string `json:"downloadUrl"`
+	MD5         string `json:"md5"`
+	PackageName string `json:"packageName"`
+	Version     string `json:"version"`
+	FileSize    string `json:"fileSize,omitempty"`
+}
+
+// InstallByURLRequest 是 /cp/apps/install-by-url 的请求体。
+type InstallByURLRequest struct {
+	CpIDs []string          `json:"cpIds"`
+	Apps  []InstallByURLApp `json:"apps"`
+}
+
+// InstallAppByURL 调用 POST /cp/apps/install-by-url 按 URL 异步安装应用。
+// 复用现有 AKSK 签名 doJSON 与 InstallAppResponse(taskInfoList)。
+func (c *Client) InstallAppByURL(ctx context.Context, req InstallByURLRequest) (*InstallAppResponse, error) {
+	const path = "/open/api/vendor/v1/cp/apps/install-by-url"
+	raw, err := c.doJSON(ctx, http.MethodPost, path, nil, req)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return &InstallAppResponse{}, nil
+	}
+	var out InstallAppResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UninstallAppRequest 是 /cloud-phone/uninstallApp 的请求体。
 // appIds 与 packageNames 至少传一个。
 type UninstallAppRequest struct {
