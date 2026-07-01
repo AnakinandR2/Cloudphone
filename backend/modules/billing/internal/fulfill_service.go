@@ -41,8 +41,8 @@ func (s *fulfillServiceImpl) FulfillNew(userID int, kind string, quantity, durat
 	if kind != KindSeat && kind != KindBootSlot {
 		return apperr.Validation("非法的授权单元类型")
 	}
-	if quantity < 1 {
-		return apperr.Validation("数量必须≥1")
+	if err := validateOrderQuantity(quantity); err != nil {
+		return err
 	}
 	if durationValue < 1 {
 		return apperr.Validation("时长必须≥1")

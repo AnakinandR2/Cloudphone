@@ -106,6 +106,17 @@ func TestComputeQuote_RejectsNonPositiveInputs(t *testing.T) {
 	}
 }
 
+// 数量上限：==MaxOrderQuantity 放行，超出一律 422（防超大批量插入击穿 DB 变量上限，见 CP-0006）。
+func TestComputeQuote_RejectsQuantityOverMax(t *testing.T) {
+	cfg := PriceConfig{UnitPriceCents: 1000}
+	if _, err := computeQuote(cfg, MaxOrderQuantity, 1); err != nil {
+		t.Errorf("quantity==MaxOrderQuantity should be allowed, got %v", err)
+	}
+	if _, err := computeQuote(cfg, MaxOrderQuantity+1, 1); err == nil {
+		t.Errorf("expected error for quantity over MaxOrderQuantity")
+	}
+}
+
 // computeFee 实收外加手续费 = 比例(基数×bps，四舍五入到分) + 固定；基数<=0 一律 0；满额免（threshold>0 且 base>=threshold）则免。
 func TestComputeFee(t *testing.T) {
 	cases := []struct {

@@ -1,6 +1,10 @@
 package billing
 
-import "manager-backend/framework/apperr"
+import (
+	"fmt"
+
+	"manager-backend/framework/apperr"
+)
 
 // 计价引擎（新购买模型）。纯逻辑、不依赖 DB：服务端权威计价的核心。
 //
@@ -39,9 +43,25 @@ type PriceQuote struct {
 	GiftRuntimeMinutes  int // 席位新购/续费赠送的临时开机时长（分钟）；其它资源为 0
 }
 
-func computeQuote(cfg PriceConfig, quantity, durationValue int) (PriceQuote, error) {
+// MaxOrderQuantity 单次下单/履约的数量上限（seat / boot_slot）。
+// 防止超大批量 INSERT 击穿底层 DB 的绑定变量上限（SQLite 32766 / MySQL·PG 65535），
+// 同时作为业务上的单次数量合理性约束——超限一律 422 干净拒绝，不泄漏底层 SQL 错误。
+const MaxOrderQuantity = 1000
+
+// validateOrderQuantity 数量上下限校验：<1 或 >MaxOrderQuantity 均返回 422。
+func validateOrderQuantity(quantity int) error {
 	if quantity < 1 {
-		return PriceQuote{}, apperr.Validation("数量必须≥1")
+		return apperr.Validation("数量必须≥1")
+	}
+	if quantity > MaxOrderQuantity {
+		return apperr.Validation(fmt.Sprintf("数量超过单次上限（最多 %d）", MaxOrderQuantity))
+	}
+	return nil
+}
+
+func computeQuote(cfg PriceConfig, quantity, durationValue int) (PriceQuote, error) {
+	if err := validateOrderQuantity(quantity); err != nil {
+		return PriceQuote{}, err
 	}
 	if durationValue < 1 {
 		return PriceQuote{}, apperr.Validation("时长必须≥1")
