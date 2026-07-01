@@ -26,7 +26,7 @@ func (m *billingModule) Init(db *gorm.DB) error {
 	PricingConfigService = newPricingConfigService(newPricingConfigRepository(db))
 	RuntimeWalletService = newRuntimeWalletService(newRuntimeWalletRepository(db))
 	FulfillService = newFulfillService(newLicenseRepository(db), newRuntimeWalletRepository(db), newRepository(db))
-	BizOrderService = newBizOrderService(newBizOrderRepository(db), PricingConfigService, WalletService, FulfillService)
+	BizOrderService = newBizOrderService(db, newBizOrderRepository(db), PricingConfigService, WalletService, FulfillService)
 	RuntimeEngineService = newRuntimeEngineService(newRuntimeChargeRepository(db), newRuntimeWalletRepository(db), LicenseService, PricingConfigService)
 	return nil
 }

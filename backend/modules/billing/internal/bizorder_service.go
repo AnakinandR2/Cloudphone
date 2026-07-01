@@ -6,10 +6,13 @@ import (
 	"time"
 
 	"manager-backend/framework/apperr"
+
+	"gorm.io/gorm"
 )
 
 // bizOrderServiceImpl 新购买模型订单服务：报价 → 下单 → 支付 → 统一履约。
 type bizOrderServiceImpl struct {
+	db      *gorm.DB
 	repo    bizOrderRepository
 	pricing *pricingConfigServiceImpl
 	wallet  *walletServiceImpl
@@ -19,8 +22,21 @@ type bizOrderServiceImpl struct {
 // BizOrderService 模块内单例。
 var BizOrderService *bizOrderServiceImpl
 
-func newBizOrderService(repo bizOrderRepository, pricing *pricingConfigServiceImpl, wallet *walletServiceImpl, fulfill *fulfillServiceImpl) *bizOrderServiceImpl {
-	return &bizOrderServiceImpl{repo: repo, pricing: pricing, wallet: wallet, fulfill: fulfill}
+func newBizOrderService(db *gorm.DB, repo bizOrderRepository, pricing *pricingConfigServiceImpl, wallet *walletServiceImpl, fulfill *fulfillServiceImpl) *bizOrderServiceImpl {
+	return &bizOrderServiceImpl{db: db, repo: repo, pricing: pricing, wallet: wallet, fulfill: fulfill}
+}
+
+// withTx 返回一个所有 repo/service 都绑定到同一 tx 的克隆，
+// 使 pay / MarkPaid 的「扣款 + 履约 + 置已付」在单个数据库事务内原子完成
+// （任一步失败整体回滚，杜绝"扣了钱没发货 / 重复扣款"）。pricing 为只读配置，直接复用。
+func (s *bizOrderServiceImpl) withTx(tx *gorm.DB) *bizOrderServiceImpl {
+	return &bizOrderServiceImpl{
+		db:      tx,
+		repo:    newBizOrderRepository(tx),
+		pricing: s.pricing,
+		wallet:  newWalletService(newRepository(tx)),
+		fulfill: newFulfillService(newLicenseRepository(tx), newRuntimeWalletRepository(tx), newRepository(tx)),
+	}
 }
 
 // kindOf 把 biz_type 映射到授权单元 kind。
@@ -210,20 +226,53 @@ func (s *bizOrderServiceImpl) PayOrder(userID, id int) (*BizOrderResult, error) 
 //   - 余额支付：即时扣款（充值除外）→ 履约 → 置 paid。
 //   - 第三方支付：当前为桩网关，无真实对接 → 视为即时到账，直接履约 + 置 paid（不扣余额，
 //     钱由外部网关收取）。后续接入真实网关时，这里改回返回 pending + 走 MarkPaid 回调。
-func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
-	// 余额支付才从钱包扣款；第三方由外部网关收款，不动余额。
-	// TotalCents==0（如套餐降级）跳过扣款，避免无谓的 0 元钱包流水。
+// chargeIfBalance 余额支付时扣款并写流水；第三方桩网关不动余额；TotalCents==0 跳过（如套餐降级）。
+func (s *bizOrderServiceImpl) chargeIfBalance(userID int, o *BizOrder) error {
 	if o.PayMethod == PayBalance && o.BizType != BizRecharge && o.TotalCents > 0 {
-		// 实付 = 商品金额 + 手续费（余额方式 fee 恒 0，等价于扣 TotalCents，行为不变）。
-		if err := s.wallet.Charge(userID, o.TotalCents+o.FeeCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID)); err != nil {
+		// 实付 = 商品金额 + 手续费（余额方式 fee 恒 0，等价于扣 TotalCents）。
+		return s.wallet.Charge(userID, o.TotalCents+o.FeeCents, LedgerPurchase, "购买:"+o.BizType, o.ID, "user:"+strconv.Itoa(userID))
+	}
+	return nil
+}
+
+// isBuiltinBizType 报告该业务类型的履约是否全部经 billing 内部 repo 完成、可安全纳入单事务。
+// 注册型外部业务（library 等）的 fulfill 走自身独立 db 连接，纳入本事务会在 SQLite 单写锁下与
+// 外层事务死锁，故对它们保持原有逐步执行（其原子性为既有限制，不在 CP-0006 范围内）。
+func isBuiltinBizType(bizType string) bool {
+	switch bizType {
+	case BizRecharge, BizRuntimePack, BizSeatNew, BizBootSlotNew, BizSeatRenew, BizBootSlotRenew:
+		return true
+	}
+	return false
+}
+
+func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
+	if isBuiltinBizType(o.BizType) {
+		// 内建类型：扣款 + 履约 + 置已付 收进单事务，任一步失败整体回滚，
+		// 避免"余额已扣却履约失败"（如批量插入报错）造成的丢钱 / 重复扣款。
+		if err := s.db.Transaction(func(tx *gorm.DB) error {
+			stx := s.withTx(tx)
+			if err := stx.chargeIfBalance(userID, o); err != nil {
+				return err
+			}
+			if err := stx.fulfillOrder(userID, o, items); err != nil {
+				return err
+			}
+			return stx.repo.markPaid(int(o.ID))
+		}); err != nil {
 			return PayResult{}, err
 		}
-	}
-	if err := s.fulfillOrder(userID, o, items); err != nil {
-		return PayResult{}, err
-	}
-	if err := s.repo.markPaid(int(o.ID)); err != nil {
-		return PayResult{}, err
+	} else {
+		// 注册型外部业务：fulfill 走自身 db 连接，无法纳入本事务，保持逐步执行。
+		if err := s.chargeIfBalance(userID, o); err != nil {
+			return PayResult{}, err
+		}
+		if err := s.fulfillOrder(userID, o, items); err != nil {
+			return PayResult{}, err
+		}
+		if err := s.repo.markPaid(int(o.ID)); err != nil {
+			return PayResult{}, err
+		}
 	}
 	now := time.Now()
 	o.Status = BizOrderPaid
@@ -243,11 +292,24 @@ func (s *bizOrderServiceImpl) MarkPaid(id int) (*BizOrder, error) {
 	if o.Status == BizOrderPaid {
 		return o, nil
 	}
-	if err := s.fulfillOrder(int(o.UserID), o, items); err != nil {
-		return nil, err
-	}
-	if err := s.repo.markPaid(id); err != nil {
-		return nil, err
+	// 内建类型履约 + 置已付 收进单事务；注册型外部业务走自身连接，保持逐步执行（见 isBuiltinBizType）。
+	if isBuiltinBizType(o.BizType) {
+		if err := s.db.Transaction(func(tx *gorm.DB) error {
+			stx := s.withTx(tx)
+			if err := stx.fulfillOrder(int(o.UserID), o, items); err != nil {
+				return err
+			}
+			return stx.repo.markPaid(id)
+		}); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.fulfillOrder(int(o.UserID), o, items); err != nil {
+			return nil, err
+		}
+		if err := s.repo.markPaid(id); err != nil {
+			return nil, err
+		}
 	}
 	o.Status = BizOrderPaid
 	return o, nil

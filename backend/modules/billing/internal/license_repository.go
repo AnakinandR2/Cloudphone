@@ -23,11 +23,16 @@ type gormLicenseRepository struct{ db *gorm.DB }
 
 func newLicenseRepository(db *gorm.DB) licenseRepository { return &gormLicenseRepository{db: db} }
 
+// licenseInsertBatchSize 分批插入的批大小。LicenseUnit 约 11 个绑定列，
+// 200 行 ≈ 2200 变量，远低于 SQLite(32766)/MySQL·PG(65535) 的单语句变量上限，
+// 即使将来放大数量上限也不会击穿。
+const licenseInsertBatchSize = 200
+
 func (r *gormLicenseRepository) create(units []LicenseUnit) error {
 	if len(units) == 0 {
 		return nil
 	}
-	return r.db.Create(&units).Error
+	return r.db.CreateInBatches(units, licenseInsertBatchSize).Error
 }
 
 // activeUnits 返回某用户某类未过期的可用单元（status=active 且 expire_at>now），按到期倒序。
