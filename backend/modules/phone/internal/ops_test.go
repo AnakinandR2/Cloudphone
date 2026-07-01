@@ -76,9 +76,6 @@ func (f *fakePort) WebRTCAuth(_ context.Context, cpID string) (*midplat.WebRTCAu
 func (f *fakePort) WebRTCState(_ context.Context, cpID string) (bool, error) {
 	return true, f.note(cpID, "webrtc-state")
 }
-func (f *fakePort) Screenshot(_ context.Context, cpID, format string) error {
-	return f.note(cpID, "screenshot:"+format)
-}
 func (f *fakePort) SetVolume(_ context.Context, cpID string, v int) error {
 	return f.note(cpID, "volume")
 }
@@ -272,8 +269,6 @@ func TestOpPassesCpIDAndChecksOwnership(t *testing.T) {
 	// 各操作都把同一台的 cpId 透传过去
 	require.NoError(t, PhoneService.Restart(userA, id))
 	assert.Equal(t, "restart", f.lastOp)
-	require.NoError(t, PhoneService.Screenshot(userA, id, "png"))
-	assert.Equal(t, "screenshot:png", f.lastOp)
 	require.NoError(t, PhoneService.Rotate(userA, id, "landscape"))
 	assert.Equal(t, "rotate:landscape", f.lastOp)
 

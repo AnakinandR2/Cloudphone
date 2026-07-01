@@ -42,7 +42,6 @@ type midplatPort interface {
 	WebRTCAuth(ctx context.Context, cpID string) (*midplat.WebRTCAuthInfo, error)
 	WebRTCState(ctx context.Context, cpID string) (bool, error)
 
-	Screenshot(ctx context.Context, cpID, format string) error
 	SetVolume(ctx context.Context, cpID string, volume int) error
 	Rotate(ctx context.Context, cpID, orientation string) error
 	Shake(ctx context.Context, cpID string) error
@@ -261,17 +260,6 @@ func (a *sdkAdapter) WebRTCState(ctx context.Context, cpID string) (bool, error)
 		}
 	}
 	return false, nil
-}
-
-func (a *sdkAdapter) Screenshot(ctx context.Context, cpID, format string) error {
-	if format == "" {
-		format = "png"
-	}
-	return a.c.ScreenShot(ctx, midplat.ScreenShotRequest{
-		Containers: []string{cpID},
-		Path:       "/data/local/tmp/screenshoots/" + cpID + "." + format,
-		Format:     format,
-	})
 }
 
 func (a *sdkAdapter) SetVolume(ctx context.Context, cpID string, volume int) error {

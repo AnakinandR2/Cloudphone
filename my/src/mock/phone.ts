@@ -219,11 +219,6 @@ export default defineFakeRoute([
     response: () => ok({ in_webrtc: true }),
   },
   {
-    url: '/v1/phone/:id/screenshot',
-    method: 'post',
-    response: () => ok(null),
-  },
-  {
     url: '/v1/phone/:id/volume',
     method: 'post',
     response: () => ok(null),

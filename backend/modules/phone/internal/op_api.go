@@ -172,31 +172,6 @@ func WebRTCStateCloudPhone(c *gin.Context) {
 	framework.OKWithData(c, gin.H{"in_webrtc": inWebRTC})
 }
 
-// ScreenshotCloudPhone 截屏
-// @Summary 截屏
-// @Tags 我的云手机
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path int true "ID"
-// @Param body body object false "{format?: png|jpeg}"
-// @Router /phone/{id}/screenshot [post]
-func ScreenshotCloudPhone(c *gin.Context) {
-	uid, id, ok := opCloudPhone(c)
-	if !ok {
-		return
-	}
-	var req struct {
-		Format string `json:"format"`
-	}
-	_ = c.ShouldBindJSON(&req)
-	if err := PhoneService.Screenshot(uid, id, req.Format); err != nil {
-		framework.FailErr(c, err)
-		return
-	}
-	framework.OK(c)
-}
-
 // VolumeCloudPhone 调整音量
 // @Summary 调整音量
 // @Tags 我的云手机

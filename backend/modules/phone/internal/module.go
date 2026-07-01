@@ -70,7 +70,6 @@ func (m *phoneModule) RegisterRoutes(router *gin.RouterGroup, middlewareFuncs ..
 		g.POST("/:id/destroy", DestroyCloudPhone)              // 销毁（并移除本地档案）
 		g.POST("/:id/webrtc-auth", WebRTCAuthCloudPhone)       // 远程控制：申请 WebRTC 凭证
 		g.GET("/:id/webrtc-state", WebRTCStateCloudPhone)      // 远程控制：查询串流状态
-		g.POST("/:id/screenshot", ScreenshotCloudPhone)        // 截屏
 		g.POST("/:id/volume", VolumeCloudPhone)                // 音量
 		g.POST("/:id/rotate", RotateCloudPhone)                // 屏幕旋转
 		g.POST("/:id/shake", ShakeCloudPhone)                  // 摇一摇

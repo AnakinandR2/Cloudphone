@@ -58,9 +58,6 @@ export default {
   webrtcState: (id: number) =>
     api.get<unknown, R<{ in_webrtc: boolean }>>(`phone/${id}/webrtc-state`),
 
-  screenshot: (id: number, format: 'png' | 'jpeg' = 'png') =>
-    api.post<unknown, R<unknown>>(`phone/${id}/screenshot`, { format }),
-
   volume: (id: number, volume: number) =>
     api.post<unknown, R<null>>(`phone/${id}/volume`, { volume }),
 
