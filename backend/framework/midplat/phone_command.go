@@ -1,4 +1,4 @@
-// phone_command.go：云手机指令（root/截屏/文件操作/音量/旋转/摇一摇/WebRTC状态/关闭应用）。
+// phone_command.go：云手机指令（root/文件操作/音量/旋转/摇一摇/WebRTC状态/关闭应用）。
 package midplat
 
 import (
@@ -30,27 +30,6 @@ type UpdateRootRequest struct {
 // UpdateRoot 调用 POST /cloud-phone/update-root 切换 root 权限（仅部分云支持）。
 func (c *Client) UpdateRoot(ctx context.Context, req UpdateRootRequest) error {
 	const path = "/open/api/vendor/v1/cloud-phone/update-root"
-	_, err := c.doJSON(ctx, http.MethodPost, path, nil, req)
-	return err
-}
-
-// ============================================================================
-// 截屏
-// ============================================================================
-
-// ScreenShotRequest 是 /phone-command/screen-shot 的请求体。
-// path 是云手机端保存路径，doc 推荐 /data/local/tmp/screenshoots/{uuid}.png。
-type ScreenShotRequest struct {
-	VmID       string   `json:"vm_id,omitempty"`
-	Containers []string `json:"containers"`
-	Path       string   `json:"path"`
-	Format     string   `json:"format"`            // png / jpeg
-	Quality    int      `json:"quality,omitempty"` // 0-100，png 忽略
-}
-
-// ScreenShot 调用 POST /phone-command/screen-shot 让云手机截屏并保存到 path。
-func (c *Client) ScreenShot(ctx context.Context, req ScreenShotRequest) error {
-	const path = "/open/api/vendor/v1/phone-command/screen-shot"
 	_, err := c.doJSON(ctx, http.MethodPost, path, nil, req)
 	return err
 }

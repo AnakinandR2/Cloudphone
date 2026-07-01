@@ -730,16 +730,6 @@ func (s *serviceImpl) WebRTCState(userID, id int) (bool, error) {
 	return s.ops.WebRTCState(ctx, p.CpID)
 }
 
-func (s *serviceImpl) Screenshot(userID, id int, format string) error {
-	p, err := s.resolveCp(userID, id)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	return s.ops.Screenshot(ctx, p.CpID, format)
-}
-
 func (s *serviceImpl) SetVolume(userID, id, volume int) error {
 	p, err := s.resolveCp(userID, id)
 	if err != nil {

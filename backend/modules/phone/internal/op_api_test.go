@@ -52,7 +52,6 @@ func TestOpHandlersHappyPath(t *testing.T) {
 	assert.Equal(t, http.StatusOK, run(NewDeviceCloudPhone, http.MethodPost, nil).Code)
 	assert.Equal(t, http.StatusOK, run(WebRTCAuthCloudPhone, http.MethodPost, nil).Code)
 	assert.Equal(t, http.StatusOK, run(WebRTCStateCloudPhone, http.MethodGet, nil).Code)
-	assert.Equal(t, http.StatusOK, run(ScreenshotCloudPhone, http.MethodPost, map[string]any{"format": "png"}).Code)
 	assert.Equal(t, http.StatusOK, run(VolumeCloudPhone, http.MethodPost, map[string]any{"volume": 50}).Code)
 	assert.Equal(t, http.StatusOK, run(RotateCloudPhone, http.MethodPost, map[string]any{"orientation": "landscape"}).Code)
 	assert.Equal(t, http.StatusOK, run(ShakeCloudPhone, http.MethodPost, nil).Code)
