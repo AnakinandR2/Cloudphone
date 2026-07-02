@@ -189,13 +189,16 @@ func TestDeleteStaffGuards_HTTP(t *testing.T) {
 	r := setupRouter()
 	admin := adminToken(t, r)
 
+	// 唯一命名，避免污染共享表、避免重跑（清理被打断）时 409。
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+
 	// 造一个受限管理员（非超管，稍后挂 staff:delete）
-	restricted := "rbac_del_actor"
+	restricted := "rbac_del_actor_" + suffix
 	createUser(t, r, admin, restricted, "pass123", false)
 	restrictedID := staffIDByUsername(t, restricted)
 	t.Cleanup(func() { framework.DB.Exec("DELETE FROM staff WHERE username = ?", restricted) })
 
-	cleanupRole := grantStaffDelete(t, restrictedID, "rbac_del_role")
+	cleanupRole := grantStaffDelete(t, restrictedID, "rbac_del_role_"+suffix)
 	t.Cleanup(cleanupRole)
 
 	actorTok := login(t, r, restricted, "pass123")
@@ -212,7 +215,7 @@ func TestDeleteStaffGuards_HTTP(t *testing.T) {
 	// A5-c（末位超管守卫的可达半边）：超管 admin 删一个“非末位”超管 → 成功（count>1，守卫放行）。
 	// 说明：count<=1 的 409 分支在生产 HTTP 下不可达（唯一超管即操作者自身，先被自删守卫拦截），
 	// 且 apptest 不得截断/降级共享的 admin 超管行；此处断言超管可删非末位超管这一守卫放行路径。
-	secondSuper := "rbac_second_super"
+	secondSuper := "rbac_second_super_" + suffix
 	createUser(t, r, admin, secondSuper, "pass123", true) // admin 为超管 → CreateStaffChecked 保留 is_superuser=true
 	secondSuperID := staffIDByUsername(t, secondSuper)
 	t.Cleanup(func() { framework.DB.Exec("DELETE FROM staff WHERE username = ?", secondSuper) })
