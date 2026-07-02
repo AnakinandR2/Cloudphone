@@ -21,6 +21,9 @@ const { t } = useI18n()
 
 const kindCfg = computed(() => props.config.kinds[props.kind])
 
+// 单次下单数量上限，与后端 billing MaxOrderQuantity(=1000) 对齐：超限后端返回 422。
+// 后端已权威拦截，这里前置卡上限只为给出即时反馈、避免无谓往返。
+const MAX_ORDER_QUANTITY = 1000
 const quantity = ref(1)
 const durationValue = ref(kindCfg.value.duration_options[0]?.value ?? 1)
 const payMethod = ref('')
@@ -74,6 +77,7 @@ async function confirm() {
       v-model="quantity"
       :tiers="kindCfg.qty_tiers"
       :unit-label="kindCfg.unit_label"
+      :max="MAX_ORDER_QUANTITY"
     />
 
     <DurationPicker
