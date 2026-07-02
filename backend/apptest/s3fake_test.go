@@ -41,6 +41,12 @@ func (s *fakeS3Store) get(k string) ([]byte, bool) {
 	return v, ok
 }
 
+func (s *fakeS3Store) del(k string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, k)
+}
+
 // etagOf 返回单段 PUT 语义下的 ETag：对象内容 md5 的 32-hex，两端加引号（与真实 S3 一致）。
 // framework/s3.Head 会 strings.Trim 掉两端引号后回给 library.ConfirmUpload 做 md5 权威校验，
 // 故此处必须带引号，才能真实走「ETag==md5」主校验路径（而非 GetObject 流式回退）。
@@ -73,6 +79,9 @@ func newFakeS3(t *testing.T, bucket, publicBase string) (*s3.Client, *fakeS3Stor
 			w.Header().Set("ETag", etagOf(body))
 			w.WriteHeader(http.StatusOK)
 		case http.MethodDelete:
+			// 真删对象（不再是空操作）：让「confirm 失败删临时对象」「市场批量删除公有桶对象」
+			// 这类断言能真实验证 DeleteObject 已生效。
+			store.del(key)
 			w.WriteHeader(http.StatusNoContent)
 		default: // GET
 			body, ok := store.get(key)

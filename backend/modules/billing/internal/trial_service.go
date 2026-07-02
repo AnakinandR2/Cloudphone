@@ -98,6 +98,13 @@ func (s *trialServiceImpl) CreatePolicy(req *TrialPolicyCreate) (*TrialPolicy, e
 	if err := s.repo.createPolicy(&p); err != nil {
 		return nil, err
 	}
+	// GORM 的 Create 会跳过带 `default:true` 标签的零值字段（Enabled=false），
+	// 导致落库仍是 enabled=true——运营因此无法经 API 建「停用」策略。显式回写纠正。
+	if !enabled {
+		if err := s.repo.updatePolicy(int(p.ID), map[string]interface{}{"enabled": false}); err != nil {
+			return nil, err
+		}
+	}
 	return s.getPolicy(int(p.ID))
 }
 

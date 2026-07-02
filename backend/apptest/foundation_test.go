@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/png"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"manager-backend/framework"
@@ -106,6 +107,15 @@ func cleanupUserAndBillingByID(t *testing.T, uid uint) {
 	db.Exec("DELETE FROM billing_ledger_entries WHERE user_id = ?", uid)
 	db.Exec("DELETE FROM billing_license_units WHERE user_id = ?", uid)
 	db.Exec("DELETE FROM billing_accounts WHERE user_id = ?", uid)
+	// billing 运行时：赠送时长写入的钱包/结算流水/日用量——必须清，否则 SQLite
+	// 回收并复用同一自增 user_id 时，新用户会读到上个用例遗留的时长余量（前置态污染）。
+	db.Exec("DELETE FROM billing_runtime_minute_wallets WHERE user_id = ?", uid)
+	db.Exec("DELETE FROM billing_runtime_charges WHERE user_id = ?", uid)
+	db.Exec("DELETE FROM billing_runtime_daily_usage WHERE user_id = ?", uid)
+	// billing 试用：领取记录/资格/发放。
+	db.Exec("DELETE FROM billing_trial_claims WHERE user_id = ?", uid)
+	db.Exec("DELETE FROM billing_trial_eligibilities WHERE user_id = ?", uid)
+	db.Exec("DELETE FROM billing_trial_grants WHERE user_id = ?", uid)
 	// 用户自身。
 	db.Exec("DELETE FROM users WHERE id = ?", uid)
 }
@@ -121,8 +131,16 @@ func tinyPNG(t *testing.T) []byte {
 	}
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, img))
+	// 追加唯一后缀：PNG 解码器忽略 IEND 之后的字节，但 md5/大小随之变化，保证每次调用内容唯一。
+	// 否则多用例上传同一份 tinyPNG 会命中【全局按 (md5,size) 去重】的 blob，其对象落在别的用例
+	// 自建、已随 t.Cleanup 关闭的 fake S3 server 上，导致后续 presigned GET 打到空对象 404。
+	n := atomic.AddInt64(&tinyPNGSeq, 1)
+	buf.WriteString(fmt.Sprintf("\n#gp-uniq-%d", n))
 	return buf.Bytes()
 }
+
+// tinyPNGSeq 为 tinyPNG 提供进程内唯一序号，杜绝跨用例内容去重（见 tinyPNG 注释）。
+var tinyPNGSeq int64
 
 // minimalXAPK 构造一段最小可解析的 .xapk 字节：本质是内含 manifest.json + icon.png 的 zip。
 // apkparse.Parse(xapk) 只需 manifest.json 即可解出 package_name/version_name/name（icon 缺失容忍），

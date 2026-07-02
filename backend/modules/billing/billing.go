@@ -102,7 +102,8 @@ func RegisterBizType(bizType string, quote BizQuoteFunc, fulfill BizFulfillFunc)
 // InitForTest 测试用：供其他模块装配 billing。
 func InitForTest(db *gorm.DB) error { return billinginternal.InitForTest(db) }
 
-// GrantSeatLicensesForTest 测试用：给用户发放 n 个 seat 授权单元（新模型 license_units，30 天到期）。
+// GrantSeatLicensesForTest 测试用：给用户发放 n 个 seat 授权单元（新模型 license_units，
+// duration=30；seat 按月计 → 约 30 个月后到期，测试期内远未过期）。
 func GrantSeatLicensesForTest(userID, n int) error {
 	return billinginternal.FulfillService.FulfillNew(userID, billinginternal.KindSeat, n, 30, billinginternal.SourceGrant, "test")
 }
