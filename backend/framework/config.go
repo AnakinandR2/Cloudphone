@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -152,6 +153,22 @@ func loadDotEnv() {
 }
 
 // LoadConfig 从环境变量加载配置（应在程序启动时调用一次，之后通过 AppConfig 全局访问）
+// defaultJWTSecret 是未配置 JWT_SECRET 时的占位默认值（公开常量，绝不可用于生产）。
+const defaultJWTSecret = "change-me-in-production"
+
+// validateProdSecrets 在"真实部署"（DBType 非 sqlite，即连了 mysql/postgres）下拒绝弱默认
+// JWT 密钥：返回非 nil 时 LoadConfig fail-fast。sqlite（本地开发默认，go run . 即用）仅告警放行，
+// 不破坏开箱即用体验（F2）。以 DBType 而非 GIN_MODE 判定生产，因 GIN_MODE 默认即 release、无区分度。
+func validateProdSecrets(cfg *Config) error {
+	if cfg.DBType == "sqlite" {
+		return nil
+	}
+	if cfg.JWTSecret == defaultJWTSecret {
+		return fmt.Errorf("JWT_SECRET 仍是默认值 %q（连接非 sqlite 库视为生产部署），必须设置为强随机值", defaultJWTSecret)
+	}
+	return nil
+}
+
 func LoadConfig() *Config {
 	loadDotEnv()
 	cfg := &Config{
@@ -173,7 +190,7 @@ func LoadConfig() *Config {
 		TrustedProxies:       getEnvAsList("TRUSTED_PROXIES"),
 		AccessLogUserEnabled: getEnvAsBool("ACCESS_LOG_USER_ENABLED", false),
 
-		JWTSecret:       getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTSecret:       getEnv("JWT_SECRET", defaultJWTSecret),
 		JWTExpireHours:  getEnvAsInt("JWT_EXPIRE_HOURS", 15*24),
 		JWTCookieName:   getEnv("JWT_COOKIE_NAME", "jwt_token"),
 		JWTCookieSecure: getEnvAsBool("JWT_COOKIE_SECURE", false),
@@ -240,7 +257,11 @@ func LoadConfig() *Config {
 	log.Printf("[config] S3LibraryAccessKeyID=%s  S3LibrarySecretAccessKey=%s  S3PresignGetTTL=%s  S3PresignPutTTL=%s",
 		displayOrEmpty(cfg.S3LibraryAccessKeyID), maskSecret(cfg.S3LibrarySecretAccessKey), cfg.S3PresignGetTTL, cfg.S3PresignPutTTL)
 
-	if cfg.JWTSecret == "change-me-in-production" {
+	if cfg.JWTSecret == defaultJWTSecret {
+		// 生产（连真实库）下弱默认密钥可被离线伪造任意令牌 → fail-fast；sqlite 开发态仅告警。
+		if err := validateProdSecrets(cfg); err != nil {
+			log.Fatalf("[config] 致命: %v", err)
+		}
 		log.Println("[config] ⚠️  正在使用默认 JWT_SECRET，请在生产环境务必改为强随机值！")
 	}
 	if len(cfg.CORSAllowedOrigins) == 0 {

@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -39,7 +40,15 @@ func (s *serviceImpl) discoverPlanTasks(ctx context.Context) {
 		if p.PlanUID == "" {
 			continue
 		}
-		eg.Go(func() error {
+		eg.Go(func() (err error) {
+			// errgroup 子 goroutine 独立于 tick goroutine，PeriodicRunner 的 recover 覆盖不到它；
+			// 这里自带 recover，单 plan 处理 panic 只跳过、不击穿进程（F1，best-effort）。
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[automation] discoverPlanTasks panic recovered (plan %s): %v", p.PlanUID, r)
+					err = nil
+				}
+			}()
 			vos, err := s.ops.TasksByPlan(ctx, p.PlanUID)
 			if err != nil {
 				return nil // best-effort：单 plan 失败跳过

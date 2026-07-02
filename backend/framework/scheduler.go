@@ -81,12 +81,24 @@ func (p *PeriodicRunner) Start() {
 			case <-p.quit:
 				return
 			case <-ticker.C:
-				if _, err := TryRunLocked(p.db, p.name, p.lease, p.fn); err != nil {
-					log.Printf("[cron %s] error: %v", p.name, err)
-				}
+				p.runTick()
 			}
 		}
 	}()
+}
+
+// runTick 执行一次带 recover 的周期触发：业务 fn 若 panic（空指针/越界/外部响应异常等），
+// 只记录并跳过本轮，绝不让未捕获的 panic 击穿整个进程——gin 的 Recovery 只覆盖 HTTP 请求
+// goroutine，不覆盖这些独立后台 goroutine。租约到期后锁自动释放，故 recover 是安全的（F1）。
+func (p *PeriodicRunner) runTick() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[cron %s] panic recovered: %v", p.name, r)
+		}
+	}()
+	if _, err := TryRunLocked(p.db, p.name, p.lease, p.fn); err != nil {
+		log.Printf("[cron %s] error: %v", p.name, err)
+	}
 }
 
 func (p *PeriodicRunner) Stop() { close(p.quit) }
