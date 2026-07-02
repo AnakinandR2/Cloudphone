@@ -20,6 +20,7 @@ func TestResolvePublicHostPort_RejectsPrivateAndLocal(t *testing.T) {
 		"172.16.0.1",      // 私网 B
 		"192.168.1.1",     // 私网 C
 		"169.254.169.254", // 链路本地（云元数据）
+		"100.64.0.1",      // CGNAT（RFC6598，云/k8s 内网）
 		"0.0.0.0",         // 未指定
 	} {
 		_, err := resolvePublicHostPort(ctx, host, 6379)
@@ -34,7 +35,7 @@ func TestResolvePublicHostPort_AllowsPublic(t *testing.T) {
 }
 
 func TestIsDisallowedIP(t *testing.T) {
-	disallowed := []string{"127.0.0.1", "10.1.2.3", "192.168.0.5", "169.254.169.254", "::1", "0.0.0.0", "224.0.0.1"}
+	disallowed := []string{"127.0.0.1", "10.1.2.3", "192.168.0.5", "169.254.169.254", "100.64.1.2", "::1", "0.0.0.0", "224.0.0.1"}
 	for _, s := range disallowed {
 		assert.True(t, isDisallowedIP(net.ParseIP(s)), "应判定为禁止: %s", s)
 	}

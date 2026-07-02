@@ -253,48 +253,45 @@ func isBuiltinBizType(bizType string) bool {
 }
 
 func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
-	if isBuiltinBizType(o.BizType) {
-		// 内建类型：CAS 置已付 + 扣款 + 履约 收进单事务。CAS 先行 —— 并发下仅一个赢家把
-		// unpaid→paid 成功（rows=1）并继续扣款/履约，其余读到 rows=0 幂等中止；任一步失败
-		// 整体回滚（含 CAS），订单回到未支付，避免"余额已扣却履约失败"与重复扣款/重复履约。
-		err := s.db.Transaction(func(tx *gorm.DB) error {
-			stx := s.withTx(tx)
-			rows, err := stx.repo.markPaid(int(o.ID))
-			if err != nil {
-				return err
-			}
-			if rows == 0 {
-				return errOrderAlreadyPaid
-			}
-			if err := stx.chargeIfBalance(userID, o); err != nil {
-				return err
-			}
-			return stx.fulfillOrder(userID, o, items)
-		})
-		if err != nil && !errors.Is(err, errOrderAlreadyPaid) {
-			return PayResult{}, err
-		}
-	} else {
-		// 注册型外部业务：fulfill 走自身 db 连接，无法纳入本事务。CAS 先行防并发重复履约；
-		// 其"已置已付但外部履约失败"的补偿缺口为既有限制（见 isBuiltinBizType / CP-0006）。
-		rows, err := s.repo.markPaid(int(o.ID))
+	builtin := isBuiltinBizType(o.BizType)
+	// 【CAS 置已付 + 扣款】收进单事务：CAS 先行——并发下仅一个赢家(rows=1)继续扣款，其余读到
+	// rows=0 幂等中止；扣款失败整体回滚(含 CAS)，订单回到未支付且未扣款，可重试。扣款与「置已付」
+	// 恒原子(要么都成、要么都不)，杜绝重复扣款与"已付却未扣款"。内建履约走 billing 内部 repo，
+	// 一并纳入本事务，失败整体回滚。
+	txErr := s.db.Transaction(func(tx *gorm.DB) error {
+		stx := s.withTx(tx)
+		rows, err := stx.repo.markPaid(int(o.ID))
 		if err != nil {
-			return PayResult{}, err
+			return err
 		}
 		if rows == 0 {
-			o.Status = BizOrderPaid
+			return errOrderAlreadyPaid
+		}
+		if err := stx.chargeIfBalance(userID, o); err != nil {
+			return err
+		}
+		if builtin {
+			return stx.fulfillOrder(userID, o, items)
+		}
+		return nil // 注册型履约走自身外部连接，无法纳入本事务，事务提交后再执行
+	})
+	if txErr != nil {
+		if errors.Is(txErr, errOrderAlreadyPaid) {
+			now := time.Now()
+			o.Status, o.PaidAt = BizOrderPaid, &now
 			return PayResult{Status: BizOrderPaid, PayMethod: o.PayMethod}, nil
 		}
-		if err := s.chargeIfBalance(userID, o); err != nil {
-			return PayResult{}, err
-		}
+		return PayResult{}, txErr
+	}
+	if !builtin {
+		// 事务已提交(paid+charged)。注册型外部履约 best-effort：失败则订单已付已扣款但未履约，
+		// 需后台补履约——外部业务履约原子性为既有限制(CP-0006)，但已不再重复扣款/"付而未扣"。
 		if err := s.fulfillOrder(userID, o, items); err != nil {
 			return PayResult{}, err
 		}
 	}
 	now := time.Now()
-	o.Status = BizOrderPaid
-	o.PaidAt = &now
+	o.Status, o.PaidAt = BizOrderPaid, &now
 	return PayResult{Status: BizOrderPaid, PayMethod: o.PayMethod}, nil
 }
 
@@ -310,32 +307,30 @@ func (s *bizOrderServiceImpl) MarkPaid(id int) (*BizOrder, error) {
 	if o.Status == BizOrderPaid {
 		return o, nil
 	}
-	// 内建类型 CAS 置已付 + 履约 收进单事务；CAS 先行使并发/重复回调幂等（仅一个赢家履约）。
-	// 注册型外部业务走自身连接，CAS 先行防重复履约（补偿缺口为既有限制，见 isBuiltinBizType）。
-	if isBuiltinBizType(o.BizType) {
-		err := s.db.Transaction(func(tx *gorm.DB) error {
-			stx := s.withTx(tx)
-			rows, err := stx.repo.markPaid(id)
-			if err != nil {
-				return err
-			}
-			if rows == 0 {
-				return errOrderAlreadyPaid
-			}
-			return stx.fulfillOrder(int(o.UserID), o, items)
-		})
-		if err != nil && !errors.Is(err, errOrderAlreadyPaid) {
-			return nil, err
-		}
-	} else {
-		rows, err := s.repo.markPaid(id)
+	builtin := isBuiltinBizType(o.BizType)
+	// CAS 置已付收进单事务，先行使并发/重复回调幂等(仅赢家履约)；内建履约一并纳入事务，失败回滚。
+	txErr := s.db.Transaction(func(tx *gorm.DB) error {
+		stx := s.withTx(tx)
+		rows, err := stx.repo.markPaid(id)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if rows == 0 {
+			return errOrderAlreadyPaid
+		}
+		if builtin {
+			return stx.fulfillOrder(int(o.UserID), o, items)
+		}
+		return nil // 注册型外部履约事务提交后再执行
+	})
+	if txErr != nil {
+		if errors.Is(txErr, errOrderAlreadyPaid) {
 			o.Status = BizOrderPaid
 			return o, nil
 		}
+		return nil, txErr
+	}
+	if !builtin {
 		if err := s.fulfillOrder(int(o.UserID), o, items); err != nil {
 			return nil, err
 		}

@@ -116,11 +116,39 @@ func resolvePublicHostPort(ctx context.Context, host string, port int) (string, 
 	return net.JoinHostPort(ips[0].String(), strconv.Itoa(port)), nil
 }
 
+// reservedCIDRs 是 net.IP.IsPrivate 未覆盖、但同样不应作为代理目标的网段：
+// RFC6598 CGNAT（云/k8s 节点/Pod 常用内网段）、IETF 协议分配、基准测试、保留/未来用途。
+var reservedCIDRs = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{
+		"100.64.0.0/10", // RFC6598 CGNAT
+		"192.0.0.0/24",  // IETF 协议分配
+		"198.18.0.0/15", // 基准测试
+		"240.0.0.0/4",   // 保留/未来用途
+	} {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
 // isDisallowedIP 报告 IP 是否属于禁止的私有/特殊网段（环回/私网/链路本地/未指定/多播，
-// 含云元数据地址 169.254.169.254）。
+// 含云元数据地址 169.254.169.254 与 CGNAT 100.64.0.0/10 等保留段）。
 func isDisallowedIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified()
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	for _, n := range reservedCIDRs {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // ipvibeResponse 对应 https://www.ipvibe.com/api/search 的返回结构（只取所需字段）。

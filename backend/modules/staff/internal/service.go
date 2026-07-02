@@ -352,7 +352,16 @@ func (s *serviceImpl) CreateStaffChecked(req *StaffCreate, actorSuper bool) (*St
 //   - 非超管不得改超管位（A1）、不得赋越权角色（A3）；
 //   - 禁用（is_active true→false）递增令牌版本，使被禁用者旧令牌立即失效（A4）。
 func (s *serviceImpl) UpdateStaffChecked(id int, req *StaffUpdate, actorID int, actorSuper bool) (*Staff, error) {
+	target, err := s.GetStaffByID(id)
+	if err != nil {
+		return nil, err
+	}
 	if !actorSuper {
+		// 非超管不得修改超管账号——否则可改超管密码/禁用超管完成账号接管（A5 对称保护，
+		// 与 DeleteStaffChecked 一致；删除挡住而更新不挡是提权链的另一半）。
+		if target.IsSuperuser {
+			return nil, apperr.Forbidden("无权修改超级管理员")
+		}
 		req.IsSuperuser = nil
 		if req.RoleIDs != nil {
 			if err := s.assertRolesWithinActor(actorID, *req.RoleIDs); err != nil {
@@ -360,13 +369,9 @@ func (s *serviceImpl) UpdateStaffChecked(id int, req *StaffUpdate, actorID int, 
 			}
 		}
 	}
-	// A4：禁用需失效旧令牌。先读当前态判断是否发生 true→false 的禁用。
-	disabling := false
-	if req.IsActive != nil && !*req.IsActive {
-		if cur, err := s.GetStaffByID(id); err == nil && cur.IsActive {
-			disabling = true
-		}
-	}
+	// A4：禁用（is_active true→false）需递增令牌版本使旧令牌立即失效。用已取的 target 判断。
+	disabling := req.IsActive != nil && !*req.IsActive && target.IsActive
+
 	u, err := s.UpdateStaffWithForm(id, req)
 	if err != nil {
 		return nil, err

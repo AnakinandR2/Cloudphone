@@ -132,6 +132,21 @@ func TestRoleUpdateChecked_NonSuperCannotEscalatePermissions(t *testing.T) {
 	assert.Equal(t, apperr.KindForbidden, apperr.KindOf(err))
 }
 
+// A5（更新侧对称保护）：非超管不得修改超管账号（改密/禁用 → 账号接管）。
+func TestUpdateStaffChecked_NonSuperCannotModifySuperuser(t *testing.T) {
+	super := mkUser(t, "target-super-upd", true)
+	actor := mkUser(t, "actor-upd", false)
+
+	_, err := staff.Service.UpdateStaffChecked(super.ID, &staff.StaffUpdate{Password: "attacker-pw"}, actor.ID, false)
+	require.Error(t, err, "非超管改超管密码应被拒")
+	assert.Equal(t, apperr.KindForbidden, apperr.KindOf(err))
+
+	no := false
+	_, err = staff.Service.UpdateStaffChecked(super.ID, &staff.StaffUpdate{IsActive: &no}, actor.ID, false)
+	require.Error(t, err, "非超管禁用超管应被拒")
+	assert.Equal(t, apperr.KindForbidden, apperr.KindOf(err))
+}
+
 // A5：删除保护。
 func TestDeleteStaffChecked_CannotDeleteSelf(t *testing.T) {
 	u := mkUser(t, "self-del", false)

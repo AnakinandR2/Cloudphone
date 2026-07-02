@@ -27,15 +27,15 @@ type Proxy struct {
 	EgressIP      string     `gorm:"type:varchar(64)" json:"egress_ip"` // 经代理访问得到的真实出口 IP
 	LastCheckedAt *time.Time `json:"last_checked_at"`
 	// 出口 IP 归属（由测试时调 ipvibe 自动识别）。
-	Country  string `gorm:"type:varchar(64)" json:"country"`
-	City     string `gorm:"type:varchar(64)" json:"city"`
-	ASN      string `gorm:"type:varchar(32)" json:"asn"`       // 如 AS21859
-	ASNName  string `gorm:"type:varchar(128)" json:"asn_name"` // 如 Zenlayer Inc
-	Company  string `gorm:"type:varchar(128)" json:"company"`  // 如 Zenlayer IP Block @Hong Kong
-	ConnType string `gorm:"type:varchar(32)" json:"conn_type"` // 如 Corporate
-	Remark   string `gorm:"type:varchar(255)" json:"remark"`
-	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt     time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	Country   string    `gorm:"type:varchar(64)" json:"country"`
+	City      string    `gorm:"type:varchar(64)" json:"city"`
+	ASN       string    `gorm:"type:varchar(32)" json:"asn"`       // 如 AS21859
+	ASNName   string    `gorm:"type:varchar(128)" json:"asn_name"` // 如 Zenlayer Inc
+	Company   string    `gorm:"type:varchar(128)" json:"company"`  // 如 Zenlayer IP Block @Hong Kong
+	ConnType  string    `gorm:"type:varchar(32)" json:"conn_type"` // 如 Corporate
+	Remark    string    `gorm:"type:varchar(255)" json:"remark"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Proxy) TableName() string { return "proxies" }

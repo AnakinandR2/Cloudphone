@@ -46,8 +46,8 @@ func TestProxyCRUDOwnedByUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, uint(userA), created.UserID)
-	assert.Equal(t, "socks5", created.Protocol)     // 默认协议
-	assert.Equal(t, StatusUnknown, created.Status)   // 默认未检测
+	assert.Equal(t, "socks5", created.Protocol)    // 默认协议
+	assert.Equal(t, StatusUnknown, created.Status) // 默认未检测
 	id := int(created.ID)
 
 	got, err := ProxyService.GetByID(userA, id)
@@ -181,7 +181,7 @@ func TestProxyBatchCreate(t *testing.T) {
 	items := []ProxyCreate{
 		{Name: "a", Host: "1.1.1.1", Port: 1080},
 		{Name: "b", Host: "2.2.2.2", Port: 1081, Username: "u", Password: "p"},
-		{Name: "bad-no-host", Port: 1082}, // 无 host → 跳过
+		{Name: "bad-no-host", Port: 1082},      // 无 host → 跳过
 		{Name: "bad-no-port", Host: "3.3.3.3"}, // 无 port → 跳过
 	}
 	created, err := ProxyService.BatchCreate(userA, items)

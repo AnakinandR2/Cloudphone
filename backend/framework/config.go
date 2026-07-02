@@ -160,7 +160,9 @@ const defaultJWTSecret = "change-me-in-production"
 // JWT 密钥：返回非 nil 时 LoadConfig fail-fast。sqlite（本地开发默认，go run . 即用）仅告警放行，
 // 不破坏开箱即用体验（F2）。以 DBType 而非 GIN_MODE 判定生产，因 GIN_MODE 默认即 release、无区分度。
 func validateProdSecrets(cfg *Config) error {
-	if cfg.DBType == "sqlite" {
+	// 开发(sqlite)与测试(GIN_MODE=test，SetupTestDB 置)放行——仅"连真实库的生产启动"才 fail-fast，
+	// 否则 DB_TYPE=mysql go test 这条 CI 路径(SetupTestDB 不设 JWT_SECRET)会被误杀。
+	if cfg.DBType == "sqlite" || cfg.GinMode == "test" {
 		return nil
 	}
 	if cfg.JWTSecret == defaultJWTSecret {

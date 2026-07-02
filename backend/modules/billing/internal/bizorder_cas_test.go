@@ -2,6 +2,7 @@ package billing
 
 import (
 	"testing"
+	"time"
 
 	"manager-backend/framework"
 
@@ -67,4 +68,28 @@ func TestMarkPaidService_RechargeFulfilledOnce(t *testing.T) {
 	after2, err := WalletService.BalanceCents(uid)
 	require.NoError(t, err)
 	assert.Equal(t, after1, after2, "重复 MarkPaid 不应重复充值(B2 幂等)")
+}
+
+// TestPay_ChargeFailureLeavesOrderUnpaid 验证扣款失败时订单回滚为未支付、余额不被扣（可重试）——
+// CAS 与扣款同事务，杜绝"已置已付却未扣款"（对抗复核 C2 回归）。
+func TestPay_ChargeFailureLeavesOrderUnpaid(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders")
+		framework.CleanTable("billing_biz_order_items")
+		framework.CleanTable("billing_license_units")
+	})
+	uid := 960003 // 不 TopUp：余额为 0，买席位必然扣款失败
+
+	_, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizSeatNew, Quantity: 1, DurationValue: 1, PayMethod: PayBalance,
+	})
+	require.Error(t, err, "余额不足应支付失败")
+
+	bal, err := WalletService.BalanceCents(uid)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), bal, "扣款失败余额不应变动")
+
+	_, paidTotal, err := BizOrderService.ListOrders(uid, 1, 20, BizOrderPaid, "", time.Time{}, time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), paidTotal, "不应留下已支付订单（应回滚为未支付，可重试）")
 }
