@@ -320,19 +320,48 @@ func (a *sdkAdapter) UninstallApp(ctx context.Context, cpID string, appIDs []int
 	return a.c.UninstallApp(ctx, midplat.UninstallAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs, PackageNames: pkgs})
 }
 
+// cpInFailedList 报告目标 cp 是否落在中台返回的失败列表中（单台调用时用于把
+// "HTTP 200 + 该 cp 在失败列表" 识别为业务失败，而非误当成功，C1）。
+func cpInFailedList(failed []string, cpID string) bool {
+	for _, f := range failed {
+		if f == cpID {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *sdkAdapter) StartApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error {
-	_, err := a.c.StartApp(ctx, midplat.StartStopAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs, PackageNames: pkgs})
-	return err
+	res, err := a.c.StartApp(ctx, midplat.StartStopAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs, PackageNames: pkgs})
+	if err != nil {
+		return err
+	}
+	if res != nil && cpInFailedList(res.StartFailedCpIDs, cpID) {
+		return fmt.Errorf("中台启动应用失败: %s", cpID)
+	}
+	return nil
 }
 
 func (a *sdkAdapter) StopApp(ctx context.Context, cpID string, appIDs []int64, pkgs []string) error {
-	_, err := a.c.StopApp(ctx, midplat.StartStopAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs, PackageNames: pkgs})
-	return err
+	res, err := a.c.StopApp(ctx, midplat.StartStopAppRequest{CpIDs: []string{cpID}, AppIDs: appIDs, PackageNames: pkgs})
+	if err != nil {
+		return err
+	}
+	if res != nil && cpInFailedList(res.StopFailedCpIDs, cpID) {
+		return fmt.Errorf("中台停止应用失败: %s", cpID)
+	}
+	return nil
 }
 
 func (a *sdkAdapter) KillAllApps(ctx context.Context, cpID string) error {
-	_, err := a.c.KillAllApps(ctx, []string{cpID})
-	return err
+	failed, err := a.c.KillAllApps(ctx, []string{cpID})
+	if err != nil {
+		return err
+	}
+	if cpInFailedList(failed, cpID) {
+		return fmt.Errorf("中台关闭全部应用失败: %s", cpID)
+	}
+	return nil
 }
 
 func (a *sdkAdapter) AdbEnableToken(ctx context.Context, cpID string) (*midplat.ADBTokenContainer, error) {
