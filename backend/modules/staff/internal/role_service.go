@@ -128,6 +128,44 @@ func (s *roleServiceImpl) Update(id int, req *RoleUpdate) (*Role, error) {
 	return s.GetByID(id)
 }
 
+// assertPermsWithinActor 校验待授予的权限项均在操作者自身权限集内（防铸造越权角色，S1）。
+func (s *roleServiceImpl) assertPermsWithinActor(actorID int, perms []string) error {
+	actorPerms, err := s.roles.userPermissions(actorID)
+	if err != nil {
+		return err
+	}
+	allowed := make(map[string]bool, len(actorPerms))
+	for _, p := range actorPerms {
+		allowed[p] = true
+	}
+	for _, p := range perms {
+		if !allowed[p] {
+			return apperr.Forbidden("无权授予超出自身权限范围的权限项")
+		}
+	}
+	return nil
+}
+
+// CreateChecked 非超管创建角色时，权限项须为自身权限子集（S1）。handler 唯一入口。
+func (s *roleServiceImpl) CreateChecked(req *RoleCreate, actorID int, actorSuper bool) (*Role, error) {
+	if !actorSuper {
+		if err := s.assertPermsWithinActor(actorID, req.Permissions); err != nil {
+			return nil, err
+		}
+	}
+	return s.Create(req)
+}
+
+// UpdateChecked 非超管更新角色时，权限项须为自身权限子集（S1）。handler 唯一入口。
+func (s *roleServiceImpl) UpdateChecked(id int, req *RoleUpdate, actorID int, actorSuper bool) (*Role, error) {
+	if !actorSuper {
+		if err := s.assertPermsWithinActor(actorID, req.Permissions); err != nil {
+			return nil, err
+		}
+	}
+	return s.Update(id, req)
+}
+
 func (s *roleServiceImpl) Delete(id int) error {
 	roleDB, err := s.roles.findByID(id)
 	if err != nil {

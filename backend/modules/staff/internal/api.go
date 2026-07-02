@@ -229,7 +229,7 @@ func CreateStaff(c *gin.Context) {
 		return
 	}
 
-	u, err := Service.CreateStaffWithForm(&req)
+	u, err := Service.CreateStaffChecked(&req, c.GetBool("is_superuser"))
 	if err != nil {
 		framework.FailErr(c, err)
 		return
@@ -262,7 +262,7 @@ func UpdateStaff(c *gin.Context) {
 		return
 	}
 
-	u, err := Service.UpdateStaffWithForm(id, &req)
+	u, err := Service.UpdateStaffChecked(id, &req, c.GetInt("userID"), c.GetBool("is_superuser"))
 	if err != nil {
 		framework.FailErr(c, err)
 		return
@@ -288,7 +288,7 @@ func DeleteStaff(c *gin.Context) {
 		return
 	}
 
-	if err = Service.DeleteStaff(id); err != nil {
+	if err = Service.DeleteStaffChecked(id, c.GetInt("userID"), c.GetBool("is_superuser")); err != nil {
 		framework.FailErr(c, err)
 		return
 	}

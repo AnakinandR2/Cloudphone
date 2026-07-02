@@ -29,6 +29,7 @@ type userRepository interface {
 	list(offset, limit int, username, orderClause string) ([]StaffDB, int64, error)
 	tokenVersion(id int) (int, error)
 	bumpTokenVersion(id int) error
+	countSuperusers() (int64, error)
 }
 
 // roleRepository 角色 / 权限 / 用户-角色关联的持久化。
@@ -58,6 +59,13 @@ func newStaffRepository(db *gorm.DB) userRepository { return &gormStaffRepositor
 func (r *gormStaffRepository) countExcludingUsernames(names []string) (int64, error) {
 	var count int64
 	err := r.db.Model(&StaffDB{}).Where("username NOT IN ?", names).Count(&count).Error
+	return count, err
+}
+
+// countSuperusers 统计超级管理员数量（删除保护用于防止删掉最后一个超管）。
+func (r *gormStaffRepository) countSuperusers() (int64, error) {
+	var count int64
+	err := r.db.Model(&StaffDB{}).Where("is_superuser = ?", true).Count(&count).Error
 	return count, err
 }
 

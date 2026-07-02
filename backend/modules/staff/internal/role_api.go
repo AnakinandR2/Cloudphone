@@ -75,7 +75,7 @@ func CreateRole(c *gin.Context) {
 		return
 	}
 
-	role, err := RoleService.Create(&req)
+	role, err := RoleService.CreateChecked(&req, c.GetInt("userID"), c.GetBool("is_superuser"))
 	if err != nil {
 		framework.FailErr(c, err)
 		return
@@ -106,7 +106,7 @@ func UpdateRole(c *gin.Context) {
 		return
 	}
 
-	role, err := RoleService.Update(id, &req)
+	role, err := RoleService.UpdateChecked(id, &req, c.GetInt("userID"), c.GetBool("is_superuser"))
 	if err != nil {
 		framework.FailErr(c, err)
 		return
