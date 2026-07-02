@@ -53,7 +53,12 @@ func (rp *realProber) Probe(ctx context.Context, p Proxy) (ProbeResult, error) {
 	if p.Username != "" {
 		auth = &xproxy.Auth{User: p.Username, Password: p.Password}
 	}
-	addr := net.JoinHostPort(p.Host, strconv.Itoa(p.Port))
+	// SSRF 防护：拒绝把代理指向内网/环回/链路本地地址（否则可借探测做内网端口扫描），
+	// 并 pin 到已校验的 IP 拨号，避免拨号时二次解析被 DNS rebinding 绕过（S2）。
+	addr, err := resolvePublicHostPort(ctx, p.Host, p.Port)
+	if err != nil {
+		return ProbeResult{}, err
+	}
 	dialer, err := xproxy.SOCKS5("tcp", addr, auth, &net.Dialer{Timeout: 10 * time.Second})
 	if err != nil {
 		return ProbeResult{}, fmt.Errorf("构造 SOCKS5 拨号器失败: %w", err)
@@ -81,7 +86,8 @@ func (rp *realProber) Probe(ctx context.Context, p Proxy) (ProbeResult, error) {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	egressIP := ipRe.FindString(string(body))
 	if egressIP == "" {
-		return ProbeResult{}, fmt.Errorf("未从响应解析出出口 IP：%s", strings.TrimSpace(string(body)))
+		// 不回显响应原始字节：避免把探测目标返回的内容当侧信道泄露（S2）。
+		return ProbeResult{}, fmt.Errorf("未从响应解析出出口 IP")
 	}
 
 	res := ProbeResult{EgressIP: egressIP, LatencyMs: latency}
@@ -93,6 +99,28 @@ func (rp *realProber) Probe(ctx context.Context, p Proxy) (ProbeResult, error) {
 		res.Company, res.ConnType = info.Company, info.ConnType
 	}
 	return res, nil
+}
+
+// resolvePublicHostPort 解析代理 host → 校验所有 IP 均为公网地址（拒绝内网/环回/链路本地/
+// 未指定/多播），返回 pin 到首个 IP 的 host:port 拨号地址（防拨号时二次解析被 DNS rebinding 绕过）。
+func resolvePublicHostPort(ctx context.Context, host string, port int) (string, error) {
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil || len(ips) == 0 {
+		return "", fmt.Errorf("解析代理地址失败: %v", err)
+	}
+	for _, ip := range ips {
+		if isDisallowedIP(ip) {
+			return "", fmt.Errorf("代理地址不合法：禁止指向内网/环回/链路本地地址")
+		}
+	}
+	return net.JoinHostPort(ips[0].String(), strconv.Itoa(port)), nil
+}
+
+// isDisallowedIP 报告 IP 是否属于禁止的私有/特殊网段（环回/私网/链路本地/未指定/多播，
+// 含云元数据地址 169.254.169.254）。
+func isDisallowedIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified()
 }
 
 // ipvibeResponse 对应 https://www.ipvibe.com/api/search 的返回结构（只取所需字段）。
