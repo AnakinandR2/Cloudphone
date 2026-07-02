@@ -49,8 +49,9 @@ func registerBilling() {
 		}
 		return billing.BizQuoteResult{TotalCents: total, MetaJSON: meta}, nil
 	}
-	fulfill := func(userID int, orderID uint, metaJSON []byte) error {
-		return Service.FulfillPackage(userID, orderID, metaJSON)
+	fulfill := func(tx *gorm.DB, userID int, orderID uint, metaJSON []byte) error {
+		// 用 billing 支付事务的 tx 履约，使订阅写入与扣款/订单原子（fulfill 失败整单回滚）。
+		return Service.withTx(tx).FulfillPackage(userID, orderID, metaJSON)
 	}
 	for _, bt := range []string{BizLibNew, BizLibUpgrade, BizLibRenew, BizLibDowngrade} {
 		billing.RegisterBizType(bt, quote, fulfill)

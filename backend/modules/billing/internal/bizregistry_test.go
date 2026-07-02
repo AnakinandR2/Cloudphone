@@ -6,9 +6,11 @@ import (
 	"testing"
 
 	"manager-backend/framework"
+	"manager-backend/framework/apperr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // gap-8：用 internal registerBizType 注册一个假业务类型，驱动 CreateOrder → PayOrder，
@@ -44,7 +46,7 @@ func TestRegisteredBiz_RoutesQuoteFulfillAndChargesBalance(t *testing.T) {
 			rec.lastQuoteParam = append([]byte(nil), params...)
 			return BizQuoteResult{TotalCents: 1234, MetaJSON: metaOut}, nil
 		},
-		func(userID int, orderID uint, metaJSON []byte) error {
+		func(_ *gorm.DB, userID int, orderID uint, metaJSON []byte) error {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			rec.fulfillCalls++
@@ -104,7 +106,7 @@ func TestRegisteredBiz_ZeroTotalSkipsCharge(t *testing.T) {
 		func(userID int, params []byte) (BizQuoteResult, error) {
 			return BizQuoteResult{TotalCents: 0, MetaJSON: metaOut}, nil
 		},
-		func(userID int, orderID uint, metaJSON []byte) error {
+		func(_ *gorm.DB, userID int, orderID uint, metaJSON []byte) error {
 			fulfillCalls++
 			gotMeta = append([]byte(nil), metaJSON...)
 			return nil
@@ -143,7 +145,7 @@ func TestRegisteredBiz_PayOrderRoutesFulfill(t *testing.T) {
 		func(userID int, params []byte) (BizQuoteResult, error) {
 			return BizQuoteResult{TotalCents: 500, MetaJSON: metaOut}, nil
 		},
-		func(userID int, orderID uint, metaJSON []byte) error {
+		func(_ *gorm.DB, userID int, orderID uint, metaJSON []byte) error {
 			fulfillCalls++
 			return nil
 		},
@@ -168,4 +170,34 @@ func TestRegisteredBiz_PayOrderRoutesFulfill(t *testing.T) {
 	assert.Equal(t, 1, fulfillCalls) // 未重复履约
 	bal2, _ := WalletService.BalanceCents(uid)
 	assert.Equal(t, bal1, bal2) // 未重复扣款
+}
+
+// B3：注册型外部业务的 fulfill 失败时，已扣余额必须随支付事务整体回滚（不丢钱）。
+// 履约经 tx 纳入同一事务后，fulfill 报错 → CAS 置已付 + 扣款一并回滚。
+func TestRegisteredBiz_FulfillFailureRollsBackCharge(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items")
+	})
+	const fakeType = "test_fake_fulfill_fail"
+	registerBizType(fakeType,
+		func(userID int, params []byte) (BizQuoteResult, error) {
+			return BizQuoteResult{TotalCents: 700, MetaJSON: []byte(`{}`)}, nil
+		},
+		func(_ *gorm.DB, userID int, orderID uint, metaJSON []byte) error {
+			return apperr.Validation("fulfill boom") // 履约失败
+		},
+	)
+
+	uid := 960004
+	require.NoError(t, WalletService.TopUp(uid, 10000, "test", "test"))
+	balBefore, _ := WalletService.BalanceCents(uid)
+
+	_, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: fakeType, PayMethod: PayBalance, Params: json.RawMessage(`{}`),
+	})
+	require.Error(t, err) // 履约失败 → 下单失败
+
+	// 关键：余额随事务回滚，一分未扣。
+	balAfter, _ := WalletService.BalanceCents(uid)
+	assert.Equal(t, balBefore, balAfter, "外部履约失败必须回滚已扣余额")
 }

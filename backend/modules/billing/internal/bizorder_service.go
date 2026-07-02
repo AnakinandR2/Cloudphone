@@ -241,23 +241,11 @@ func (s *bizOrderServiceImpl) chargeIfBalance(userID int, o *BizOrder) error {
 	return nil
 }
 
-// isBuiltinBizType 报告该业务类型的履约是否全部经 billing 内部 repo 完成、可安全纳入单事务。
-// 注册型外部业务（library 等）的 fulfill 走自身独立 db 连接，纳入本事务会在 SQLite 单写锁下与
-// 外层事务死锁，故对它们保持原有逐步执行（其原子性为既有限制，不在 CP-0006 范围内）。
-func isBuiltinBizType(bizType string) bool {
-	switch bizType {
-	case BizRecharge, BizRuntimePack, BizSeatNew, BizBootSlotNew, BizSeatRenew, BizBootSlotRenew:
-		return true
-	}
-	return false
-}
-
 func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem) (PayResult, error) {
-	builtin := isBuiltinBizType(o.BizType)
-	// 【CAS 置已付 + 扣款】收进单事务：CAS 先行——并发下仅一个赢家(rows=1)继续扣款，其余读到
-	// rows=0 幂等中止；扣款失败整体回滚(含 CAS)，订单回到未支付且未扣款，可重试。扣款与「置已付」
-	// 恒原子(要么都成、要么都不)，杜绝重复扣款与"已付却未扣款"。内建履约走 billing 内部 repo，
-	// 一并纳入本事务，失败整体回滚。
+	// 【CAS 置已付 + 扣款 + 履约】收进单事务：CAS 先行——并发下仅一个赢家(rows=1)继续，其余读到
+	// rows=0 幂等中止；任一步失败整体回滚，订单回到未支付且未扣款，可重试。扣款、履约（含注册型
+	// 外部业务——单库 monolith 下经 tx 写自身表）与「置已付」恒原子，杜绝重复扣款、"已付却未扣款"、
+	// 以及"已扣款却未履约"（丢钱）。
 	txErr := s.db.Transaction(func(tx *gorm.DB) error {
 		stx := s.withTx(tx)
 		rows, err := stx.repo.markPaid(int(o.ID))
@@ -270,10 +258,7 @@ func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem)
 		if err := stx.chargeIfBalance(userID, o); err != nil {
 			return err
 		}
-		if builtin {
-			return stx.fulfillOrder(userID, o, items)
-		}
-		return nil // 注册型履约走自身外部连接，无法纳入本事务，事务提交后再执行
+		return stx.fulfillOrder(userID, o, items)
 	})
 	if txErr != nil {
 		if errors.Is(txErr, errOrderAlreadyPaid) {
@@ -282,13 +267,6 @@ func (s *bizOrderServiceImpl) pay(userID int, o *BizOrder, items []BizOrderItem)
 			return PayResult{Status: BizOrderPaid, PayMethod: o.PayMethod}, nil
 		}
 		return PayResult{}, txErr
-	}
-	if !builtin {
-		// 事务已提交(paid+charged)。注册型外部履约 best-effort：失败则订单已付已扣款但未履约，
-		// 需后台补履约——外部业务履约原子性为既有限制(CP-0006)，但已不再重复扣款/"付而未扣"。
-		if err := s.fulfillOrder(userID, o, items); err != nil {
-			return PayResult{}, err
-		}
 	}
 	now := time.Now()
 	o.Status, o.PaidAt = BizOrderPaid, &now
@@ -307,8 +285,8 @@ func (s *bizOrderServiceImpl) MarkPaid(id int) (*BizOrder, error) {
 	if o.Status == BizOrderPaid {
 		return o, nil
 	}
-	builtin := isBuiltinBizType(o.BizType)
-	// CAS 置已付收进单事务，先行使并发/重复回调幂等(仅赢家履约)；内建履约一并纳入事务，失败回滚。
+	// CAS 置已付 + 履约收进单事务：CAS 先行使并发/重复回调幂等(仅赢家履约)；履约（含注册型外部业务）
+	// 一并纳入事务，失败整体回滚。
 	txErr := s.db.Transaction(func(tx *gorm.DB) error {
 		stx := s.withTx(tx)
 		rows, err := stx.repo.markPaid(id)
@@ -318,10 +296,7 @@ func (s *bizOrderServiceImpl) MarkPaid(id int) (*BizOrder, error) {
 		if rows == 0 {
 			return errOrderAlreadyPaid
 		}
-		if builtin {
-			return stx.fulfillOrder(int(o.UserID), o, items)
-		}
-		return nil // 注册型外部履约事务提交后再执行
+		return stx.fulfillOrder(int(o.UserID), o, items)
 	})
 	if txErr != nil {
 		if errors.Is(txErr, errOrderAlreadyPaid) {
@@ -329,11 +304,6 @@ func (s *bizOrderServiceImpl) MarkPaid(id int) (*BizOrder, error) {
 			return o, nil
 		}
 		return nil, txErr
-	}
-	if !builtin {
-		if err := s.fulfillOrder(int(o.UserID), o, items); err != nil {
-			return nil, err
-		}
 	}
 	o.Status = BizOrderPaid
 	return o, nil
@@ -373,7 +343,8 @@ func (s *bizOrderServiceImpl) fulfillOrder(userID int, o *BizOrder, items []BizO
 		if len(items) > 0 {
 			meta = []byte(items[0].MetaJSON)
 		}
-		return rb.fulfill(userID, o.ID, meta)
+		// s.db 在支付事务内为绑定的 tx（见 withTx），外部履约随之纳入同一事务。
+		return rb.fulfill(s.db, userID, o.ID, meta)
 	}
 	return apperr.Validation("未知业务类型")
 }

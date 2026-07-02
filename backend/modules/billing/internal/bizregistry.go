@@ -1,6 +1,10 @@
 package billing
 
-import "sync"
+import (
+	"sync"
+
+	"gorm.io/gorm"
+)
 
 // 业务类型注册表：让外部模块（如 library）把自有业务并入 billing 统一订单，
 // billing 仅持有函数指针，无对外部模块的编译期依赖（依赖反转，遵守 Modulith 边界）。
@@ -17,7 +21,9 @@ type BizQuoteResult struct {
 type BizQuoteFunc func(userID int, params []byte) (BizQuoteResult, error)
 
 // BizFulfillFunc 履约：支付成功后按 meta_json 落地业务变更。
-type BizFulfillFunc func(userID int, orderID uint, metaJSON []byte) error
+// tx 为 billing 支付事务句柄——单库 monolith 下外部模块须用它写自身表，使"扣款 + 履约"原子化
+// （履约失败则整单回滚，杜绝扣款成功但履约失败的丢钱 / 重复扣款）。
+type BizFulfillFunc func(tx *gorm.DB, userID int, orderID uint, metaJSON []byte) error
 
 type registeredBiz struct {
 	quote   BizQuoteFunc

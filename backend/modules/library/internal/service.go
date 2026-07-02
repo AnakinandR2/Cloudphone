@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"manager-backend/framework/apperr"
+
+	"gorm.io/gorm"
 )
 
 // Service 素材库业务服务（本步聚焦商业核心：计价 + 四动作 + 履约）。
@@ -25,6 +27,12 @@ var Service *serviceImpl
 
 func newService(repo repository, pricing *pricingConfigServiceImpl, getTTL, putTTL time.Duration) *serviceImpl {
 	return &serviceImpl{repo: repo, pricing: pricing, now: time.Now, getTTL: getTTL, putTTL: putTTL}
+}
+
+// withTx 返回 repo 绑定到传入 tx 的克隆，供 billing 支付事务回调内履约，
+// 使订阅写入与 billing 的扣款/订单落在同一事务（单库 monolith），fulfill 失败随整单回滚。
+func (s *serviceImpl) withTx(tx *gorm.DB) *serviceImpl {
+	return &serviceImpl{repo: newRepository(tx), pricing: s.pricing, now: s.now, getTTL: s.getTTL, putTTL: s.putTTL}
 }
 
 // ---- 报价/下单请求与载荷（§2.2）----
