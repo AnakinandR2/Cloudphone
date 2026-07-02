@@ -13,7 +13,9 @@ type bizOrderRepository interface {
 	create(o *BizOrder, items []BizOrderItem) error
 	getOwned(userID, id int) (*BizOrder, []BizOrderItem, error)
 	get(id int) (*BizOrder, []BizOrderItem, error)
-	markPaid(id int) error
+	// markPaid 以状态守卫 CAS 把订单置为已付：仅当当前状态不是 paid 才更新，
+	// 返回受影响行数（0 表示已被并发赢家处理）。用于防重复扣款/重复履约。
+	markPaid(id int) (int64, error)
 	setGift(id, minutes int) error
 	itemsByOrders(orderIDs []uint) (map[uint][]BizOrderItem, error)
 	listOwned(userID, offset, limit int, status, bizType string, from, to time.Time) ([]BizOrder, int64, error)
@@ -63,9 +65,10 @@ func (r *gormBizOrderRepository) get(id int) (*BizOrder, []BizOrderItem, error) 
 	return &o, items, nil
 }
 
-func (r *gormBizOrderRepository) markPaid(id int) error {
-	return r.db.Model(&BizOrder{}).Where("id = ?", id).
-		Update("status", BizOrderPaid).Error
+func (r *gormBizOrderRepository) markPaid(id int) (int64, error) {
+	res := r.db.Model(&BizOrder{}).Where("id = ? AND status <> ?", id, BizOrderPaid).
+		Update("status", BizOrderPaid)
+	return res.RowsAffected, res.Error
 }
 
 // setGift 记录订单实际赠送的临时开机时长（履约时写入）。
