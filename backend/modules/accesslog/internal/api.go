@@ -33,6 +33,13 @@ import (
 func GetAccessLogList(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	// 钳制分页参数，避免 size=-1 触发 Limit(-1) 拉全表、page=0 产生负 offset（S4）。
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 200 {
+		size = 20
+	}
 
 	list, total, err := AccessLogService.GetList(ListQuery{
 		Page:        page,
