@@ -148,6 +148,11 @@ func TestProxyProbeRejectsPrivateHTTP(t *testing.T) {
 		require.True(t, ok, "host=%s data 应为对象", host)
 		assert.Equal(t, "fail", data["status"], "host=%s 应判为探测失败（被内网拦截）", host)
 		assert.NotEmpty(t, data["message"], "host=%s 失败应带拦截原因", host)
+		// 断言命中的是 SSRF 守卫的拒绝文案（resolvePublicHostPort/isDisallowedIP），
+		// 而非真实 SOCKS5 拨号失败的通用报错——否则即使守卫被误删，对内网地址的
+		// 真实拨号同样会失败并收敛成同样的 {status:fail}，测试会“假通过”。
+		msg, _ := data["message"].(string)
+		assert.Contains(t, msg, "代理地址不合法", "host=%s message 应为守卫拒绝文案而非通用拨号失败", host)
 		// 内网拦截发生在拨号前，绝不该返回出口 IP
 		assert.Empty(t, data["egress_ip"], "host=%s 被拦截不应有出口 IP", host)
 	}
