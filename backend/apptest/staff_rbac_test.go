@@ -9,6 +9,7 @@ import (
 	"manager-backend/framework"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -159,4 +160,100 @@ func staffIsSuperuser(t *testing.T, id int) bool {
 	var v bool
 	require.NoError(t, framework.DB.Raw("SELECT is_superuser FROM staff WHERE id = ?", id).Scan(&v).Error)
 	return v
+}
+
+// grantStaffDelete 直接经原生 SQL 给某员工挂一个仅含 staff:delete 权限的角色（造数据，非授权路径）。
+// 返回清理函数，删除本次造出的 role/role_permissions/staff_roles 行。
+func grantStaffDelete(t *testing.T, staffID int, roleName string) func() {
+	t.Helper()
+	db := framework.DB
+	require.NoError(t, db.Exec(
+		"INSERT INTO roles (name, description, is_builtin) VALUES (?, '', ?)", roleName, false).Error)
+	var roleID int
+	require.NoError(t, db.Table("roles").Where("name = ?", roleName).Pluck("id", &roleID).Error)
+	require.NotZero(t, roleID)
+	require.NoError(t, db.Exec(
+		"INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)", roleID, "staff:delete").Error)
+	require.NoError(t, db.Exec(
+		"INSERT INTO staff_roles (staff_id, role_id) VALUES (?, ?)", staffID, roleID).Error)
+	return func() {
+		db.Exec("DELETE FROM staff_roles WHERE role_id = ?", roleID)
+		db.Exec("DELETE FROM role_permissions WHERE role_id = ?", roleID)
+		db.Exec("DELETE FROM roles WHERE id = ?", roleID)
+	}
+}
+
+// A5：DeleteStaffChecked 删除守卫（HTTP 层，经 DELETE /api/v1/staff/delete/:id）。
+// 受限管理员 = 非超管但持 staff:delete，通过 PermissionMiddleware 后由 *Checked 拦截越权删除。
+func TestDeleteStaffGuards_HTTP(t *testing.T) {
+	r := setupRouter()
+	admin := adminToken(t, r)
+
+	// 造一个受限管理员（非超管，稍后挂 staff:delete）
+	restricted := "rbac_del_actor"
+	createUser(t, r, admin, restricted, "pass123", false)
+	restrictedID := staffIDByUsername(t, restricted)
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM staff WHERE username = ?", restricted) })
+
+	cleanupRole := grantStaffDelete(t, restrictedID, "rbac_del_role")
+	t.Cleanup(cleanupRole)
+
+	actorTok := login(t, r, restricted, "pass123")
+
+	// A5-a：受限管理员删超管（种子 admin 是超管）→ 403（非超管无权删超管）。
+	adminID := staffIDByUsername(t, "admin")
+	wa := doJSON(r, "DELETE", fmt.Sprintf("/api/v1/staff/delete/%d", adminID), actorTok, nil)
+	assert.Equal(t, http.StatusForbidden, wa.Code, "受限管理员删超管应 403: %s", wa.Body.String())
+
+	// A5-b：受限管理员删自己 → 403（禁止自删）。
+	wb := doJSON(r, "DELETE", fmt.Sprintf("/api/v1/staff/delete/%d", restrictedID), actorTok, nil)
+	assert.Equal(t, http.StatusForbidden, wb.Code, "删自己应 403: %s", wb.Body.String())
+
+	// A5-c（末位超管守卫的可达半边）：超管 admin 删一个“非末位”超管 → 成功（count>1，守卫放行）。
+	// 说明：count<=1 的 409 分支在生产 HTTP 下不可达（唯一超管即操作者自身，先被自删守卫拦截），
+	// 且 apptest 不得截断/降级共享的 admin 超管行；此处断言超管可删非末位超管这一守卫放行路径。
+	secondSuper := "rbac_second_super"
+	createUser(t, r, admin, secondSuper, "pass123", true) // admin 为超管 → CreateStaffChecked 保留 is_superuser=true
+	secondSuperID := staffIDByUsername(t, secondSuper)
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM staff WHERE username = ?", secondSuper) })
+
+	wc := doJSON(r, "DELETE", fmt.Sprintf("/api/v1/staff/delete/%d", secondSuperID), admin, nil)
+	assert.Equal(t, http.StatusOK, wc.Code, "超管删非末位超管应成功: %s", wc.Body.String())
+	// 已删除：库中该行应消失。
+	var cnt int64
+	framework.DB.Table("staff").Where("id = ?", secondSuperID).Count(&cnt)
+	assert.Equal(t, int64(0), cnt, "非末位超管应已被删除")
+}
+
+// A4/X2：禁用前台用户后，其旧 user 令牌立即失效（token_version 递增）且无法再登录。
+func TestDisabledUserTokenAndLoginRejected(t *testing.T) {
+	const phone = "13900050051" // 唯一手机号，避免污染共享 users 表
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM users WHERE phone = ?", phone) })
+
+	r := setupRouter()
+	admin := adminToken(t, r)
+
+	userTok := registerUser(t, r, phone) // 密码固定 "pass123"
+	// 前置健壮性：禁用前旧令牌可用。
+	require.Equal(t, http.StatusOK, doJSON(r, "GET", "/api/v1/user/me", userTok, nil).Code)
+
+	// 取前台用户 id（users 表）。
+	var userID int
+	require.NoError(t, framework.DB.Table("users").Where("phone = ?", phone).Pluck("id", &userID).Error)
+	require.NotZero(t, userID)
+
+	// adminToken PUT 禁用：is_active=false（AdminStatusRequest.IsActive 为 *bool binding:"required"）。
+	wd := doJSON(r, "PUT", fmt.Sprintf("/api/v1/admin/users/%d/status", userID), admin,
+		map[string]interface{}{"is_active": false})
+	require.Equal(t, http.StatusOK, wd.Code, "禁用应成功: %s", wd.Body.String())
+
+	// X2：禁用后旧 user 令牌打 /user/me → 401（token_version 不匹配，UserAuth 拒绝）。
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "GET", "/api/v1/user/me", userTok, nil).Code, "禁用后旧令牌应失效")
+
+	// A4：被禁用手机号再登录 → 403（Authenticate 对 !IsActive 返回 Forbidden）。
+	wl := doJSON(r, "POST", "/api/v1/user/auth/login", "", map[string]string{
+		"phone": phone, "password": "pass123",
+	})
+	assert.Equal(t, http.StatusForbidden, wl.Code, "被禁用账号登录应 403: %s", wl.Body.String())
 }
