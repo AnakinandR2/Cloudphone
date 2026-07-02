@@ -5,6 +5,7 @@ import (
 
 	"manager-backend/framework"
 	"manager-backend/modules/billing"
+	"manager-backend/modules/proxy"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,16 +18,19 @@ const (
 
 func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units", "proxies")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
+	// I2 修复后 Create 绑代理需属主校验：先给 userA 建一条真实代理。
+	p, err := proxy.Create(userA, proxy.ProxyInput{Name: "px", Host: "203.0.113.9", Port: 1080})
+	require.NoError(t, err)
 
-	created, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "甲机", ProxyID: 5})
+	created, err := PhoneService.Create(userA, &CloudPhoneCreate{Name: "甲机", ProxyID: uint(p.ID)})
 	require.NoError(t, err)
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, uint(userA), created.UserID)
 	assert.Equal(t, StatusCreated, created.Status) // 默认状态
-	assert.Equal(t, uint(5), created.ProxyID)
+	assert.Equal(t, uint(p.ID), created.ProxyID)
 	id := int(created.ID)
 
 	got, err := PhoneService.GetByID(userA, id)

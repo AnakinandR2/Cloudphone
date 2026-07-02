@@ -6,7 +6,11 @@
 // 触发自注册，并对外导出少量门面（供 openapi 等读写代理）。
 package proxy
 
-import proxyinternal "manager-backend/modules/proxy/internal"
+import (
+	proxyinternal "manager-backend/modules/proxy/internal"
+
+	"gorm.io/gorm"
+)
 
 // Proxy 是代理记录的公开别名（供 openapi 等引用返回类型；Password 字段 json:"-" 永不外泄）。
 type Proxy = proxyinternal.Proxy
@@ -48,3 +52,12 @@ func Update(userID, id int, in ProxyInput) (*Proxy, error) {
 func Delete(userID, id int) error {
 	return proxyinternal.ProxyService.Delete(userID, id)
 }
+
+// GetByID 返回某用户名下指定 id 的代理；不存在或非属主一律 apperr.NotFound（隐藏他人资源）。
+// 供跨模块（如云手机绑定代理）做属主 + 存在性校验，杜绝 BOLA/IDOR。
+func GetByID(userID, id int) (*Proxy, error) {
+	return proxyinternal.ProxyService.GetByID(userID, id)
+}
+
+// InitForTest 测试用：供其他模块装配 proxy（建表 + 装配服务）。
+func InitForTest(db *gorm.DB) error { return proxyinternal.InitForTest(db) }

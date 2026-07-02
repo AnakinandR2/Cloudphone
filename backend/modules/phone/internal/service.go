@@ -10,6 +10,7 @@ import (
 	"manager-backend/framework/midplat"
 	"manager-backend/framework/query"
 	"manager-backend/modules/billing"
+	"manager-backend/modules/proxy"
 )
 
 // 异步任务超时阈值：超过则 worker 把云手机收敛到失败态（创建→CREATE_FAILED；开机→STOPPED）。
@@ -335,6 +336,12 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 	if err := s.checkSeatAvailable(userID); err != nil {
 		return nil, err
 	}
+	// 绑定代理必须是本人已存在的代理（否则 404，堵 BOLA/I2）。
+	if req.ProxyID != 0 {
+		if _, err := proxy.GetByID(userID, int(req.ProxyID)); err != nil {
+			return nil, err
+		}
+	}
 	item := CloudPhone{
 		UserID:  uint(userID),
 		Name:    req.Name,
@@ -383,6 +390,12 @@ func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, er
 func (s *serviceImpl) Update(userID, id int, req *CloudPhoneUpdate) (*CloudPhone, error) {
 	if _, err := s.GetByID(userID, id); err != nil {
 		return nil, err
+	}
+	// 改绑代理必须是本人已存在的代理（否则 404，堵 BOLA/I2）。
+	if req.ProxyID != 0 {
+		if _, err := proxy.GetByID(userID, int(req.ProxyID)); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.update(userID, id, updateFields(req)); err != nil {
 		return nil, err

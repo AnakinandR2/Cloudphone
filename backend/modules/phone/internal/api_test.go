@@ -10,6 +10,7 @@ import (
 
 	"manager-backend/framework"
 	"manager-backend/modules/billing"
+	"manager-backend/modules/proxy"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -61,8 +62,17 @@ func apiCleanup(t *testing.T) {
 		framework.CleanTable("cloud_phones", "cp_tasks",
 			"billing_license_units", "billing_ledger_entries",
 			"billing_seat_usages", "billing_dunning_states",
-			"billing_entitlement_batches", "billing_runtime_minute_wallets")
+			"billing_entitlement_batches", "billing_runtime_minute_wallets",
+			"proxies")
 	})
+}
+
+// createTestProxy 为某用户建一条真实代理，供 Create/Update 绑定校验（I2 修复后需属主真实存在）用例调用。
+func createTestProxy(t *testing.T, userID int, name string) uint {
+	t.Helper()
+	p, err := proxy.Create(userID, proxy.ProxyInput{Name: name, Host: "203.0.113.30", Port: 1080})
+	require.NoError(t, err)
+	return p.ID
 }
 
 // --- 认证缺失：所有需要 userID 的 handler 都应 401 ---
@@ -111,9 +121,10 @@ func TestCreateGetUpdateDeleteHandlers(t *testing.T) {
 	apiCleanup(t)
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, nil) // 无中台降级：Create 直接落 CREATED
+	proxyID := createTestProxy(t, userA, "px-crud")
 
 	// Create
-	c, w := ctxFor(t, http.MethodPost, userA, CloudPhoneCreate{Name: "H机", ProxyID: 3})
+	c, w := ctxFor(t, http.MethodPost, userA, CloudPhoneCreate{Name: "H机", ProxyID: proxyID})
 	CreateCloudPhone(c)
 	require.Equal(t, http.StatusOK, w.Code)
 	code, data := decodeResp(t, w)
@@ -159,8 +170,9 @@ func TestUpdateHandler_IgnoresStatusMassAssignment(t *testing.T) {
 	apiCleanup(t)
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, nil)
+	proxyID := createTestProxy(t, userA, "px-mass")
 
-	c, w := ctxFor(t, http.MethodPost, userA, CloudPhoneCreate{Name: "P", ProxyID: 3})
+	c, w := ctxFor(t, http.MethodPost, userA, CloudPhoneCreate{Name: "P", ProxyID: proxyID})
 	CreateCloudPhone(c)
 	require.Equal(t, http.StatusOK, w.Code)
 	_, data := decodeResp(t, w)

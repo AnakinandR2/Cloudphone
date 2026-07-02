@@ -8,6 +8,7 @@ import (
 
 	"manager-backend/framework"
 	"manager-backend/modules/billing"
+	"manager-backend/modules/proxy"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -208,7 +209,7 @@ func TestPowerRuntimeGate(t *testing.T) {
 // 绑定代理后即可开机。代理门禁排在 CanBoot 之前，这里备足时长以证明唯一拦截原因是「未绑代理」。
 func TestPowerOnRequiresProxy(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries")
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries", "proxies")
 	})
 	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(userA, 1000))
 	f := &fakePort{statuses: map[string]string{"cp-noproxy": "STOPPED"}} // 实时态可开机
@@ -223,8 +224,10 @@ func TestPowerOnRequiresProxy(t *testing.T) {
 	assert.Contains(t, err.Error(), "代理")
 	assert.Equal(t, 0, f.calls, "被代理门禁拦下，不应触达中台")
 
-	// 绑定代理后可开机。
-	_, err = PhoneService.Update(userA, int(p.ID), &CloudPhoneUpdate{ProxyID: 7})
+	// 绑定代理后可开机（I2 修复后 Update 绑代理需属主校验：先给 userA 建一条真实代理）。
+	px, err := proxy.Create(userA, proxy.ProxyInput{Name: "px-boot", Host: "203.0.113.10", Port: 1080})
+	require.NoError(t, err)
+	_, err = PhoneService.Update(userA, int(p.ID), &CloudPhoneUpdate{ProxyID: uint(px.ID)})
 	require.NoError(t, err)
 	require.NoError(t, PhoneService.Power(userA, int(p.ID), "开机"))
 	assert.Equal(t, StatusStarting, statusOf(t, p.ID))

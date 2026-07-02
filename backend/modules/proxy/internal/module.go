@@ -56,3 +56,11 @@ func init() {
 		return db.AutoMigrate(&Proxy{})
 	})
 }
+
+// InitForTest 供其他模块的测试装配 proxy（建表 + 装配服务）。仅测试用。
+func InitForTest(db *gorm.DB) error {
+	if err := db.AutoMigrate(&Proxy{}); err != nil {
+		return err
+	}
+	return (&proxyModule{}).Init(db)
+}
