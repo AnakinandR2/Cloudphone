@@ -115,3 +115,40 @@ func TestProxyAdminListDeleteHTTP(t *testing.T) {
 	require.Equal(t, http.StatusOK, doJSON(r, "DELETE", fmt.Sprintf("/api/v1/admin/proxies/delete/%d", proxyID), admin, nil).Code)
 	assert.Equal(t, http.StatusNotFound, doJSON(r, "GET", fmt.Sprintf("/api/v1/admin/proxies/%d", proxyID), admin, nil).Code)
 }
+
+// S2 回归：即时探测 /proxy/probe 必须拦截内网/环回/链路本地/CGNAT 地址，
+// 防被当作内网端口扫描/云元数据 SSRF 原语。拦截命中拨号前的 resolvePublicHostPort，
+// Probe 把 error 收敛成 ProbeOutcome{status:"fail", message:...}（非接口错误），
+// 故 HTTP 200 + 业务 Code=0，但 data.status=="fail" 且 data.message 非空。
+// 只验拦截路径，不传公网地址（避免真实拨号）。
+func TestProxyProbeRejectsPrivateHTTP(t *testing.T) {
+	r := setupRouter()
+	token := registerUser(t, r, "13900020006")
+
+	// 未登录不可访问该前台接口
+	assert.Equal(t, http.StatusUnauthorized,
+		doJSON(r, "POST", "/api/v1/proxy/probe", "", map[string]interface{}{
+			"host": "203.0.113.7", "port": 1080,
+		}).Code)
+
+	for _, host := range []string{
+		"127.0.0.1",       // 环回
+		"10.0.0.1",        // 私网
+		"169.254.169.254", // 链路本地 / 云元数据
+		"100.64.0.1",      // CGNAT（RFC6598）
+	} {
+		w := doJSON(r, "POST", "/api/v1/proxy/probe", token, map[string]interface{}{
+			"host": host, "port": 6379,
+		})
+		// 拦截被收敛为“探测失败”结果：HTTP 200 + 业务成功码，但内容判失败。
+		require.Equal(t, http.StatusOK, w.Code, "host=%s body=%s", host, w.Body.String())
+		resp := decode(t, w)
+		require.Equal(t, 0, resp.Code, "host=%s 业务码应为 0（探测结果而非接口错误）", host)
+		data, ok := resp.Data.(map[string]interface{})
+		require.True(t, ok, "host=%s data 应为对象", host)
+		assert.Equal(t, "fail", data["status"], "host=%s 应判为探测失败（被内网拦截）", host)
+		assert.NotEmpty(t, data["message"], "host=%s 失败应带拦截原因", host)
+		// 内网拦截发生在拨号前，绝不该返回出口 IP
+		assert.Empty(t, data["egress_ip"], "host=%s 被拦截不应有出口 IP", host)
+	}
+}
