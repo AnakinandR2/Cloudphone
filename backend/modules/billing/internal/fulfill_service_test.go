@@ -67,3 +67,91 @@ func TestFulfillRuntimePack_AddsMinutes(t *testing.T) {
 	rem, _ = RuntimeWalletService.Remaining(uid)
 	assert.Equal(t, int64(700), rem)
 }
+
+// 注：cleanupLicenseUnitsByUser(t *testing.T, uid int) 已由 Task 10 在同包
+// （modules/billing/internal，license_repository_test.go）定义，本文件直接复用，勿重复定义。
+
+// TestFulfillRenew_StacksFromOriginalExpiryWhenActive 未过期单元续费：新到期从原到期叠加（非从 now）。
+func TestFulfillRenew_StacksFromOriginalExpiryWhenActive(t *testing.T) {
+	uid := 930111
+	cleanupLicenseUnitsByUser(t, uid)
+
+	now := time.Now()
+	orig := now.AddDate(0, 0, 10) // 原到期 = now+10 天（未过期）
+	unit := LicenseUnit{
+		UserID: uint(uid), Kind: KindSeat, Status: LicenseActive,
+		Source: SourceOrder, SourceRef: "renew-active", ExpireAt: orig,
+	}
+	require.NoError(t, LicenseService.repo.create([]LicenseUnit{unit}))
+
+	created, err := LicenseService.repo.activeUnits(uid, KindSeat, now)
+	require.NoError(t, err)
+	require.Len(t, created, 1)
+	id := created[0].ID
+	origSaved := created[0].ExpireAt // 以 DB 落库后的到期为锚点，规避时区/精度误差
+
+	require.NoError(t, FulfillService.FulfillRenew(uid, KindSeat, []uint{id}, 1))
+
+	after, err := LicenseService.repo.getByIDs(uid, []uint{id}, KindSeat)
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	// 从原到期起算：新到期 ≈ 原到期 + 1 月，且明显晚于「从 now 起算」(now+1 月)。
+	assert.WithinDuration(t, origSaved.AddDate(0, 1, 0), after[0].ExpireAt, 2*time.Hour)
+	assert.True(t, after[0].ExpireAt.After(now.AddDate(0, 1, 0)),
+		"未过期续费必须从原到期叠加，应晚于从 now 起算")
+}
+
+// TestFulfillRenew_StacksFromNowWhenExpired 已过期单元续费：从 now 起算（非从旧到期叠加）。
+func TestFulfillRenew_StacksFromNowWhenExpired(t *testing.T) {
+	uid := 930112
+	cleanupLicenseUnitsByUser(t, uid)
+
+	now := time.Now()
+	stale := now.AddDate(0, 0, -5) // 原到期 = now-5 天（已过期）
+	unit := LicenseUnit{
+		UserID: uint(uid), Kind: KindSeat, Status: LicenseActive,
+		Source: SourceOrder, SourceRef: "renew-expired", ExpireAt: stale,
+	}
+	require.NoError(t, LicenseService.repo.create([]LicenseUnit{unit}))
+
+	// activeUnits 过滤 expire_at>now，已过期单元查不到，改用按属主的一次性查回 ID。
+	var all []LicenseUnit
+	require.NoError(t, framework.DB.Where("user_id = ? AND kind = ?", uid, KindSeat).Find(&all).Error)
+	require.Len(t, all, 1)
+	id := all[0].ID
+
+	renewAt := time.Now()
+	require.NoError(t, FulfillService.FulfillRenew(uid, KindSeat, []uint{id}, 1))
+
+	after, err := LicenseService.repo.getByIDs(uid, []uint{id}, KindSeat)
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	// 从 now 起算：新到期 ≈ renewAt + 1 月；绝不是从旧到期(now-5d)叠加。
+	assert.WithinDuration(t, renewAt.AddDate(0, 1, 0), after[0].ExpireAt, 24*time.Hour)
+	assert.True(t, after[0].ExpireAt.After(stale.AddDate(0, 1, 0)),
+		"已过期续费应从 now 起算，晚于从旧到期叠加")
+}
+
+// TestGrantTrialItem_ZeroExpireDaysIsPerpetual ExpireDays=0 视为永久：到期≈now+100 年，50 年后仍未过期。
+func TestGrantTrialItem_ZeroExpireDaysIsPerpetual(t *testing.T) {
+	uid := 930113
+	cleanupLicenseUnitsByUser(t, uid)
+
+	now := time.Now()
+	it := TrialPolicyItem{Subject: KindSeat, Quantity: 1, ExpireDays: 0} // 0=永久
+	balanceAfter, err := grantTrialItem(framework.DB, uid, it, now, "trial:perpetual")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), balanceAfter)
+
+	units, err := LicenseService.repo.listByUserKind(uid, KindSeat)
+	require.NoError(t, err)
+	require.Len(t, units, 1)
+	// 到期 ≈ now + 100 年。
+	assert.WithinDuration(t, now.AddDate(100, 0, 0), units[0].ExpireAt, 48*time.Hour)
+
+	// 50 年后仍属未过期可用池（activeUnits 过滤 expire_at>now）。
+	future := now.AddDate(50, 0, 0)
+	active, err := LicenseService.repo.activeUnits(uid, KindSeat, future)
+	require.NoError(t, err)
+	assert.Len(t, active, 1, "永久单元 50 年后仍应 active")
+}
