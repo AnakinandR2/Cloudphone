@@ -132,13 +132,14 @@ func TestCreateGetUpdateDeleteHandlers(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &got))
 	assert.Equal(t, "H机", got.Name)
 
-	// Update
+	// Update：name 可改；status 是状态机字段，前台通用 update 不得改写（I1，防绕过席位计费）。
 	c, w = ctxFor(t, http.MethodPut, userA, CloudPhoneUpdate{Name: "H机2", Status: StatusStopped}, "id", idStr)
 	UpdateCloudPhone(c)
 	require.Equal(t, http.StatusOK, w.Code)
 	_, data = decodeResp(t, w)
 	require.NoError(t, json.Unmarshal(data, &got))
 	assert.Equal(t, "H机2", got.Name)
+	assert.Equal(t, StatusCreated, got.Status, "status 不应被前台 update 改写（应保持 CREATED）")
 
 	// List
 	c, w = ctxFor(t, http.MethodGet, userA, nil)
@@ -147,10 +148,34 @@ func TestCreateGetUpdateDeleteHandlers(t *testing.T) {
 	GetCloudPhoneList(c)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	// Delete（STOPPED 可删）
+	// Delete（无中台时直删；CREATED/STOPPED 均可删）
 	c, w = ctxFor(t, http.MethodDelete, userA, nil, "id", idStr)
 	DeleteCloudPhone(c)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+// I1 回归：前台不得通过通用 update 把 status 置为 RECYCLED（绕过席位计费）。
+func TestUpdateHandler_IgnoresStatusMassAssignment(t *testing.T) {
+	apiCleanup(t)
+	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
+	withFakeOps(t, nil)
+
+	c, w := ctxFor(t, http.MethodPost, userA, CloudPhoneCreate{Name: "P", ProxyID: 3})
+	CreateCloudPhone(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	_, data := decodeResp(t, w)
+	var created CloudPhone
+	require.NoError(t, json.Unmarshal(data, &created))
+	idStr := strconv.Itoa(int(created.ID))
+
+	c, w = ctxFor(t, http.MethodPut, userA, CloudPhoneUpdate{Status: StatusRecycled}, "id", idStr)
+	UpdateCloudPhone(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	_, data = decodeResp(t, w)
+	var got CloudPhone
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.NotEqual(t, StatusRecycled, got.Status, "前台不得把 status 置为 RECYCLED")
+	assert.Equal(t, StatusCreated, got.Status, "status 应保持服务端状态机的值")
 }
 
 // Create：缺席位 → service 错误经 FailErr 映射非 200。

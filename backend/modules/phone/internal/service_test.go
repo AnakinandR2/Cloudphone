@@ -33,12 +33,13 @@ func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "甲机", got.Name)
 
+	// status 是状态机字段，前台通用 update 不得改写（I1）：请求带 Status 也应被忽略。
 	updated, err := PhoneService.Update(userA, id, &CloudPhoneUpdate{Name: "甲机2", Status: StatusStopped})
 	require.NoError(t, err)
 	assert.Equal(t, "甲机2", updated.Name)
-	assert.Equal(t, StatusStopped, updated.Status)
+	assert.Equal(t, StatusCreated, updated.Status, "status 不应被前台 update 改写")
 
-	require.NoError(t, PhoneService.Delete(userA, id)) // STOPPED 可删除
+	require.NoError(t, PhoneService.Delete(userA, id)) // 无中台直删（CREATED 可删）
 	_, err = PhoneService.GetByID(userA, id)
 	assert.Error(t, err)
 }

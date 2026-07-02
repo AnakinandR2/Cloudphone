@@ -454,9 +454,9 @@ func updateFields(req *CloudPhoneUpdate) map[string]interface{} {
 	if req.Name != "" {
 		fields["name"] = req.Name
 	}
-	if req.Status != "" {
-		fields["status"] = req.Status
-	}
+	// status 是状态机字段，由服务端操作（开机/关机/回收/reconcile）+ 中台实时态驱动，
+	// 前台通用 update 不得改写——否则可绕过席位计费（如置 RECYCLED 逃过 listNonRecycledByUser
+	// 的席位统计）或让回收站实例逃逸清理（I1）。
 	if req.ImageID != "" {
 		fields["image_id"] = req.ImageID
 	}
