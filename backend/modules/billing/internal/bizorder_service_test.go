@@ -2,6 +2,7 @@ package billing
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -355,4 +356,70 @@ func TestBizOrder_FeeFreeThreshold_NotReachedChargesFee(t *testing.T) {
 	// 未满额：fee = 2% + ¥1 = 4536 + 100 = 4636。
 	assert.Equal(t, int64(4636), res.Order.FeeCents)
 	assert.Equal(t, int64(1000000), res.Order.FeeFreeThresholdCents)
+}
+
+// B3 回归：余额充足、扣款成功但履约失败（非法 duration_value=0 触发 FulfillNew 报错）时，
+// CAS 置已付 + 扣款 + 履约同处 pay() 的单事务，任一步失败整单回滚：
+// 订单仍 unpaid、无授权单元、余额未减、无 purchase 扣款流水。
+// 直接 repo.create 落单以绕开 CreateOrder 的下单前校验（否则非法时长在报价阶段就被拦下，
+// 到不了"已扣款"这一步）。按 user_id 精准清理自造行，勿 CleanTable 截断共享表。
+func TestPay_FulfillFailureRollsBackChargeAndOrder_B3(t *testing.T) {
+	uid := 950030
+	t.Cleanup(func() {
+		framework.DB.Where("user_id = ?", uid).Delete(&BizOrder{})
+		framework.DB.Where("user_id = ?", uid).Delete(&LicenseUnit{})
+		framework.DB.Where("user_id = ?", uid).Delete(&LedgerEntry{})
+		framework.DB.Where("user_id = ?", uid).Delete(&Account{})
+	})
+
+	// 余额充足，确保扣款一定成功（失败点必须落在履约）。
+	require.NoError(t, WalletService.TopUp(uid, 1000000, "test", "test"))
+	balBefore, err := WalletService.BalanceCents(uid)
+	require.NoError(t, err)
+
+	// 直接落一张 unpaid seat 订单，订单项时长非法(0) → FulfillNew 必返回 422。
+	repo := newBizOrderRepository(framework.DB)
+	o := &BizOrder{
+		UserID:     uint(uid),
+		BizType:    BizSeatNew,
+		Status:     BizOrderUnpaid,
+		TotalCents: 3000,
+		PayMethod:  PayBalance,
+	}
+	item := BizOrderItem{
+		TargetKind: KindSeat, Quantity: 1, DurationValue: 0,
+		UnitPriceCents: 3000, AmountCents: 3000,
+		QtyDiscountBps: DiscountBpsFull, DurationDiscountBps: DiscountBpsFull,
+		DurationUnit: "month",
+	}
+	require.NoError(t, repo.create(o, []BizOrderItem{item}))
+
+	// 支付：扣款成功、履约失败 → 整单事务回滚，PayOrder 返回错误。
+	_, err = BizOrderService.PayOrder(uid, int(o.ID))
+	require.Error(t, err, "履约失败应导致整单支付失败")
+
+	// 断言 1：订单仍 unpaid、未标记支付时间。
+	reloaded, _, err := repo.get(int(o.ID))
+	require.NoError(t, err)
+	assert.Equal(t, BizOrderUnpaid, reloaded.Status, "订单应回滚为未支付")
+	assert.Nil(t, reloaded.PaidAt, "回滚后不应有支付时间")
+
+	// 断言 2：billing_license_units 无该订单履约出的行。
+	var unitCount int64
+	require.NoError(t, framework.DB.Model(&LicenseUnit{}).
+		Where("user_id = ? AND source_ref = ?", uid, "biz_order:"+strconv.Itoa(int(o.ID))).
+		Count(&unitCount).Error)
+	assert.Equal(t, int64(0), unitCount, "履约回滚后不应残留授权单元")
+
+	// 断言 3：余额未减（扣款随事务回滚）。
+	balAfter, err := WalletService.BalanceCents(uid)
+	require.NoError(t, err)
+	assert.Equal(t, balBefore, balAfter, "扣款应随事务回滚，余额不变")
+
+	// 断言 4：billing_ledger_entries 无该订单的 purchase 扣款条目。
+	var chargeCount int64
+	require.NoError(t, framework.DB.Model(&LedgerEntry{}).
+		Where("user_id = ? AND type = ? AND order_id = ?", uid, LedgerPurchase, o.ID).
+		Count(&chargeCount).Error)
+	assert.Equal(t, int64(0), chargeCount, "扣款流水应随事务回滚")
 }
