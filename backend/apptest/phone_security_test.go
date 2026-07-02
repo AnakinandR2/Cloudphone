@@ -1,0 +1,79 @@
+package apptest
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	"manager-backend/framework"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// I1/X10 回归：前台经通用 /phone/update 把 status 篡改为 RECYCLED 应被服务端白名单丢弃，
+// 否则可让实例逃过 listNonRecycledByUser 的席位统计（绕过席位计费）或让回收站实例逃逸清理。
+// 真实 HTTP：registerUser → 直接 INSERT 一个 active seat → 建机 → PUT update{status:RECYCLED}
+// → 200 且响应 data.status 保持服务端值；再查 cloud_phones 该行 status 列仍为原值（未被篡改）。
+func TestPhoneUpdateStatusMassAssignmentBlockedHTTP(t *testing.T) {
+	r := setupRouter()
+
+	// 唯一手机号，避免撞库（不截断共享表）；用完删自己这一行，支持 -count>1 重跑。
+	phone := "13900920401"
+	t.Cleanup(func() { framework.DB.Exec("DELETE FROM users WHERE phone = ?", phone) })
+	token := registerUser(t, r, phone)
+
+	// 由手机号回查前台用户 ID（apptest 不能 import user internal，走 framework.DB 原生查 users 表）。
+	var userID int
+	require.NoError(t, framework.DB.Raw("SELECT id FROM users WHERE phone = ?", phone).Scan(&userID).Error)
+	require.NotZero(t, userID, "注册后应能按手机号查到用户 ID")
+
+	// 建机需要席位：直接 INSERT 一个未过期的 active seat 授权单元（billing_license_units）。
+	// 该用户初始非回收实例数 0 < 容量 1 → 允许建 1 台。
+	now := time.Now()
+	require.NoError(t, framework.DB.Exec(
+		`INSERT INTO billing_license_units
+		 (user_id, kind, status, current_instance_id, source, source_ref, order_item_id, expire_at, created_at, updated_at)
+		 VALUES (?, 'seat', 'active', '', 'grant', 'test:I1', 0, ?, ?, ?)`,
+		userID, now.Add(24*time.Hour), now, now,
+	).Error)
+	t.Cleanup(func() {
+		framework.DB.Exec("DELETE FROM billing_license_units WHERE user_id = ?", userID)
+	})
+
+	// 建机（无中台配置 → 走本地档案，直接置 CREATED；不触中台）。唯一 name。
+	name := fmt.Sprintf("I1机-%d", now.UnixNano())
+	w := doJSON(r, "POST", "/api/v1/phone/create", token, map[string]interface{}{"name": name})
+	require.Equal(t, http.StatusOK, w.Code, "建机应 200: %s", w.Body.String())
+	created := decode(t, w).Data.(map[string]interface{})
+	phoneID := int(created["id"].(float64))
+	require.NotZero(t, phoneID)
+	initialStatus := created["status"].(string) // 本地降级建机 → CREATED
+	t.Cleanup(func() {
+		framework.DB.Exec("DELETE FROM cloud_phones WHERE id = ?", phoneID)
+	})
+	require.Equal(t, "CREATED", initialStatus, "本地降级建机初始状态应为 CREATED")
+
+	// 越权尝试：通用 update 携带 status:RECYCLED（外加合法 name 改动，确保确实进了 update 分支）。
+	uw := doJSON(r, "PUT", fmt.Sprintf("/api/v1/phone/update/%d", phoneID), token, map[string]interface{}{
+		"name":   name + "-改名",
+		"status": "RECYCLED",
+	})
+	require.Equal(t, http.StatusOK, uw.Code, "update 应 200: %s", uw.Body.String())
+	resp := decode(t, uw)
+	require.Equal(t, 0, resp.Code)
+	updated := resp.Data.(map[string]interface{})
+
+	// 断言①：响应 data.status 未被前台篡改为 RECYCLED，保持服务端状态机的值（原始 CREATED）。
+	assert.NotEqual(t, "RECYCLED", updated["status"], "前台不得通过 update 把 status 置为 RECYCLED")
+	assert.Equal(t, initialStatus, updated["status"], "status 应保持服务端值，未被篡改")
+	// 合法字段 name 应生效，证明 update 确实执行、仅 status 被白名单丢弃。
+	assert.Equal(t, name+"-改名", updated["name"], "合法字段 name 应更新成功")
+
+	// 断言②：直查 cloud_phones 该行 status 列仍为原值（DB 层未被写脏）。
+	var dbStatus string
+	require.NoError(t, framework.DB.Raw("SELECT status FROM cloud_phones WHERE id = ?", phoneID).Scan(&dbStatus).Error)
+	assert.Equal(t, initialStatus, dbStatus, "DB 中 status 列不应被前台 update 篡改")
+	assert.NotEqual(t, "RECYCLED", dbStatus)
+}
