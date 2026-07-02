@@ -149,6 +149,9 @@ func (s *serviceImpl) ensureFinalized(userID int, fileID uint) {
 	}()
 }
 
+// maxAppFileBytes 单个应用文件（apk/xapk）可解析的大小上限，防超大文件解析打爆内存/磁盘（O3）。
+const maxAppFileBytes int64 = 1 << 30 // 1 GiB
+
 // FinalizeUserApp 回读素材库对象 → 解析元数据/图标 → 落 app_user_meta（ready/failed），返回该应用 DTO。
 func (s *serviceImpl) FinalizeUserApp(userID int, fileID uint) (*UserAppDTO, error) {
 	content, err := library.OpenFileContent(userID, fileID)
@@ -157,6 +160,11 @@ func (s *serviceImpl) FinalizeUserApp(userID int, fileID uint) (*UserAppDTO, err
 	}
 	defer content.Reader.Close()
 
+	// 大小门控：超大文件解析（zip 解压/图标解码）易打爆内存/磁盘，早拒（O3）。
+	if content.SizeBytes > maxAppFileBytes {
+		return nil, apperr.Validation("应用文件过大，无法解析")
+	}
+
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(content.Name), "."))
 	tmp, err := os.CreateTemp("", "appfinalize-*."+ext)
 	if err != nil {
@@ -164,7 +172,8 @@ func (s *serviceImpl) FinalizeUserApp(userID int, fileID uint) (*UserAppDTO, err
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
-	if _, err := io.Copy(tmp, content.Reader); err != nil {
+	// LimitReader 兜底：即便 content.Size 元数据谎报，也不会把超上限字节写进临时文件。
+	if _, err := io.Copy(tmp, io.LimitReader(content.Reader, maxAppFileBytes)); err != nil {
 		_ = tmp.Close()
 		return nil, apperr.Internal("回读文件失败")
 	}

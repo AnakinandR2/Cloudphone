@@ -192,7 +192,7 @@ func parseXAPK(path string, res *ParsedApp) error {
 	if iconName == "" {
 		iconName = "icon.png"
 	}
-	if data, ok := readZipEntry(&zr.Reader, iconName); ok {
+	if data, ok := readZipEntry(&zr.Reader, iconName, maxIconBytes); ok {
 		if png, err := toPNG(data); err == nil {
 			res.IconPNG = png
 		}
@@ -230,7 +230,7 @@ type xapkManifest struct {
 
 func readXAPKManifest(zr *zip.Reader) (xapkManifest, error) {
 	var man xapkManifest
-	data, ok := readZipEntry(zr, "manifest.json")
+	data, ok := readZipEntry(zr, "manifest.json", maxManifestBytes)
 	if !ok {
 		return man, fmt.Errorf("apkparse: manifest.json not found")
 	}
@@ -247,7 +247,7 @@ func fillFromBaseAPK(zr *zip.Reader, man xapkManifest, res *ParsedApp) {
 	if name == "" {
 		return
 	}
-	data, ok := readZipEntry(zr, name)
+	data, ok := readZipEntry(zr, name, maxBaseAPKBytes)
 	if !ok {
 		return
 	}
@@ -317,9 +317,21 @@ func zipFile(zr *zip.Reader, name string) (*zip.File, bool) {
 	return nil, false
 }
 
-func readZipEntry(zr *zip.Reader, name string) ([]byte, bool) {
+// 解析各类 zip 条目的解压上限（防压缩炸弹：小体积包声明超大解压条目打爆内存，O3）。
+const (
+	maxManifestBytes int64 = 4 << 20   // manifest.json / 小文本条目
+	maxIconBytes     int64 = 16 << 20  // 图标条目
+	maxBaseAPKBytes  int64 = 512 << 20 // xapk 内嵌基础 apk 条目
+)
+
+// readZipEntry 读取指定 zip 条目，最多 max 字节：声明解压大小超上限直接拒绝（不解压），
+// 并对实际读取再用 LimitReader 兜底（防条目头谎报大小）。
+func readZipEntry(zr *zip.Reader, name string, max int64) ([]byte, bool) {
 	f, ok := zipFile(zr, name)
 	if !ok {
+		return nil, false
+	}
+	if f.UncompressedSize64 > uint64(max) {
 		return nil, false
 	}
 	rc, err := f.Open()
@@ -327,7 +339,7 @@ func readZipEntry(zr *zip.Reader, name string) ([]byte, bool) {
 		return nil, false
 	}
 	defer rc.Close()
-	data, err := io.ReadAll(rc)
+	data, err := io.ReadAll(io.LimitReader(rc, max))
 	if err != nil {
 		return nil, false
 	}
@@ -352,6 +364,9 @@ func scanZipForLauncherIcon(path string) []byte {
 		if !isLauncherIconEntry(f.Name) {
 			continue
 		}
+		if f.UncompressedSize64 > uint64(maxIconBytes) {
+			continue // 跳过异常大的图标条目（防压缩炸弹用超大声明诱导选中）
+		}
 		if best == nil || f.UncompressedSize64 > best.UncompressedSize64 {
 			best = f
 		}
@@ -365,7 +380,7 @@ func scanZipForLauncherIcon(path string) []byte {
 		return nil
 	}
 	defer rc.Close()
-	data, err := io.ReadAll(rc)
+	data, err := io.ReadAll(io.LimitReader(rc, maxIconBytes))
 	if err != nil {
 		return nil
 	}
