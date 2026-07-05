@@ -645,8 +645,6 @@ export default {
       more: 'More',
       clean: 'Clean',
       accelerate: 'Boost',
-      detectIp: 'Detect IP',
-      detectIpSoon: 'Redirecting to the IP detection site (under development)',
       accelerateConfirm: 'This will close all app processes. Continue?',
       cleanConfirm: 'Clean sdcard files and uploaded files?',
       comingSoon: 'Feature under development',

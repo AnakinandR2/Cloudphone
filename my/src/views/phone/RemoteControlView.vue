@@ -20,7 +20,6 @@ import {
   RefreshCw,
   Rocket,
   RotateCw,
-  Search,
   SignalHigh,
   Square,
   TabletSmartphone,
@@ -191,11 +190,6 @@ const confirmState = ref<{ open: boolean, title: string, desc: string, run: () =
 })
 function ask(title: string, desc: string, run: () => void) {
   confirmState.value = { open: true, title, desc, run }
-}
-
-// 检测 IP：点击后将跳转到 IP 检测网站（开发中）。
-function detectIp() {
-  toast.info(t('phone.rc.detectIpSoon'))
 }
 
 // 加速：确认将关闭所有 APP 进程。
@@ -654,9 +648,6 @@ onBeforeUnmount(() => {
             </DropdownMenuItem>
             <DropdownMenuItem @click="boost">
               <Rocket class="size-4" /> {{ t('phone.rc.accelerate') }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @click="detectIp">
-              <Search class="size-4" /> {{ t('phone.rc.detectIp') }}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

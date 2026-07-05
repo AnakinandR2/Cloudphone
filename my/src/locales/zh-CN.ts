@@ -645,8 +645,6 @@ export default {
       more: '更多',
       clean: '清理',
       accelerate: '加速',
-      detectIp: '检测 IP',
-      detectIpSoon: '即将跳转到 IP 检测网站（开发中）',
       accelerateConfirm: '将关闭所有 APP 进程，确定要继续吗？',
       cleanConfirm: '确定要清理 sdcard 文件和上传的文件吗？',
       comingSoon: '功能正在开发中',
