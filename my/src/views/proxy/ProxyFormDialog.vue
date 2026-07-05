@@ -52,6 +52,23 @@ function emptyForm() {
 }
 const form = reactive(emptyForm())
 
+// 脏值检测（#57）：编辑态未做任何改动时禁用「确认」按钮。以「打开弹窗回填后的快照」为基准，
+// 归一化各字段（port 数字/字符串统一按字符串比对），任一字段与初值不同即视为已改动。
+function fingerprint() {
+  return JSON.stringify({
+    name: form.name,
+    protocol: form.protocol || 'socks5',
+    host: String(form.host),
+    port: String(form.port),
+    username: form.username,
+    password: form.password,
+    region: form.region,
+    remark: form.remark,
+  })
+}
+const initialFingerprint = ref('')
+const isDirty = computed(() => fingerprint() !== initialFingerprint.value)
+
 const dialogTitle = computed(() =>
   props.mode === 'view'
     ? t('proxy.viewTitle')
@@ -71,6 +88,8 @@ watch(open, async (v) => {
       const res = await proxyApi.detail(props.id)
       Object.assign(form, res.data, { password: '' })
     }
+    // 回填完成后记录基准快照，供编辑态脏值检测（#57）。
+    initialFingerprint.value = fingerprint()
   }
 })
 
@@ -249,7 +268,8 @@ async function submit() {
         <Button variant="outline" @click="open = false">
           {{ readonly ? t('crud.close') : t('crud.cancel') }}
         </Button>
-        <Button v-if="!readonly" :disabled="submitting" @click="submit">
+        <!-- 编辑态未改动任何字段时禁用确认（#57）；新增态不受此限。 -->
+        <Button v-if="!readonly" :disabled="submitting || (props.mode === 'edit' && !isDirty)" @click="submit">
           {{ t('crud.confirm') }}
         </Button>
       </DialogFooter>
