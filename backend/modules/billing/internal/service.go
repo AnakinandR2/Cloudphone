@@ -17,8 +17,9 @@ func (s *serviceImpl) GetAccount(userID int) (*Account, error) {
 
 // Topup 充值入账（计划1 为桩：直接增加余额；计划4 改由支付网关回调驱动）。
 func (s *serviceImpl) Topup(userID int, amountCents int64, reason, operator string) (*Account, error) {
-	if amountCents <= 0 {
-		return nil, apperr.Validation("充值金额必须大于0")
+	// 边界校验含单次上限（CP-0041 / #37），与 biz 充值口径一致，防直接打此 API 越界大额充值。
+	if err := validateRechargeAmount(amountCents); err != nil {
+		return nil, err
 	}
 	return s.repo.applyBalance(userID, amountCents, LedgerTopup, reason, 0, operator)
 }

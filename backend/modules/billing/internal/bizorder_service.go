@@ -15,6 +15,21 @@ import (
 // 用于中止事务但对调用方视为幂等成功（非真实错误，外层用 errors.Is 吞掉）。
 var errOrderAlreadyPaid = errors.New("order already paid")
 
+// MaxRechargeCents 单次充值面额上限（分）= ¥100000，防异常大额充值（资损/风控）。CP-0041。
+const MaxRechargeCents int64 = 10_000_000
+
+// validateRechargeAmount 充值面额边界校验（CP-0041 / #37）：须为正整数分、且不超过单次上限。
+// 前端已拦截小数精度（>2 位小数），后端收到的是整数分，这里做正负/上限兜底（含直接打 API 的场景）。
+func validateRechargeAmount(cents int64) error {
+	if cents <= 0 {
+		return apperr.Validation("充值金额必须大于0")
+	}
+	if cents > MaxRechargeCents {
+		return apperr.Validation("单次充值金额不能超过 ¥" + strconv.FormatInt(MaxRechargeCents/100, 10))
+	}
+	return nil
+}
+
 // bizOrderServiceImpl 新购买模型订单服务：报价 → 下单 → 支付 → 统一履约。
 type bizOrderServiceImpl struct {
 	db      *gorm.DB
@@ -133,8 +148,8 @@ func (s *bizOrderServiceImpl) CreateOrder(userID int, req *BizOrderCreate) (*Biz
 
 	switch req.BizType {
 	case BizRecharge:
-		if req.AmountCents <= 0 {
-			return nil, apperr.Validation("充值金额必须大于0")
+		if err := validateRechargeAmount(req.AmountCents); err != nil {
+			return nil, err
 		}
 		order.TotalCents = req.AmountCents
 		item = BizOrderItem{TargetKind: SubjectBalance, Quantity: 1, AmountCents: req.AmountCents, UnitPriceCents: req.AmountCents, QtyDiscountBps: DiscountBpsFull, DurationDiscountBps: DiscountBpsFull}

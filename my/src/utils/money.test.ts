@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { computeFeeCents, feeWaived, fmtCents, fmtDiscountBps, fmtFeeHint } from './money'
+import { computeFeeCents, feeWaived, fmtCents, fmtDiscountBps, fmtFeeHint, MAX_RECHARGE_CENTS, validateRechargeYuan } from './money'
+
+describe('validateRechargeYuan (CP-0041)', () => {
+  it('两位小数有效', () => {
+    expect(validateRechargeYuan(0.11)).toEqual({ cents: 11, error: '' })
+    expect(validateRechargeYuan(100)).toEqual({ cents: 10000, error: '' })
+  })
+  it('超过两位小数拒绝（不静默截断）', () => {
+    expect(validateRechargeYuan(0.1121132131)).toEqual({ cents: 0, error: 'precision' })
+    expect(validateRechargeYuan(0.115)).toEqual({ cents: 0, error: 'precision' })
+  })
+  it('空/零/负 → required', () => {
+    expect(validateRechargeYuan(undefined).error).toBe('required')
+    expect(validateRechargeYuan(0).error).toBe('required')
+    expect(validateRechargeYuan(-5).error).toBe('required')
+  })
+  it('超过单次上限 → max；等于上限放行', () => {
+    expect(validateRechargeYuan(100000.01).error).toBe('max')
+    expect(validateRechargeYuan(100000)).toEqual({ cents: MAX_RECHARGE_CENTS, error: '' })
+  })
+})
 
 describe('money', () => {
   it('分→元两位小数', () => {

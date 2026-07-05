@@ -1228,6 +1228,8 @@ export default {
       rechargePayable: 'Payable',
       rechargeConfirm: 'Confirm recharge',
       rechargeAmountRequired: 'Please enter a valid amount',
+      rechargeAmountPrecision: 'At most 2 decimal places (down to cents)',
+      rechargeAmountMax: 'A single recharge cannot exceed ¥{max}',
       rechargeOk: 'Recharge succeeded, balance updated',
       // renew
       renewSearchPlaceholder: 'Search instance name / ID',

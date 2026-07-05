@@ -8,7 +8,7 @@ import billingApi from '@/api/modules/billing'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
-import { computeFeeCents, feeWaived, fmtCents, fmtFeeHint } from '@/utils/money'
+import { computeFeeCents, feeWaived, fmtCents, fmtFeeHint, MAX_RECHARGE_CENTS, validateRechargeYuan } from '@/utils/money'
 import PaymentBox from './PaymentBox.vue'
 import { feeOf } from './useQuote'
 
@@ -27,15 +27,23 @@ const customYuan = ref<number | undefined>(undefined)
 const payMethod = ref('')
 const submitting = ref(false)
 
+// 自定义金额校验（CP-0041 / #37）：拒绝 >2 位小数（不静默截断）、越上限，纯函数集中判定。
+const customCheck = computed(() => validateRechargeYuan(customYuan.value))
 const amountCents = computed(() => {
-  if (presetCents.value === 'custom') {
-    const y = customYuan.value
-    if (!y || y <= 0) return 0
-    return Math.round(y * 100)
-  }
+  if (presetCents.value === 'custom')
+    return customCheck.value.error ? 0 : customCheck.value.cents
   return presetCents.value
 })
-const customInvalid = computed(() => presetCents.value === 'custom' && amountCents.value <= 0)
+const customInvalid = computed(() => presetCents.value === 'custom' && !!customCheck.value.error)
+// 就地错误文案：仅对「精度/上限」这类明确非法给出提示；空输入不飘红文案（交给确认时兜底）。
+const customError = computed(() => {
+  if (presetCents.value !== 'custom') return ''
+  switch (customCheck.value.error) {
+    case 'precision': return t('billing.purchase2.rechargeAmountPrecision')
+    case 'max': return t('billing.purchase2.rechargeAmountMax', { max: fmtCents(MAX_RECHARGE_CENTS) })
+    default: return ''
+  }
+})
 
 // 选中的支付方式（充值不允许余额方式；缺省视为无手续费、无 logo）。
 const selectedMethod = computed(() => feeOf(props.config.payment_methods, payMethod.value))
@@ -72,6 +80,11 @@ const feeLogoMark = computed(() => {
 })
 
 async function confirm() {
+  // 自定义金额非法（精度/上限/空）→ 优先给出具体原因，绝不带着被截断的金额下单。
+  if (presetCents.value === 'custom' && customCheck.value.error) {
+    toast.error(customError.value || t('billing.purchase2.rechargeAmountRequired'))
+    return
+  }
   if (amountCents.value <= 0) {
     toast.error(t('billing.purchase2.rechargeAmountRequired'))
     return
@@ -131,6 +144,7 @@ async function confirm() {
           v-model.number="customYuan"
           type="number"
           min="0.01"
+          max="100000"
           step="0.01"
           class="h-9 w-40 tabular-nums"
           :aria-invalid="customInvalid"
@@ -138,6 +152,7 @@ async function confirm() {
         />
         <span class="text-muted-foreground text-sm">{{ t('billing.purchase2.yuan') }}</span>
       </div>
+      <p v-if="customError" class="text-xs text-red-600">{{ customError }}</p>
     </div>
 
     <Separator />

@@ -1228,6 +1228,8 @@ export default {
       rechargePayable: '应付金额',
       rechargeConfirm: '确认充值',
       rechargeAmountRequired: '请输入有效的充值金额',
+      rechargeAmountPrecision: '金额最多两位小数（精确到分）',
+      rechargeAmountMax: '单次充值不能超过 ¥{max}',
       rechargeOk: '充值成功，余额已更新',
       // 续费
       renewSearchPlaceholder: '搜索实例名 / ID',

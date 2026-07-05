@@ -116,6 +116,31 @@ func TestBizOrder_RenewAccumulatesExpiry(t *testing.T) {
 	assert.WithinDuration(t, before.AddDate(0, 3, 0), after[0].ExpireAt, 24*time.Hour)
 }
 
+// #37（CP-0041）：充值面额边界——≤0 与超过单次上限均拒绝；边界值放行。
+func TestBizOrder_RechargeAmountBounds(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("billing_biz_orders", "billing_biz_order_items")
+	})
+	uid := 950040
+
+	_, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizRecharge, AmountCents: 0, PayMethod: PayAlipay,
+	})
+	assert.Error(t, err, "充值金额为 0 应拒绝")
+
+	_, err = BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizRecharge, AmountCents: MaxRechargeCents + 1, PayMethod: PayAlipay,
+	})
+	assert.Error(t, err, "超过单次上限应拒绝")
+
+	// 边界值（正好等于上限）放行。
+	res, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
+		BizType: BizRecharge, AmountCents: MaxRechargeCents, PayMethod: PayAlipay,
+	})
+	require.NoError(t, err, "等于上限应放行")
+	assert.Equal(t, MaxRechargeCents, res.Order.TotalCents)
+}
+
 func TestBizOrder_RechargeRejectsBalancePay(t *testing.T) {
 	uid := 950003
 	_, err := BizOrderService.CreateOrder(uid, &BizOrderCreate{
