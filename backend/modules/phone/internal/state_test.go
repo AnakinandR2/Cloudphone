@@ -264,6 +264,43 @@ func TestDestroyGating(t *testing.T) {
 	assert.Error(t, PhoneService.Delete(userA, int(u.ID)), "实时态未知应拒绝销毁")
 }
 
+// 对外主销毁 Destroy 的门禁（CP-0071 回归守护）：过渡/运行态不可销毁；CREATE_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。
+// 三个对外入口（/phone/{id}/destroy、openapi、mcp）都汇到 PhoneService.Destroy——门禁漏在此处即运行中真机可经 API 直接销毁。
+func TestDestroyServiceGating(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
+	f := &fakePort{statuses: map[string]string{
+		"cp-INITIALIZING": "INITIALIZING",
+		"cp-STARTING":     "STARTING",
+		"cp-NORMAL":       "NORMAL",
+		"cp-DESTROYING":   "DESTROYING",
+		"cp-ok-failed":    "INIT_FAILED",
+		"cp-ok-stopped":   "STOPPED",
+	}}
+	withFakeOps(t, f)
+
+	// 运行中/过渡态：一律拒绝，且不得触达中台销毁、不得删本地档案。
+	for _, raw := range []string{"INITIALIZING", "STARTING", "NORMAL", "DESTROYING"} {
+		p := insertPhone(t, userA, StatusRunning, "cp-"+raw)
+		assert.Error(t, PhoneService.Destroy(userA, int(p.ID)), raw+" 不应可销毁")
+		assert.NotEqual(t, "destroy", f.lastOp, raw+" 被门禁拦下，不应触达中台销毁")
+		_, err := PhoneService.GetByID(userA, int(p.ID))
+		assert.NoError(t, err, raw+" 被拒后本地档案应保留")
+	}
+
+	// 可销毁（中台 INIT_FAILED / STOPPED）：过门禁 → 调中台 destroy + 立即删本地档案。
+	// 注：Destroy 收尾会跑 reconcileSeats（可能关停溢出实例）覆盖 f.lastOp，故以「本地档案已删除」判成功。
+	for _, cp := range []string{"cp-ok-failed", "cp-ok-stopped"} {
+		p := insertPhone(t, userA, StatusStopped, cp)
+		require.NoError(t, PhoneService.Destroy(userA, int(p.ID)), cp+" 应可销毁")
+		_, err := PhoneService.GetByID(userA, int(p.ID))
+		assert.Error(t, err, "销毁后本地档案应被删除")
+	}
+
+	// 中台查不到（UNKNOWN）→ 拒绝。
+	u := insertPhone(t, userA, StatusStopped, "cp-unknown")
+	assert.Error(t, PhoneService.Destroy(userA, int(u.ID)), "实时态未知应拒绝销毁")
+}
+
 // 销毁 worker：中台确认实例消失（查不到）后删本地档案。
 func TestWorkerDestroyRemovesRecord(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })

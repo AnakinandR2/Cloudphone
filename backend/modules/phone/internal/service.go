@@ -403,6 +403,20 @@ func (s *serviceImpl) Update(userID, id int, req *CloudPhoneUpdate) (*CloudPhone
 	return s.GetByIDDisplay(userID, id)
 }
 
+// destroyGate 按中台实时态判定销毁门禁：仅 STOPPED/CREATED/CREATE_FAILED 三终态可销毁（返回 nil）。
+// 运行中/过渡态（RUNNING/STARTING/DESTROYING…）返回「须先停止」；UNKNOWN 返回「稍后重试」。
+// CP-0071：Delete 与对外主销毁 Destroy 共用此门禁，避免两条销毁路径门禁漂移导致运行中真机被绕过前端直接销毁。
+func destroyGate(live string) error {
+	switch live {
+	case StatusStopped, StatusCreated, StatusCreateFailed:
+		return nil
+	case StatusUnknown:
+		return apperr.Validation("状态未知，请稍后重试")
+	default:
+		return apperr.Validation("当前状态不可销毁，请先停止")
+	}
+}
+
 // Delete 销毁一台云手机（异步）。
 // 状态门禁：CREATING/STARTING/RUNNING/DESTROYING 不可销毁；CREATE_FAILED/CREATED/STOPPED 可销毁。
 //   - 有中台实例（cp_id 非空且中台已配置）：调中台 destroy → 置 DESTROYING + 销毁任务，
@@ -418,13 +432,8 @@ func (s *serviceImpl) Delete(userID, id int) error {
 		ctx, cancel := opCtx()
 		live := s.liveStatus(ctx, p.CpID)
 		cancel()
-		switch live {
-		case StatusStopped, StatusCreated, StatusCreateFailed:
-			// 可销毁
-		case StatusUnknown:
-			return apperr.Validation("状态未知，请稍后重试")
-		default:
-			return apperr.Validation("当前状态不可销毁，请先停止")
+		if err := destroyGate(live); err != nil {
+			return err
 		}
 	}
 	if p.CpID == "" || s.ops == nil {
@@ -646,6 +655,11 @@ func (s *serviceImpl) Destroy(userID, id int) error {
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
+	// CP-0071 门禁：按中台实时态校验，运行中/过渡态真机不可销毁（须先停止）。
+	// 前端靠 canDestroy 隐藏按钮，但接口可直连——门禁必须在后端二次校验，防运行中真机被误销/越权销毁。
+	if err := destroyGate(s.liveStatus(ctx, p.CpID)); err != nil {
+		return err
+	}
 	if err := s.ops.Destroy(ctx, p.CpID); err != nil {
 		return err
 	}

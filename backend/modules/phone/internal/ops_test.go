@@ -384,7 +384,7 @@ func TestOpErrorPropagates(t *testing.T) {
 
 func TestOpDestroyRemovesLocalRecord(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones") })
-	f := &fakePort{}
+	f := &fakePort{statuses: map[string]string{"cp-aaa": "STOPPED"}} // 实时态 STOPPED：过销毁门禁（CP-0071）
 	withFakeOps(t, f)
 	id := provisionedPhone(t, userA, "cp-aaa")
 
