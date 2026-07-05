@@ -118,6 +118,13 @@ func normalizeProtocol(p string) string {
 // --- 前台（属主隔离）---
 
 func (s *serviceImpl) GetList(userID, page, size int, kw, order, sort string) ([]Proxy, int64, error) {
+	// 分页下界 clamp（CP-0004）：size=0/负值或超上限直进 GORM Limit 会返空/全表，回落默认。
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 200 {
+		size = 20
+	}
 	total, err := s.repo.count(userID, kw)
 	if err != nil {
 		return nil, 0, err
@@ -334,6 +341,13 @@ func (s *serviceImpl) Delete(userID, id int) error {
 // --- 管理侧（不限属主）---
 
 func (s *serviceImpl) AdminList(page, size int, kw, status, order, sort string) ([]Proxy, int64, error) {
+	// 分页下界 clamp（CP-0004）：与 GetList 同源，避免 size=0/负值返空、超大 size 全表扫描。
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 200 {
+		size = 20
+	}
 	total, err := s.repo.adminCount(kw, status)
 	if err != nil {
 		return nil, 0, err

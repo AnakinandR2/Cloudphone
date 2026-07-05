@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"manager-backend/framework"
@@ -220,6 +221,51 @@ func TestProxyRejectsPortOutOfRange(t *testing.T) {
 
 	_, err = ProxyService.BatchCreate(userA, []ProxyCreate{{Name: "bx", Host: "2.2.2.2", Port: 111111}})
 	assert.Error(t, err, "批量含越界端口应整批拒绝")
+}
+
+// CP-0004 子点②回归守护：名称超 100 字符应拒绝（校验在 CP-0055/#48 引入，此处补守护）。
+func TestProxyRejectsNameTooLong(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	long := strings.Repeat("代", 101) // 101 个字符，超 100 上限
+	_, err := ProxyService.Create(userA, &ProxyCreate{Name: long, Host: "1.1.1.1", Port: 1080})
+	assert.Error(t, err, "名称>100 字符应拒绝")
+
+	ok, err := ProxyService.Create(userA, &ProxyCreate{Name: strings.Repeat("a", 100), Host: "1.1.1.1", Port: 1080})
+	require.NoError(t, err, "名称=100 边界应通过")
+	_, err = ProxyService.Update(userA, int(ok.ID), &ProxyUpdate{Name: long})
+	assert.Error(t, err, "更新到超长名称应拒绝")
+}
+
+// CP-0004：分页 size=0 / 负值 / page<1 应回落默认（下界 clamp），而非直进 GORM Limit 返空。
+func TestProxyListSizeClamp(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	_, err := ProxyService.Create(userA, sampleCreate("c1", "10.0.0.1"))
+	require.NoError(t, err)
+	_, err = ProxyService.Create(userA, sampleCreate("c2", "10.0.0.2"))
+	require.NoError(t, err)
+
+	// size=0：应回落默认页大小并返回全部 2 条，而非空 list（total 仍为 2）。
+	list, total, err := ProxyService.GetList(userA, 1, 0, "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	assert.Len(t, list, 2, "size=0 应回落默认，不应返回空 list")
+
+	// size 负值同样回落默认。
+	list, _, err = ProxyService.GetList(userA, 1, -5, "", "", "")
+	require.NoError(t, err)
+	assert.Len(t, list, 2, "size<0 应回落默认")
+
+	// page<1：应回落到第 1 页（offset 不为负），仍返回数据。
+	list, _, err = ProxyService.GetList(userA, 0, 10, "", "", "")
+	require.NoError(t, err)
+	assert.Len(t, list, 2, "page<1 应回落第 1 页")
+
+	// 管理侧分页同样具备下界 clamp。
+	adminList, _, err := ProxyService.AdminList(0, 0, "", "", "", "")
+	require.NoError(t, err)
+	assert.Len(t, adminList, 2, "AdminList size=0/page<1 应回落默认")
 }
 
 // #55：名称同属主唯一（创建 / 更新 / 批量）；不同用户可同名。
