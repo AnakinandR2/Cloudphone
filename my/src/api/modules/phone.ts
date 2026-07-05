@@ -39,8 +39,9 @@ export default {
   delete: (id: number) => api.delete<unknown, R<null>>(`phone/delete/${id}`),
 
   // ---- 实例操作（中台）----
+  // 开机成功但绑定代理短超时探测未通过时，data 携带非阻断告警 { warning }（CP-0028）；否则 data 为 null。
   power: (id: number, operation: '开机' | '关机') =>
-    api.post<unknown, R<null>>(`phone/${id}/power`, { operation }),
+    api.post<unknown, R<{ warning?: string } | null>>(`phone/${id}/power`, { operation }),
 
   restart: (id: number) => api.post<unknown, R<null>>(`phone/${id}/restart`),
 

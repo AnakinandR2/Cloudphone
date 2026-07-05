@@ -354,14 +354,30 @@ async function runOp(fn: () => Promise<unknown>, okMsg: string, refresh = true) 
   }
 }
 
-function powerOn(row: CloudPhone) {
+async function powerOn(row: CloudPhone) {
   // 业务硬约束：未绑定代理不可开机。前端提前拦截并引导去编辑里绑定代理（后端亦兜底）。
   if (!row.proxy_id || row.proxy_id <= 0) {
     toast.error(t('phone.op.needProxy'))
     openEdit(row)
     return
   }
-  runOp(() => phoneApi.power(row.id, '开机'), t('phone.op.powerOnOk'))
+  if (opBusy.value)
+    return
+  opBusy.value = true
+  try {
+    const res = await phoneApi.power(row.id, '开机')
+    // 开机成功；若后端附带代理连通性告警（短超时探测未通过，CP-0028 / #23），
+    // 黄色提示但不阻断——开机仍继续。
+    const warn = res?.data?.warning
+    if (warn)
+      toast.warning(warn)
+    else
+      toast.success(t('phone.op.powerOnOk'))
+    load()
+  }
+  finally {
+    opBusy.value = false
+  }
 }
 function powerOff(row: CloudPhone) {
   runOp(() => phoneApi.power(row.id, '关机'), t('phone.op.powerOffOk'))
