@@ -37,6 +37,49 @@ func statusOf(t *testing.T, id uint) string {
 	return p.Status
 }
 
+// CP-0019/#25 + CP-0021/#22：状态过滤须按中台实时态（与列表展示同源），本地 status 列滞后不得影响筛选/计数。
+func TestGetListStatusFilterUsesLiveStatus(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })
+	// 本地 status 全部落 CREATED（滞后），但中台实时态各异。
+	f := &fakePort{statuses: map[string]string{
+		"cp-a": "STOPPED", // 实时 → 已停止
+		"cp-b": "STOPPED", // 实时 → 已停止
+		"cp-c": "NORMAL",  // 实时 → 运行中
+	}}
+	withFakeOps(t, f)
+	insertPhone(t, userA, StatusCreated, "cp-a")
+	insertPhone(t, userA, StatusCreated, "cp-b")
+	insertPhone(t, userA, StatusCreated, "cp-c")
+
+	// 按「已停止」过滤：应按实时态返回 cp-a/cp-b（本地列全 CREATED，若按本地列过滤会返空）。
+	stopped, total, err := PhoneService.GetList(userA, 1, 20, "", StatusStopped, "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total, "已停止过滤应按实时态计数为 2")
+	require.Len(t, stopped, 2)
+	for _, p := range stopped {
+		assert.Equal(t, StatusStopped, p.Status)
+	}
+
+	// 按「运行中」过滤：返回 cp-c。
+	running, rtotal, err := PhoneService.GetList(userA, 1, 20, "", StatusRunning, "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rtotal)
+	require.Len(t, running, 1)
+	assert.Equal(t, "cp-c", running[0].CpID)
+
+	// 按「已创建」过滤：无一实时态为已创建（都已开通并映射到 STOPPED/RUNNING）→ 0（本地列滞后不得误匹配）。
+	created, ctotal, err := PhoneService.GetList(userA, 1, 20, "", StatusCreated, "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), ctotal, "本地列虽为 CREATED，但实时态无一为已创建")
+	assert.Len(t, created, 0)
+
+	// 全部（无过滤）：3 台，且计数一致（子过滤之和 = 全部）。
+	all, allTotal, err := PhoneService.GetList(userA, 1, 20, "", "", "", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), allTotal)
+	assert.Len(t, all, 3)
+}
+
 // 创建：调中台受理 → 落 CREATING + cpId + 创建任务。
 func TestCreateProvisionsViaMidplat(t *testing.T) {
 	t.Cleanup(func() {

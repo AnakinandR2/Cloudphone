@@ -64,11 +64,51 @@ var orderable = map[string]bool{"id": true, "name": true, "status": true, "creat
 // --- 前台（属主隔离）---
 
 func (s *serviceImpl) GetList(userID, page, size int, kw, status, tag, order, sort string) ([]CloudPhone, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 200 {
+		size = 20
+	}
+	orderClause := query.SafeOrder(order, sort, orderable, "id DESC")
+
+	// 状态过滤须按「中台实时态」判定（与列表展示同源）。本地 status 列会滞后于中台，
+	// 若直接按它过滤/计数会与展示对不上——按「已停止」查不到（CP-0019/#25）、各状态计数之和 != 全部（CP-0021/#22）。
+	// 故：有状态过滤且已接中台时，取匹配 kw/tag 的全部（不带 status、不分页）→ 解析实时态 → 内存按状态过滤 + 分页。
+	// 列表按属主隔离、数量有界（受席位上限约束），全量解析实时态代价可控；中台状态查询已批量。
+	if status != "" && s.ops != nil {
+		all, err := s.repo.list(userID, 0, -1, kw, "", tag, orderClause)
+		if err != nil {
+			return nil, 0, err
+		}
+		s.resolveLiveStatuses(all)
+		filtered := make([]CloudPhone, 0, len(all))
+		for _, p := range all {
+			if p.Status == status {
+				filtered = append(filtered, p)
+			}
+		}
+		total := int64(len(filtered))
+		start := (page - 1) * size
+		if start >= len(filtered) {
+			return []CloudPhone{}, total, nil
+		}
+		end := start + size
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		pageItems := filtered[start:end]
+		// 实时态已在上面解析，这里只补分页内的 ADB/Root 标记。
+		s.enrichAdb(pageItems)
+		s.enrichRoot(pageItems)
+		return pageItems, total, nil
+	}
+
+	// 无状态过滤（或本地降级无中台）：kw/tag/分页走 SQL；展示仍解析实时态。
 	total, err := s.repo.count(userID, kw, status, tag)
 	if err != nil {
 		return nil, 0, err
 	}
-	orderClause := query.SafeOrder(order, sort, orderable, "id DESC")
 	items, err := s.repo.list(userID, (page-1)*size, size, kw, status, tag, orderClause)
 	if err != nil {
 		return nil, 0, err
