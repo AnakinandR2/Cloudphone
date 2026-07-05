@@ -17,7 +17,7 @@ func meteringCleanup(t *testing.T) {
 		framework.CleanTable("cloud_phones", "run_sessions",
 			"billing_license_units", "billing_ledger_entries",
 			"billing_runtime_minute_wallets", "billing_seat_usages",
-			"billing_dunning_states", "billing_entitlement_batches",
+			"billing_entitlement_batches",
 			"billing_runtime_settlements")
 	})
 }

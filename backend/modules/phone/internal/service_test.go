@@ -18,7 +18,7 @@ const (
 
 func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units", "proxies")
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units", "proxies")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	// I2 修复后 Create 绑代理需属主校验：先给 userA 建一条真实代理。
@@ -51,7 +51,7 @@ func TestCloudPhoneCRUDOwnedByUser(t *testing.T) {
 // 核心：用户只能看/改/删自己的云手机，访问他人的一律「不存在」。
 func TestCloudPhoneIsolationBetweenUsers(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	require.NoError(t, billing.GrantSeatLicensesForTest(userB, 5))
@@ -81,7 +81,7 @@ func TestCloudPhoneIsolationBetweenUsers(t *testing.T) {
 // 管理侧：看到全量实例（跨用户），支持按 userId/status 过滤，可强制删除。
 func TestCloudPhoneAdminListAllFilterDelete(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	require.NoError(t, billing.GrantSeatLicensesForTest(userB, 5))
@@ -112,7 +112,7 @@ func TestCloudPhoneAdminListAllFilterDelete(t *testing.T) {
 
 func TestCreateGatedByInstanceSeat(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
 	const u = 9501
 	_, err := PhoneService.Create(u, &CloudPhoneCreate{Name: "x"})

@@ -17,7 +17,7 @@ func miscCleanup(t *testing.T) {
 	t.Cleanup(func() {
 		framework.CleanTable("cloud_phones", "run_sessions", "cp_tasks",
 			"billing_license_units", "billing_ledger_entries",
-			"billing_seat_usages", "billing_dunning_states",
+			"billing_seat_usages",
 			"billing_entitlement_batches", "billing_runtime_minute_wallets")
 	})
 }

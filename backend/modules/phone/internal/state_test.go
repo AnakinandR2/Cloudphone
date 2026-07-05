@@ -83,7 +83,7 @@ func TestGetListStatusFilterUsesLiveStatus(t *testing.T) {
 // 创建：调中台受理 → 落 CREATING + cpId + 创建任务。
 func TestCreateProvisionsViaMidplat(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, &fakePort{createCpID: "cp-123"})
@@ -103,7 +103,7 @@ func TestCreateProvisionsViaMidplat(t *testing.T) {
 // 无中台（降级）：仅落本地档案，直接 CREATED，不建任务。
 func TestCreateDegradedWithoutMidplat(t *testing.T) {
 	t.Cleanup(func() {
-		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_dunning_states", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_seat_usages", "billing_entitlement_batches", "billing_ledger_entries", "billing_license_units")
 	})
 	require.NoError(t, billing.GrantSeatLicensesForTest(userA, 5))
 	withFakeOps(t, nil)

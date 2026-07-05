@@ -20,7 +20,7 @@ func recycleCleanup(t *testing.T) {
 	t.Cleanup(func() {
 		framework.CleanTable("cloud_phones", "cp_tasks", "run_sessions",
 			"billing_license_units", "billing_ledger_entries",
-			"billing_seat_usages", "billing_dunning_states",
+			"billing_seat_usages",
 			"billing_entitlement_batches", "billing_runtime_minute_wallets")
 	})
 }
