@@ -199,7 +199,7 @@ onMounted(load)
           </DataTable>
         </CardContent>
 
-        <ProxyFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" />
+        <ProxyFormDialog :id="dialog.id" v-model="dialog.open" :mode="dialog.mode" @success="load" @tested="load" />
         <ProxyImportDialog v-model="importOpen" @success="load" />
       </Card>
     </TabsContent>

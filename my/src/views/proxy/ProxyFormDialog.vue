@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label'
 
 const props = defineProps<{ id: number, mode: 'create' | 'edit' | 'view' }>()
 const open = defineModel<boolean>({ default: false })
-const emit = defineEmits<{ success: [] }>()
+const emit = defineEmits<{ success: [], tested: [] }>()
 
 const { t } = useI18n()
 const readonly = computed(() => props.mode === 'view')
@@ -94,7 +94,10 @@ watch(open, async (v) => {
   }
 })
 
-// 表单内即时测试：按当前填写的 host/port/用户名/密码探测，展示结果但不保存
+// 表单内测试：
+// - 编辑态（代理已存在）：走「落库测试」proxyApi.test(id)，无论成败都把结果+时间写回记录并
+//   同步到列表（CP-0042 / #38）；测试的是已保存参数。
+// - 新增态（尚未创建）：只能即时预览探测 proxyApi.probe（不落库），保存时再补落库测试。
 async function doProbe() {
   hostError.value = ''
   portError.value = ''
@@ -109,16 +112,36 @@ async function doProbe() {
   probing.value = true
   probeResult.value = null
   try {
-    const res = await proxyApi.probe({
-      host: String(form.host),
-      port: Number(form.port),
-      username: form.username,
-      password: form.password,
-    })
-    probeResult.value = res.data
-    toast[res.data.status === 'ok' ? 'success' : 'error'](
-      res.data.status === 'ok' ? t('proxy.testOk') : t('proxy.testFail'),
-    )
+    if (props.id !== 0) {
+      const res = await proxyApi.test(props.id)
+      const p = res.data
+      probeResult.value = {
+        status: p.status === 'ok' ? 'ok' : 'fail',
+        latency: p.latency,
+        egress_ip: p.egress_ip,
+        country: p.country,
+        city: p.city,
+        asn: p.asn,
+        asn_name: p.asn_name,
+        company: p.company,
+        conn_type: p.conn_type,
+        message: p.status === 'ok' ? '' : t('proxy.testFail'),
+      }
+      emit('tested') // 通知列表刷新，即便用户不保存直接关闭也已落库
+      toast[p.status === 'ok' ? 'success' : 'error'](p.status === 'ok' ? t('proxy.testOk') : t('proxy.testFail'))
+    }
+    else {
+      const res = await proxyApi.probe({
+        host: String(form.host),
+        port: Number(form.port),
+        username: form.username,
+        password: form.password,
+      })
+      probeResult.value = res.data
+      toast[res.data.status === 'ok' ? 'success' : 'error'](
+        res.data.status === 'ok' ? t('proxy.testOk') : t('proxy.testFail'),
+      )
+    }
   }
   finally {
     probing.value = false
@@ -166,7 +189,11 @@ async function submit() {
       remark: form.remark,
     }
     if (isCreate.value) {
-      await proxyApi.create(payload)
+      const created = await proxyApi.create(payload)
+      // 新增态若在表单里测试过，对新建代理补一次「落库测试」，让列表状态/时间反映
+      // 最新测试结果（CP-0042 / #38）；测试失败不影响创建成功。
+      if (probeResult.value)
+        await proxyApi.test(created.data.id).catch(() => {})
       toast.success(t('crud.createOk'))
     }
     else {
