@@ -1,8 +1,7 @@
 package user
 
 import (
-	"errors"
-	"math/rand"
+	"manager-backend/framework"
 
 	"gorm.io/gorm"
 )
@@ -48,30 +47,18 @@ func (r *gormRepository) findByID(id int) (*UserDB, error) {
 	return &c, nil
 }
 
-// create 插入前台用户。主键不走自增，而是「当前最大 ID + 1 + 随机 0..4」，
-// 让 ID 之间出现不规则间隔，避免通过 ID 推断用户规模。并发撞键时重算重试。
+// create 插入前台用户。主键由 DB 原生自增原子分配（无 SELECT MAX+rand 竞态、无需撞键重试），
+// 插入后再把序列额外随机跳 0..4，让 ID 之间出现不规则间隔，避免通过 ID 顺序枚举/推断用户规模。
+// 与 billing 订单号共用 framework.ScatterNextID 同一发号策略。
 func (r *gormRepository) create(c *UserDB) error {
-	if c.ID != 0 { // 显式指定 ID 时按原样插入（如测试/数据导入）
+	if c.ID != 0 { // 显式指定 ID 时按原样插入（如测试/数据导入），不打散序列
 		return r.db.Create(c).Error
 	}
-	for attempt := 0; attempt < 8; attempt++ {
-		var maxID int64
-		if err := r.db.Model(&UserDB{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
-			return err
-		}
-		c.ID = uint(maxID) + 1 + uint(rand.Intn(5)) // 自增基础(+1) 上额外加 0..4
-
-		err := r.db.Create(c).Error
-		if err == nil {
-			return nil
-		}
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			c.ID = 0 // 并发下 ID 撞车，重算重试（手机号唯一性已在 service 预校验）
-			continue
-		}
+	if err := r.db.Create(c).Error; err != nil {
 		return err
 	}
-	return errors.New("分配用户 ID 失败，请重试")
+	framework.ScatterNextID(r.db, UserDB{}.TableName(), c.ID)
+	return nil
 }
 
 func (r *gormRepository) tokenVersion(id int) (int, error) {

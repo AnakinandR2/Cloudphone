@@ -2,10 +2,9 @@ package billing
 
 import (
 	"errors"
-	"fmt"
-	"math/rand"
 	"time"
 
+	"manager-backend/framework"
 	"manager-backend/framework/query"
 
 	"gorm.io/gorm"
@@ -44,36 +43,10 @@ func (r *gormBizOrderRepository) create(o *BizOrder, items []BizOrderItem) error
 	}); err != nil {
 		return err
 	}
-	// 下单成功后，额外把自增序列多推随机 0..4 步，使下一张订单号出现不规则跳跃，
-	// 避免订单号被顺序枚举遍历他人订单（CP-0037 / #36）。best-effort——推进失败或并发
-	// 交错时最多导致某几张单跳变为 0（gap=1），需求可接受（并非每张都必须跳）。
-	r.advanceOrderSeq(o.ID, rand.Intn(5))
+	// 下单成功后，把订单号自增序列额外随机跳 0..4 步，使下一张订单号出现不规则跳跃，
+	// 避免订单号被顺序枚举遍历他人订单（CP-0037 / #36）。与 user 模块共用同一发号策略。
+	framework.ScatterNextID(r.db, BizOrder{}.TableName(), o.ID)
 	return nil
-}
-
-// advanceOrderSeq 把订单表自增序列在「刚用掉的 curID」基础上再多烧 steps 个号，
-// 使下一张订单号 = curID + 1 + steps（gap 恒在 [1,5]）。本单 ID 已原子分配、绝不受影响，
-// 故推进出错一律吞掉（仅影响下一张是否跳变）。三种库各用其原生序列推进写法；
-// 表名为编译期常量、steps 为本地整型，无外部输入，字符串拼接无注入面。
-func (r *gormBizOrderRepository) advanceOrderSeq(curID uint, steps int) {
-	if steps <= 0 {
-		return
-	}
-	table := BizOrder{}.TableName()
-	switch r.db.Dialector.Name() {
-	case "sqlite":
-		// AUTOINCREMENT 表：下一个 id = sqlite_sequence.seq + 1；相对前移，避免并发下回退。
-		r.db.Exec("UPDATE sqlite_sequence SET seq = seq + ? WHERE name = ?", steps, table)
-	case "mysql":
-		// InnoDB：把 AUTO_INCREMENT 设为 curID+1+steps（DDL 只会向前、≤当前值时被忽略，天然不回退）。
-		r.db.Exec(fmt.Sprintf("ALTER TABLE `%s` AUTO_INCREMENT = %d", table, curID+1+uint(steps)))
-	case "postgres":
-		// 连续 nextval steps 次烧号，把序列相对前移（始终向前，安全）。
-		seq := table + "_id_seq"
-		for i := 0; i < steps; i++ {
-			r.db.Exec(fmt.Sprintf("SELECT nextval('%s')", seq))
-		}
-	}
 }
 
 func (r *gormBizOrderRepository) getOwned(userID, id int) (*BizOrder, []BizOrderItem, error) {
