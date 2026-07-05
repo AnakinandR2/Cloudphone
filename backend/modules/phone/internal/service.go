@@ -544,12 +544,19 @@ func (s *serviceImpl) resolveCp(userID, id int) (*CloudPhone, error) {
 //   - 开机：仅 CREATED / STOPPED 可开机 → 置 STARTING + 开机任务，worker 收敛到 RUNNING（失败/超时 → STOPPED）。
 //   - 关机：仅 RUNNING 可关机 → 透传中台关机，置 STOPPED（无中间态）。
 func (s *serviceImpl) Power(userID, id int, operation string) error {
+	_, err := s.powerChecked(userID, id, operation)
+	return err
+}
+
+// powerChecked 与 Power 同，但开机时额外返回「代理连通性告警」（非阻断）：warn=="" 表示无告警。
+// HTTP handler 用它把告警带回前端 toast；门面/其他调用方走 Power 忽略告警即可。
+func (s *serviceImpl) powerChecked(userID, id int, operation string) (string, error) {
 	if operation != "开机" && operation != "关机" {
-		return apperr.BadRequest("operation 只能是 开机 / 关机")
+		return "", apperr.BadRequest("operation 只能是 开机 / 关机")
 	}
 	p, err := s.resolveCp(userID, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
@@ -557,30 +564,32 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 	// 门禁按中台实时态判（与 UI 显示同源），UNKNOWN 一律拒绝。
 	live := s.liveStatus(ctx, p.CpID)
 	if live == StatusUnknown {
-		return apperr.Validation("状态未知，请稍后重试")
+		return "", apperr.Validation("状态未知，请稍后重试")
 	}
 
 	if operation == "开机" {
 		if live != StatusCreated && live != StatusStopped {
-			return apperr.Validation("当前状态不可开机")
+			return "", apperr.Validation("当前状态不可开机")
 		}
 		// 开机前置校验①：必须已绑定代理（proxy_id>0）。未绑代理一律禁止开机（业务硬约束）。
 		if p.ProxyID == 0 {
-			return apperr.Validation("未绑定代理，无法开机，请先绑定代理")
+			return "", apperr.Validation("未绑定代理，无法开机，请先绑定代理")
 		}
 		// 开机前置校验②（新模型 §3.3）：必须有空闲包月名额或临时时长>0，否则禁止开机。
 		canBoot, err := billing.CanBoot(userID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if !canBoot {
-			return apperr.Forbidden("没有可用的包月开机名额或临时开机时长，无法开机，请购买包月开机数或临时时长")
+			return "", apperr.Forbidden("没有可用的包月开机名额或临时开机时长，无法开机，请购买包月开机数或临时时长")
 		}
+		// 开机前「短超时」探测绑定代理连通性（CP-0028 / #23）：失败仅告警、不阻断开机。
+		warn := probeProxyForBoot(ctx, userID, int(p.ProxyID))
 		if err := s.ops.StartOrShutdown(ctx, p.CpID, "开机"); err != nil {
-			return err
+			return "", err
 		}
 		if err := s.repo.setStatus(p.ID, StatusStarting); err != nil {
-			return err
+			return "", err
 		}
 		_ = s.repo.createTask(&CpTask{
 			UserID:        uint(userID),
@@ -591,18 +600,18 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 			Status:        TaskPending,
 			Deadline:      time.Now().Add(startTimeout),
 		})
-		return nil
+		return warn, nil
 	}
 
 	// 关机：仅 RUNNING 可关机 → 置 STOPPING + 关机任务，worker 轮询中台到 STOPPED 再收敛。
 	if live != StatusRunning {
-		return apperr.Validation("当前状态不可关机")
+		return "", apperr.Validation("当前状态不可关机")
 	}
 	if err := s.ops.StartOrShutdown(ctx, p.CpID, "关机"); err != nil {
-		return err
+		return "", err
 	}
 	if err := s.repo.setStatus(p.ID, StatusStopping); err != nil {
-		return err
+		return "", err
 	}
 	_ = s.repo.createTask(&CpTask{
 		UserID:        uint(userID),
@@ -613,7 +622,26 @@ func (s *serviceImpl) Power(userID, id int, operation string) error {
 		Status:        TaskPending,
 		Deadline:      time.Now().Add(startTimeout),
 	})
-	return nil
+	return "", nil
+}
+
+// bootProxyProbeTimeout 开机前代理探测的短超时上限：够判连通即可，不拖慢开机。
+const bootProxyProbeTimeout = 5 * time.Second
+
+// probeBoundProxy 对绑定代理做连通性探测，默认转调 proxy 公开门面。抽成包级变量便于测试注入替身
+// （避免单测打真网）。返回 nil=连通、err=不可用。
+var probeBoundProxy = func(ctx context.Context, userID, proxyID int) error {
+	return proxy.ProbeOwned(ctx, userID, proxyID)
+}
+
+// probeProxyForBoot 用短超时探测绑定代理，返回给前端的非阻断告警文案（连通/探测能力缺省时为 ""）。
+func probeProxyForBoot(parent context.Context, userID, proxyID int) string {
+	ctx, cancel := context.WithTimeout(parent, bootProxyProbeTimeout)
+	defer cancel()
+	if err := probeBoundProxy(ctx, userID, proxyID); err != nil {
+		return "代理连通性探测未通过，已继续开机；若开机后无法联网请检查该代理是否可用"
+	}
+	return ""
 }
 
 func (s *serviceImpl) Restart(userID, id int) error {

@@ -233,6 +233,42 @@ func TestPowerOnRequiresProxy(t *testing.T) {
 	assert.Equal(t, StatusStarting, statusOf(t, p.ID))
 }
 
+// #23（CP-0028）：开机前对绑定代理做「短超时」探测——失败仅告警、绝不阻断开机
+// （仍置 STARTING 并触达中台）；探测通过则无告警。代理门禁(proxy_id>0)与计费门禁仍照旧硬拦。
+func TestPowerOnProxyProbeWarnsButDoesNotBlock(t *testing.T) {
+	t.Cleanup(func() {
+		framework.CleanTable("cloud_phones", "cp_tasks", "billing_runtime_minute_wallets", "billing_ledger_entries", "proxies")
+	})
+	require.NoError(t, billing.GrantRuntimeMinutesWalletForTest(userA, 1000))
+	f := &fakePort{statuses: map[string]string{"cp-pb1": "STOPPED", "cp-pb2": "STOPPED"}}
+	withFakeOps(t, f)
+
+	px, err := proxy.Create(userA, proxy.ProxyInput{Name: "px-pb", Host: "203.0.113.20", Port: 1080})
+	require.NoError(t, err)
+	mk := func(cpid, name string) *CloudPhone {
+		p := &CloudPhone{UserID: userA, Name: name, Status: StatusStopped, CpID: cpid, ProxyID: uint(px.ID)}
+		require.NoError(t, framework.DB.Create(p).Error)
+		return p
+	}
+	p1 := mk("cp-pb1", "探测失败机")
+	p2 := mk("cp-pb2", "探测正常机")
+
+	// 探测失败 → 告警但不阻断：开机成功、置 STARTING。
+	prev := probeBoundProxy
+	probeBoundProxy = func(context.Context, int, int) error { return errors.New("dial timeout") }
+	warn, err := PhoneService.powerChecked(userA, int(p1.ID), "开机")
+	probeBoundProxy = prev
+	require.NoError(t, err, "代理探测失败不应阻断开机")
+	assert.NotEmpty(t, warn, "探测失败应返回非阻断告警文案")
+	assert.Equal(t, StatusStarting, statusOf(t, p1.ID), "探测失败仍应正常置 STARTING")
+
+	// 探测成功（TestMain 默认桩返回 nil）→ 无告警、正常开机。
+	warn2, err := PhoneService.powerChecked(userA, int(p2.ID), "开机")
+	require.NoError(t, err)
+	assert.Empty(t, warn2, "探测通过不应有告警")
+	assert.Equal(t, StatusStarting, statusOf(t, p2.ID))
+}
+
 // 销毁门禁（按中台实时态）：过渡/运行态不可销毁；INIT_FAILED/STOPPED 可销毁；UNKNOWN 拒绝。
 func TestDestroyGating(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("cloud_phones", "cp_tasks") })

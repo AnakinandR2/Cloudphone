@@ -7,6 +7,8 @@
 package proxy
 
 import (
+	"context"
+
 	proxyinternal "manager-backend/modules/proxy/internal"
 
 	"gorm.io/gorm"
@@ -57,6 +59,12 @@ func Delete(userID, id int) error {
 // 供跨模块（如云手机绑定代理）做属主 + 存在性校验，杜绝 BOLA/IDOR。
 func GetByID(userID, id int) (*Proxy, error) {
 	return proxyinternal.ProxyService.GetByID(userID, id)
+}
+
+// ProbeOwned 对本人某代理做一次连通性探测（不落库）。供云手机「开机前短超时代理探测」复用：
+// 调用方用带较短超时的 ctx 控制耗时；返回 nil=连通、err=不可用。
+func ProbeOwned(ctx context.Context, userID, id int) error {
+	return proxyinternal.ProxyService.ProbeOwned(ctx, userID, id)
 }
 
 // InitForTest 测试用：供其他模块装配 proxy（建表 + 装配服务）。

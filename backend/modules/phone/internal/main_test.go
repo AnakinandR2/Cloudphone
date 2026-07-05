@@ -1,6 +1,7 @@
 package phone
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -29,6 +30,9 @@ func TestMain(m *testing.M) {
 	if err := proxy.InitForTest(framework.DB); err != nil {
 		panic(err)
 	}
+	// 开机前代理探测默认打真网（realProber）；测试统一置为「连通」桩避免联网，
+	// 需验证「探测失败仍开机」的用例在用例内临时覆盖 probeBoundProxy。
+	probeBoundProxy = func(context.Context, int, int) error { return nil }
 
 	code := m.Run()
 	tdb.Teardown()

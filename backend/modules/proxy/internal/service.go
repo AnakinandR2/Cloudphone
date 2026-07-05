@@ -89,6 +89,22 @@ func (s *serviceImpl) TestProxy(userID, id int) (*Proxy, error) {
 	return s.GetByID(userID, id)
 }
 
+// ProbeOwned 对本人某代理做一次连通性探测（不落库），供开机前「短超时」校验复用：
+// 调用方传入带较短超时的 ctx 控制耗时。返回 nil=连通；err=不可用（超时/拒绝/非属主）。
+func (s *serviceImpl) ProbeOwned(ctx context.Context, userID, id int) error {
+	p, err := s.GetByID(userID, id) // 非本人 → NotFound
+	if err != nil {
+		return err
+	}
+	if s.prober == nil {
+		return apperr.Internal("代理探测能力未启用")
+	}
+	if _, err := s.prober.Probe(ctx, *p); err != nil {
+		return err
+	}
+	return nil
+}
+
 // orderable 列表允许排序的字段白名单（杜绝 SQL 注入）。
 var orderable = map[string]bool{"id": true, "name": true, "latency": true, "created_at": true}
 

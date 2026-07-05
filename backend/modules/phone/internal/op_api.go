@@ -42,8 +42,14 @@ func PowerCloudPhone(c *gin.Context) {
 		Operation string `json:"operation"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	if err := PhoneService.Power(uid, id, req.Operation); err != nil {
+	warn, err := PhoneService.powerChecked(uid, id, req.Operation)
+	if err != nil {
 		framework.FailErr(c, err)
+		return
+	}
+	// 开机成功但代理短超时探测未通过：附带非阻断告警，前端 toast.warning 提示（CP-0028 / #23）。
+	if warn != "" {
+		framework.OKWithData(c, gin.H{"warning": warn})
 		return
 	}
 	framework.OK(c)
