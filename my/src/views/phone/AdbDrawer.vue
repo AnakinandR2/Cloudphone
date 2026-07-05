@@ -15,6 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{ phone: CloudPhone | null }>()
 const open = defineModel<boolean>({ default: false })
@@ -144,40 +145,6 @@ async function disable() {
   }
 }
 
-// copyText 优先用 Clipboard API；非安全上下文（如 http）下 navigator.clipboard 不可用，
-// 回退到临时 textarea + execCommand，保证非 HTTPS 环境也能复制。
-async function copyText(text: string): Promise<boolean> {
-  // 1) Clipboard API：仅在安全上下文且文档已聚焦时用（未聚焦会抛 "Document is not focused"）。
-  try {
-    if (navigator.clipboard?.writeText && window.isSecureContext && document.hasFocus()) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  }
-  catch { /* 落到回退 */ }
-  // 2) 回退：临时 textarea 自己抢焦点 + execCommand，兼容非 HTTPS / 文档未聚焦。
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.setAttribute('readonly', '')
-    ta.style.position = 'fixed'
-    ta.style.top = '0'
-    ta.style.left = '0'
-    ta.style.width = '1px'
-    ta.style.height = '1px'
-    ta.style.opacity = '0'
-    document.body.appendChild(ta)
-    ta.focus()
-    ta.select()
-    ta.setSelectionRange(0, text.length)
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  }
-  catch {
-    return false
-  }
-}
 async function copy(text: string) {
   if (!text)
     return

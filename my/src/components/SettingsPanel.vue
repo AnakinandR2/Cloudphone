@@ -24,6 +24,7 @@ import {
 import { cn } from '@/lib/utils'
 import { localeOptions } from '@/locales'
 import { useSettingsStore } from '@/stores/settings'
+import { copyText } from '@/utils/clipboard'
 
 const route = useRoute()
 // 远程控制弹窗页不显示右下角 tweak 悬浮按钮
@@ -75,13 +76,11 @@ function pickLocale(value: Locale) {
 }
 
 async function copyDefaults() {
-  try {
-    await navigator.clipboard.writeText(store.toDefaultsSnippet())
+  // 兼容非 HTTPS（CP-0046 / #41）：navigator.clipboard 不可用时回退 execCommand。
+  if (await copyText(store.toDefaultsSnippet()))
     toast.success(t('settings.copied'), { description: t('settings.copiedDesc') })
-  }
-  catch {
+  else
     toast.error(t('settings.copyFailed'))
-  }
 }
 
 function reset() {

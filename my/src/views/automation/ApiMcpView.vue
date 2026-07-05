@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import apikeyApi from '@/api/modules/apikey'
 import mcpApi from '@/api/modules/mcp'
+import { copyText } from '@/utils/clipboard'
 import Popconfirm from '@/components/Popconfirm.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -144,13 +145,13 @@ async function revoke(k: ApiKey) {
 }
 
 async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
+  if (!text)
+    return
+  // 用兼容非 HTTPS 的 copyText（CP-0046 / #41）：内网 http 下 navigator.clipboard 不可用会回退 execCommand。
+  if (await copyText(text))
     toast.success(t('apimcp.copied'))
-  }
-  catch {
+  else
     toast.error(t('apimcp.copyFail'))
-  }
 }
 </script>
 
