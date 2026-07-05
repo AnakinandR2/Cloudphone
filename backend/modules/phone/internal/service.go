@@ -19,12 +19,37 @@ const (
 	startTimeout  = 3 * time.Minute
 )
 
+// keyedMutex 按 key（此处为 userID）提供串行化互斥。零值即可用。
+// 用于把「席位校验 → 建实例」临界区按用户串起来，消除 check-then-create 的 TOCTOU 超售（CP-0050）。
+type keyedMutex struct {
+	mu sync.Mutex
+	m  map[int]*sync.Mutex
+}
+
+// lock 取得 key 对应的锁并返回释放函数；不同 key 互不阻塞，同 key 串行。
+func (k *keyedMutex) lock(key int) func() {
+	k.mu.Lock()
+	if k.m == nil {
+		k.m = make(map[int]*sync.Mutex)
+	}
+	m, ok := k.m[key]
+	if !ok {
+		m = &sync.Mutex{}
+		k.m[key] = m
+	}
+	k.mu.Unlock()
+	m.Lock()
+	return m.Unlock
+}
+
 // serviceImpl 云手机业务服务，依赖注入的 repository 与中台端口 ops。
 // 前台方法都带 userID：只操作「当前用户自己的」云手机；Admin* 方法供后台运营；
 // 操作类方法（开关机/远控/指令/应用）经 ops 透传到云手机中台。
 type serviceImpl struct {
 	repo repository
 	ops  midplatPort
+	// seatLock 按用户串行化席位创建临界区（CP-0050 / #47），零值可用。
+	seatLock keyedMutex
 }
 
 // PhoneService 模块内服务实例，由 module.Init 注入 DB 后装配。
@@ -332,6 +357,13 @@ func (s *serviceImpl) liveStatus(ctx context.Context, cpID string) string {
 //   - 已配置中台：调中台异步创建 → 落 CREATING + 创建任务，worker 轮询收敛到 CREATED/CREATE_FAILED。
 //   - 未配置中台（本地/测试降级）：仅落本地档案，直接置 CREATED，不触达中台、不建任务。
 func (s *serviceImpl) Create(userID int, req *CloudPhoneCreate) (*CloudPhone, error) {
+	// 席位 check-then-create 按用户串行化，消除 TOCTOU 超售（CP-0050 / #47）：
+	// 校验容量 → 建实例 → 落库占位 全程持锁，末位空席并发只会成功一个（其余席位不足被拒）。
+	// 锁按 userID 分片：不同用户互不阻塞；同一用户的并发创建极少，串行化代价可忽略。
+	// 注：单进程内保证原子；跨实例（HA）仍由 reconcileSeats 溢出回收兜底。
+	unlock := s.seatLock.lock(userID)
+	defer unlock()
+
 	// 席位前置校验（新模型）：当前非回收实例数 < 未过期 seat 容量才允许创建，保证不超额。
 	if err := s.checkSeatAvailable(userID); err != nil {
 		return nil, err

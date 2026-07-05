@@ -2,6 +2,9 @@ package phone
 
 import (
 	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,6 +193,36 @@ func TestCreateGatedBySeatCapacity(t *testing.T) {
 	require.NoError(t, err) // 1 席位 → 可
 	_, err = svc.Create(u, &CloudPhoneCreate{Name: "b"})
 	require.Error(t, err) // 超席位 → 拒
+}
+
+// CP-0050 / #47：末位空席（capacity=1）并发创建，check-then-create 须原子，恰好成功 1 个、不超售。
+func TestCreateSeatRaceNoOversell(t *testing.T) {
+	recycleCleanup(t)
+	const u = 9712
+	require.NoError(t, billing.GrantSeatLicensesForTest(u, 1)) // 末位空席：容量 = 1
+	svc := newService(newRepository(framework.DB), nil)        // 本地降级：Create 为纯 DB 插入
+
+	const n = 12
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	var okCount int64
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // 同时释放，最大化 check-then-create 的竞态窗口
+			if _, err := svc.Create(u, &CloudPhoneCreate{Name: fmt.Sprintf("c%d", i)}); err == nil {
+				atomic.AddInt64(&okCount, 1)
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int64(1), okCount, "容量=1 并发创建应恰好成功 1 个（其余席位不足被拒）")
+	remaining, err := svc.repo.listNonRecycledByUser(u)
+	require.NoError(t, err)
+	assert.Len(t, remaining, 1, "落库的非回收实例不得超售")
 }
 
 // TestCanBootGatesPower：开机前置校验——无空闲包月名额且无临时时长 → 拒绝。
