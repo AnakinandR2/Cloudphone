@@ -2,12 +2,36 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"manager-backend/framework/apperr"
 	"manager-backend/framework/query"
 )
+
+// maxProxyNameLen 代理名称最大长度（对齐 model 的 varchar(100)）。
+const maxProxyNameLen = 100
+
+// validateProxyPort 端口须在合法范围 1-65535（CP-0023 / #28）。
+func validateProxyPort(port int) error {
+	if port < 1 || port > 65535 {
+		return apperr.Validation("端口必须在 1-65535 之间")
+	}
+	return nil
+}
+
+// validateProxyName 名称必填且不超长（CP-0055 / #48）。
+func validateProxyName(name string) error {
+	if name == "" {
+		return apperr.Validation("名称不能为空")
+	}
+	if utf8.RuneCountInString(name) > maxProxyNameLen {
+		return apperr.Validation("名称长度不能超过 100 个字符")
+	}
+	return nil
+}
 
 // serviceImpl 代理业务服务，依赖注入的 repository 与探测端口 prober。
 // 前台方法都带 userID：只操作「当前用户自己的」代理；Admin* 方法供后台运营。
@@ -116,9 +140,24 @@ func (s *serviceImpl) GetByID(userID, id int) (*Proxy, error) {
 }
 
 func (s *serviceImpl) Create(userID int, req *ProxyCreate) (*Proxy, error) {
+	name := strings.TrimSpace(req.Name)
+	if err := validateProxyName(name); err != nil {
+		return nil, err
+	}
+	if err := validateProxyPort(req.Port); err != nil {
+		return nil, err
+	}
+	// 名称同属主唯一（CP-0063 / #55）。
+	exists, err := s.repo.existsByName(userID, name, 0)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, apperr.Conflict("代理名称已存在")
+	}
 	item := Proxy{
 		UserID:   uint(userID),
-		Name:     req.Name,
+		Name:     name,
 		Protocol: normalizeProtocol(req.Protocol),
 		Host:     req.Host,
 		Port:     req.Port,
@@ -160,19 +199,46 @@ func (s *serviceImpl) Probe(req *ProxyProbeRequest) (*ProbeOutcome, error) {
 	}, nil
 }
 
-// BatchCreate 批量为当前用户新增代理：跳过缺 host/port 的无效条目，一次性 INSERT，返回成功条数。
+// BatchCreate 批量为当前用户新增代理（CP-0055 / #48）：逐行校验主机/端口/名称，任一非法即整批
+// 拒绝并指明行号（不再静默跳过/落库脏数据）。名称导入规则：留空则以 host:port 兜底；名称须在
+// 「存量 + 批内」同属主唯一（CP-0063 / #55），重复即报错。全部通过后一次性 INSERT，返回条数。
 func (s *serviceImpl) BatchCreate(userID int, items []ProxyCreate) (int, error) {
+	existing, err := s.repo.namesOwned(userID)
+	if err != nil {
+		return 0, err
+	}
+	used := make(map[string]bool, len(existing)+len(items))
+	for _, n := range existing {
+		used[n] = true
+	}
 	toCreate := make([]Proxy, 0, len(items))
 	for i := range items {
 		it := items[i]
-		if it.Host == "" || it.Port == 0 {
-			continue
+		row := i + 1
+		host := strings.TrimSpace(it.Host)
+		if host == "" {
+			return 0, apperr.Validation(fmt.Sprintf("第 %d 行：缺少主机地址", row))
 		}
+		if err := validateProxyPort(it.Port); err != nil {
+			return 0, apperr.Validation(fmt.Sprintf("第 %d 行：端口必须在 1-65535 之间", row))
+		}
+		// 名称导入规则：缺省用 host:port 兜底。
+		name := strings.TrimSpace(it.Name)
+		if name == "" {
+			name = fmt.Sprintf("%s:%d", host, it.Port)
+		}
+		if err := validateProxyName(name); err != nil {
+			return 0, apperr.Validation(fmt.Sprintf("第 %d 行：%s", row, err.Error()))
+		}
+		if used[name] {
+			return 0, apperr.Conflict(fmt.Sprintf("第 %d 行：代理名称「%s」重复", row, name))
+		}
+		used[name] = true
 		toCreate = append(toCreate, Proxy{
 			UserID:   uint(userID),
-			Name:     it.Name,
+			Name:     name,
 			Protocol: normalizeProtocol(it.Protocol),
-			Host:     it.Host,
+			Host:     host,
 			Port:     it.Port,
 			Username: it.Username,
 			Password: it.Password,
@@ -196,7 +262,19 @@ func (s *serviceImpl) Update(userID, id int, req *ProxyUpdate) (*Proxy, error) {
 	}
 	fields := map[string]interface{}{}
 	if req.Name != "" {
-		fields["name"] = req.Name
+		name := strings.TrimSpace(req.Name)
+		if err := validateProxyName(name); err != nil {
+			return nil, err
+		}
+		// 改名时同属主查重（排除自身；CP-0063 / #55）。
+		exists, err := s.repo.existsByName(userID, name, id)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, apperr.Conflict("代理名称已存在")
+		}
+		fields["name"] = name
 	}
 	if req.Protocol != "" {
 		fields["protocol"] = req.Protocol
@@ -205,6 +283,9 @@ func (s *serviceImpl) Update(userID, id int, req *ProxyUpdate) (*Proxy, error) {
 		fields["host"] = req.Host
 	}
 	if req.Port != 0 {
+		if err := validateProxyPort(req.Port); err != nil {
+			return nil, err
+		}
 		fields["port"] = req.Port
 	}
 	if req.Username != "" {

@@ -174,31 +174,90 @@ func TestProxyProbeAdHoc(t *testing.T) {
 	assert.Contains(t, out2.Message, "connect refused")
 }
 
-// 批量导入：有效条目入库、无效（缺 host/port）跳过、全部归属当前用户。
+// 批量导入：全部有效则入库、归属当前用户、协议默认 socks5；缺省名称按规则兜底为 host:port。
 func TestProxyBatchCreate(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("proxies") })
 
 	items := []ProxyCreate{
 		{Name: "a", Host: "1.1.1.1", Port: 1080},
 		{Name: "b", Host: "2.2.2.2", Port: 1081, Username: "u", Password: "p"},
-		{Name: "bad-no-host", Port: 1082},      // 无 host → 跳过
-		{Name: "bad-no-port", Host: "3.3.3.3"}, // 无 port → 跳过
+		{Host: "3.3.3.3", Port: 1082}, // 无名称 → 规则兜底 host:port
 	}
 	created, err := ProxyService.BatchCreate(userA, items)
 	require.NoError(t, err)
-	assert.Equal(t, 2, created)
+	assert.Equal(t, 3, created)
 
 	list, total, err := ProxyService.GetList(userA, 1, 50, "", "", "")
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), total)
+	assert.Equal(t, int64(3), total)
+	names := map[string]bool{}
 	for _, p := range list {
 		assert.Equal(t, uint(userA), p.UserID)
 		assert.Equal(t, "socks5", p.Protocol) // 默认协议
+		names[p.Name] = true
 	}
+	assert.True(t, names["3.3.3.3:1082"], "缺省名称应按规则兜底为 host:port")
+
 	// 不串户：B 看不到 A 批量导入的
 	_, totalB, err := ProxyService.GetList(userB, 1, 50, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), totalB)
+}
+
+// #28：端口越界（<1 或 >65535）一律拒绝——创建 / 更新 / 批量。
+func TestProxyRejectsPortOutOfRange(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	_, err := ProxyService.Create(userA, &ProxyCreate{Name: "p1", Host: "1.1.1.1", Port: 70000})
+	assert.Error(t, err, "端口>65535 应拒绝")
+	_, err = ProxyService.Create(userA, &ProxyCreate{Name: "p2", Host: "1.1.1.1", Port: -1})
+	assert.Error(t, err, "端口<1 应拒绝")
+
+	ok, err := ProxyService.Create(userA, &ProxyCreate{Name: "ok", Host: "1.1.1.1", Port: 65535})
+	require.NoError(t, err, "边界端口 65535 应通过")
+	_, err = ProxyService.Update(userA, int(ok.ID), &ProxyUpdate{Port: 99999})
+	assert.Error(t, err, "更新到越界端口应拒绝")
+
+	_, err = ProxyService.BatchCreate(userA, []ProxyCreate{{Name: "bx", Host: "2.2.2.2", Port: 111111}})
+	assert.Error(t, err, "批量含越界端口应整批拒绝")
+}
+
+// #55：名称同属主唯一（创建 / 更新 / 批量）；不同用户可同名。
+func TestProxyNameUniquePerOwner(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	_, err := ProxyService.Create(userA, sampleCreate("dup", "1.1.1.1"))
+	require.NoError(t, err)
+	_, err = ProxyService.Create(userA, sampleCreate("dup", "2.2.2.2"))
+	assert.Error(t, err, "同属主重名应拒绝")
+	_, err = ProxyService.Create(userB, sampleCreate("dup", "3.3.3.3"))
+	require.NoError(t, err, "不同用户可同名")
+
+	other, err := ProxyService.Create(userA, sampleCreate("other", "4.4.4.4"))
+	require.NoError(t, err)
+	_, err = ProxyService.Update(userA, int(other.ID), &ProxyUpdate{Name: "dup"})
+	assert.Error(t, err, "改名撞已有名应拒绝")
+	_, err = ProxyService.Update(userA, int(other.ID), &ProxyUpdate{Name: "other"})
+	require.NoError(t, err, "改成自身原名应允许")
+}
+
+// #48+#55：批量导入名称查重（存量 + 批内），冲突整批拒绝、不部分落库。
+func TestProxyBatchRejectsDupNames(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	_, err := ProxyService.Create(userA, sampleCreate("exist", "1.1.1.1"))
+	require.NoError(t, err)
+	_, err = ProxyService.BatchCreate(userA, []ProxyCreate{{Name: "exist", Host: "2.2.2.2", Port: 1080}})
+	assert.Error(t, err, "与存量重名应拒绝")
+
+	_, err = ProxyService.BatchCreate(userA, []ProxyCreate{
+		{Name: "twin", Host: "2.2.2.2", Port: 1080},
+		{Name: "twin", Host: "3.3.3.3", Port: 1081},
+	})
+	assert.Error(t, err, "批内重名应拒绝")
+	_, total, err := ProxyService.GetList(userA, 1, 50, "twin", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), total, "整批拒绝不应部分入库")
 }
 
 // 测试代理：成功写回连通性 + 归属；失败记 fail；越权拒绝。

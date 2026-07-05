@@ -10,6 +10,10 @@ type repository interface {
 	list(userID, offset, limit int, kw, orderClause string) ([]Proxy, error)
 	listAllOwned(userID int) ([]Proxy, error)
 	findByID(userID, id int) (*Proxy, error)
+	// existsByName 报告该用户名下是否已有同名代理（excludeID>0 时排除自身，供更新查重）。
+	existsByName(userID int, name string, excludeID int) (bool, error)
+	// namesOwned 取该用户全部代理名称（供批量导入一次性做「存量+批内」查重）。
+	namesOwned(userID int) ([]string, error)
 	create(item *Proxy) error
 	createBatch(items []Proxy) error
 	update(userID, id int, fields map[string]interface{}) error
@@ -64,6 +68,22 @@ func (r *gormRepository) findByID(userID, id int) (*Proxy, error) {
 		return nil, err
 	}
 	return &item, nil
+}
+
+func (r *gormRepository) existsByName(userID int, name string, excludeID int) (bool, error) {
+	q := r.owned(userID).Where("name = ?", name)
+	if excludeID > 0 {
+		q = q.Where("id <> ?", excludeID)
+	}
+	var count int64
+	err := q.Count(&count).Error
+	return count > 0, err
+}
+
+func (r *gormRepository) namesOwned(userID int) ([]string, error) {
+	var names []string
+	err := r.owned(userID).Pluck("name", &names).Error
+	return names, err
 }
 
 func (r *gormRepository) create(item *Proxy) error { return r.db.Create(item).Error }
