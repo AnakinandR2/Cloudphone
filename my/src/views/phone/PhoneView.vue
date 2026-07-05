@@ -234,8 +234,6 @@ function statusClass(status: string): string {
   return ''
 }
 
-// UNKNOWN（中台暂不可用）也纳入轮询，自动重试拉取实时态。
-const TRANSIENT = ['CREATING', 'STARTING', 'STOPPING', 'DESTROYING', 'UNKNOWN']
 // 状态机门禁（与后端一致）：
 //   CREATING / STARTING：过渡态，禁止任何操作
 //   CREATE_FAILED：仅可删除         CREATED / STOPPED：可开机、可删除
@@ -254,16 +252,27 @@ function isRunning(s: string) {
   return s === 'RUNNING'
 }
 
-// 当存在过渡态（创建中/开机中/销毁中）实例时，定时静默刷新以反映 worker 收敛后的最终态。
+// 列表状态每 4s 静默轮询自动刷新，无需手动刷新（CP-0068 / #58）：无论过渡态/终态都持续拉取，
+// 使外部驱动的状态变化（worker 收敛、别处关机、中台侧变更）也能自动反映到列表。
+// 页面不可见（切后台/切标签页）时暂停、恢复可见时立即刷新一次再续，避免后台空跑浪费。
 let pollTimer: ReturnType<typeof setInterval> | null = null
-function syncPolling() {
-  const hasTransient = data.value.some(p => TRANSIENT.includes(p.status))
-  if (hasTransient && !pollTimer) {
-    pollTimer = setInterval(load, 4000, true)
-  }
-  else if (!hasTransient && pollTimer) {
+function startPolling() {
+  if (!pollTimer)
+    pollTimer = setInterval(() => load(true), 4000)
+}
+function stopPolling() {
+  if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+}
+function onVisibilityChange() {
+  if (document.hidden) {
+    stopPolling()
+  }
+  else {
+    load(true) // 回到前台立即刷新一次
+    startPolling()
   }
 }
 
@@ -279,7 +288,6 @@ async function load(silent = false) {
       tag: tagFilter.value || undefined,
     })
     data.value = res.data.list
-    syncPolling()
   }
   finally {
     if (!silent)
@@ -394,10 +402,12 @@ onMounted(() => {
   load()
   loadProxyOptions()
   loadTagOptions()
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onUnmounted(() => {
-  if (pollTimer)
-    clearInterval(pollTimer)
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 
