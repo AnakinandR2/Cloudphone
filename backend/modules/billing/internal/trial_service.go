@@ -15,10 +15,10 @@ func (s *trialServiceImpl) eligible(userID int, p *TrialPolicy) (bool, bool, int
 	if claimed >= p.PerUserLimit {
 		return false, false, claimed, "已达领取上限"
 	}
+	// CP-0076：新用户 = 未领取过该试用者（领取次数由 PerUserLimit 兜住）。不再以「有无付费订单」
+	// 判定，避免「先买后领」的用户因产生已付订单反而领不到应得试用（购买惩罚）。
 	if p.AllowNewUser {
-		if paid, _ := s.repo.countPaidOrders(userID); paid == 0 {
-			return true, false, claimed, ""
-		}
+		return true, false, claimed, ""
 	}
 	if ok, _ := s.repo.manualEligible(int(p.ID), userID); ok {
 		return true, false, claimed, ""
@@ -230,10 +230,10 @@ func (s *trialServiceImpl) ClaimTrial(userID int, code, inviteCode string) error
 		return apperr.Conflict("已达领取上限")
 	}
 	ok := false
+	// CP-0076：AllowNewUser = 面向所有未达领取上限的用户（新用户=未领取过试用者），
+	// 不再要求「无已付费订单」，杜绝直接购买的用户领不到试用而吃亏。
 	if p.AllowNewUser {
-		if paid, _ := s.repo.countPaidOrders(userID); paid == 0 {
-			ok = true
-		}
+		ok = true
 	}
 	if !ok {
 		if m, _ := s.repo.manualEligible(int(p.ID), userID); m {

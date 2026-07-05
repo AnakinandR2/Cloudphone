@@ -30,8 +30,9 @@ func trialAdminCleanup(t *testing.T, code string) {
 	db.Exec("DELETE FROM billing_trial_policies WHERE code = ?", code)
 }
 
-// TestTrialClaimEligibilityNewUserAndPaidUser 覆盖 TC-10-073：
-// 策略 allow_new_user=true 时，无已付订单的用户可 claim；有已付订单的用户不满足该条件被拒。
+// TestTrialClaimEligibilityNewUserAndPaidUser 覆盖 TC-10-073 + CP-0076（#62）：
+// 策略 allow_new_user=true 时，「新用户」= 未领取过试用者；无论有无已付订单，只要未达
+// 领取上限均可 claim（有已付订单不再被拒，杜绝「先买后领」的用户被购买惩罚）。
 func TestTrialClaimEligibilityNewUserAndPaidUser(t *testing.T) {
 	r := setupRouter()
 	const code = "apptest-trial-073"
@@ -81,12 +82,12 @@ func TestTrialClaimEligibilityNewUserAndPaidUser(t *testing.T) {
 	require.Equal(t, http.StatusOK, wOrder.Code, "下单失败: %s", wOrder.Body.String())
 	orderData := decode(t, wOrder).Data.(map[string]interface{})
 	order := orderData["order"].(map[string]interface{})
-	require.Equal(t, "paid", order["status"], "余额购买下单即置已付，制造 countPaidOrders>0 前置态")
+	require.Equal(t, "paid", order["status"], "余额购买下单即置已付，制造已付订单前置态")
 
-	// 已付费用户不满足 allow_new_user 条件，且未配邀请码/手动资格 → 422「不符合领取条件」。
+	// CP-0076：allow_new_user 现定义为「未领取过试用者」，有已付订单也应可领取（不再购买惩罚）。
 	w = doJSON(r, "POST", "/api/v1/billing/trials/"+code+"/claim", paidTok, map[string]string{})
-	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, "已付费用户不应命中新用户资格: %s", w.Body.String())
-	assert.Contains(t, decode(t, w).Message, "不符合领取条件")
+	assert.Equal(t, http.StatusOK, w.Code, "已付费用户也应能领取 allow_new_user 试用（CP-0076）: %s", w.Body.String())
+	assert.Equal(t, 0, decode(t, w).Code)
 }
 
 // TestTrialClaimInviteCode 覆盖 TC-10-074：策略配邀请码时，正确 invite_code 放行；

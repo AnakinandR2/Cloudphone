@@ -25,7 +25,6 @@ type trialRepository interface {
 
 	countClaims(policyID, userID int) (int, error)
 	manualEligible(policyID, userID int) (bool, error)
-	countPaidOrders(userID int) (int, error)
 	createEligibility(e *TrialEligibility) error
 	listGrants(policyID int) ([]TrialGrant, error)
 
@@ -125,13 +124,6 @@ func (r *gormTrialRepository) manualEligible(policyID, userID int) (bool, error)
 	var n int64
 	err := r.db.Model(&TrialEligibility{}).Where("policy_id = ? AND user_id = ?", policyID, userID).Count(&n).Error
 	return n > 0, err
-}
-
-// countPaidOrders 查新模型已支付订单数（新用户资格判定）。
-func (r *gormTrialRepository) countPaidOrders(userID int) (int, error) {
-	var n int64
-	err := r.db.Model(&BizOrder{}).Where("user_id = ? AND status = ?", userID, BizOrderPaid).Count(&n).Error
-	return int(n), err
 }
 
 func (r *gormTrialRepository) createEligibility(e *TrialEligibility) error {

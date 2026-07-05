@@ -63,14 +63,6 @@ func TestTrialPolicyCRUDAndHelpers(t *testing.T) {
 	ok, _ = repo.manualEligible(int(p.ID), trialUser)
 	assert.True(t, ok)
 
-	// countPaidOrders 改查新订单 BizOrder。
-	cnt, err := repo.countPaidOrders(trialUser)
-	require.NoError(t, err)
-	assert.Equal(t, 0, cnt)
-	require.NoError(t, framework.DB.Create(&BizOrder{UserID: uint(trialUser), BizType: BizSeatNew, Status: BizOrderPaid, PayMethod: PayBalance, TotalCents: 1}).Error)
-	cnt, _ = repo.countPaidOrders(trialUser)
-	assert.Equal(t, 1, cnt)
-
 	list, err := repo.listPolicies(true)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
@@ -166,14 +158,35 @@ func TestClaimTrialEligibilityPaths(t *testing.T) {
 	require.NoError(t, TrialService.ClaimTrial(trialUser, "promo", "VIP2026"))
 	assert.Equal(t, int64(600), rtRemain(t, trialUser))
 
-	// AllowNewUser：有 paid BizOrder 则不符合新用户资格；改走人工资格放行。
-	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "newonly", Name: "仅新人", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(KindBootSlot, 2, 0)}))
-	require.NoError(t, framework.DB.Create(&BizOrder{UserID: uint(trialUser), BizType: BizSeatNew, Status: BizOrderPaid, PayMethod: PayBalance, TotalCents: 1}).Error)
-	assert.Error(t, TrialService.ClaimTrial(trialUser, "newonly", ""))
-	pol, _ := repo.getPolicyByCode("newonly")
+	// 人工资格路径：AllowNewUser=false 的定向策略仅经人工放行可领。
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "manualonly", Name: "定向", Enabled: true, PerUserLimit: 1, AllowNewUser: false, Items: oneItem(KindBootSlot, 2, 0)}))
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "manualonly", ""), "无资格应拒绝")
+	pol, _ := repo.getPolicyByCode("manualonly")
 	require.NoError(t, repo.createEligibility(&TrialEligibility{PolicyID: pol.ID, UserID: uint(trialUser), GrantedBy: "staff:1"}))
-	require.NoError(t, TrialService.ClaimTrial(trialUser, "newonly", ""))
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "manualonly", ""))
 	assert.Equal(t, 2, bootCap(t, trialUser))
+}
+
+// CP-0076（#62）：AllowNewUser 试用「新用户」= 未领取过者；有已付费订单也应能领取，
+// 领取后受 PerUserLimit 兜底不可再领。杜绝「先买后领」的用户被购买惩罚领不到试用。
+func TestClaimTrialAllowNewUserOpenToPaidUsers(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable(trialTables...) })
+	repo := newTrialRepository(framework.DB)
+	require.NoError(t, repo.createPolicy(&TrialPolicy{Code: "welcome", Name: "新人礼", Enabled: true, PerUserLimit: 1, AllowNewUser: true, Items: oneItem(KindBootSlot, 2, 0)}))
+
+	// 用户已有已付费订单（买过席位/云手机）。
+	require.NoError(t, framework.DB.Create(&BizOrder{UserID: uint(trialUser), BizType: BizSeatNew, Status: BizOrderPaid, PayMethod: PayBalance, TotalCents: 1}).Error)
+
+	// 列表侧：卡片应可领取（不再因付费订单置灰）。
+	items, err := TrialService.ListClaimable(trialUser)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.True(t, items[0].Claimable, "有付费订单也应可领 AllowNewUser 试用（CP-0076）")
+
+	// 领取成功；再领受限领上限拒绝。
+	require.NoError(t, TrialService.ClaimTrial(trialUser, "welcome", ""), "有付费订单也应能领取")
+	assert.Equal(t, 2, bootCap(t, trialUser))
+	assert.Error(t, TrialService.ClaimTrial(trialUser, "welcome", ""), "已领过应达上限被拒")
 }
 
 func TestListClaimable(t *testing.T) {
