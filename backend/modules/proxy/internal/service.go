@@ -33,6 +33,16 @@ func validateProxyName(name string) error {
 	return nil
 }
 
+// validateProxyProtocol 协议白名单（CP-0027 / #32）：本产品仅支持 SOCKS5（列表定位与探测均为
+// SOCKS5 拨号）。留空按默认 socks5；显式传入其他（如 http）一律拒绝，杜绝非 SOCKS5 协议入库。
+func validateProxyProtocol(protocol string) error {
+	p := strings.ToLower(strings.TrimSpace(protocol))
+	if p == "" || p == "socks5" {
+		return nil
+	}
+	return apperr.Validation("仅支持 socks5 代理协议")
+}
+
 // serviceImpl 代理业务服务，依赖注入的 repository 与探测端口 prober。
 // 前台方法都带 userID：只操作「当前用户自己的」代理；Admin* 方法供后台运营。
 type serviceImpl struct {
@@ -108,7 +118,10 @@ func (s *serviceImpl) ProbeOwned(ctx context.Context, userID, id int) error {
 // orderable 列表允许排序的字段白名单（杜绝 SQL 注入）。
 var orderable = map[string]bool{"id": true, "name": true, "latency": true, "created_at": true}
 
+// normalizeProtocol 规范化协议：去空白并小写；留空回落 socks5。
+// 配合 validateProxyProtocol（白名单仅 socks5），落库值恒为规范化后的 "socks5"。
 func normalizeProtocol(p string) string {
+	p = strings.ToLower(strings.TrimSpace(p))
 	if p == "" {
 		return "socks5"
 	}
@@ -168,6 +181,10 @@ func (s *serviceImpl) Create(userID int, req *ProxyCreate) (*Proxy, error) {
 		return nil, err
 	}
 	if err := validateProxyPort(req.Port); err != nil {
+		return nil, err
+	}
+	// 协议白名单：仅 socks5（CP-0027 / #32）。
+	if err := validateProxyProtocol(req.Protocol); err != nil {
 		return nil, err
 	}
 	// 名称同属主唯一（CP-0063 / #55）。
@@ -245,6 +262,10 @@ func (s *serviceImpl) BatchCreate(userID int, items []ProxyCreate) (int, error) 
 		if err := validateProxyPort(it.Port); err != nil {
 			return 0, apperr.Validation(fmt.Sprintf("第 %d 行：端口必须在 1-65535 之间", row))
 		}
+		// 协议白名单：仅 socks5（CP-0027 / #32）。
+		if err := validateProxyProtocol(it.Protocol); err != nil {
+			return 0, apperr.Validation(fmt.Sprintf("第 %d 行：仅支持 socks5 代理协议", row))
+		}
 		// 名称导入规则：缺省用 host:port 兜底。
 		name := strings.TrimSpace(it.Name)
 		if name == "" {
@@ -300,7 +321,11 @@ func (s *serviceImpl) Update(userID, id int, req *ProxyUpdate) (*Proxy, error) {
 		fields["name"] = name
 	}
 	if req.Protocol != "" {
-		fields["protocol"] = req.Protocol
+		// 协议白名单：仅 socks5（CP-0027 / #32）；落库前规范化。
+		if err := validateProxyProtocol(req.Protocol); err != nil {
+			return nil, err
+		}
+		fields["protocol"] = normalizeProtocol(req.Protocol)
 	}
 	if req.Host != "" {
 		fields["host"] = req.Host

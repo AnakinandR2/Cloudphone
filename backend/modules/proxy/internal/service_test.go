@@ -268,6 +268,29 @@ func TestProxyListSizeClamp(t *testing.T) {
 	assert.Len(t, adminList, 2, "AdminList size=0/page<1 应回落默认")
 }
 
+// #32（CP-0027）：协议白名单——仅 socks5；http 等一律拒绝（创建 / 更新 / 批量）；
+// 留空默认 socks5，大小写规范化落库为小写 socks5。
+func TestProxyProtocolWhitelist(t *testing.T) {
+	t.Cleanup(func() { framework.CleanTable("proxies") })
+
+	_, err := ProxyService.Create(userA, &ProxyCreate{Name: "http1", Protocol: "http", Host: "1.1.1.1", Port: 1080})
+	assert.Error(t, err, "http 协议应拒绝")
+
+	def, err := ProxyService.Create(userA, &ProxyCreate{Name: "def", Host: "1.1.1.2", Port: 1080})
+	require.NoError(t, err)
+	assert.Equal(t, "socks5", def.Protocol, "留空应默认 socks5")
+
+	up, err := ProxyService.Create(userA, &ProxyCreate{Name: "up", Protocol: "SOCKS5", Host: "1.1.1.3", Port: 1080})
+	require.NoError(t, err)
+	assert.Equal(t, "socks5", up.Protocol, "大小写应规范化为小写 socks5")
+
+	_, err = ProxyService.Update(userA, int(def.ID), &ProxyUpdate{Protocol: "http"})
+	assert.Error(t, err, "更新到 http 协议应拒绝")
+
+	_, err = ProxyService.BatchCreate(userA, []ProxyCreate{{Name: "bh", Protocol: "http", Host: "2.2.2.2", Port: 1080}})
+	assert.Error(t, err, "批量含 http 协议应整批拒绝")
+}
+
 // #55：名称同属主唯一（创建 / 更新 / 批量）；不同用户可同名。
 func TestProxyNameUniquePerOwner(t *testing.T) {
 	t.Cleanup(func() { framework.CleanTable("proxies") })
