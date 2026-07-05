@@ -449,6 +449,7 @@ export default {
     lastChecked: 'Last Checked',
     importTitle: 'Bulk Import Proxies',
     importDesc: 'One per line. Supported formats (protocol defaults to socks5):',
+    importLabel: 'Proxy list',
     importPlaceholder: 'Paste your proxy list here, one per line…',
     importParsed: '{n} valid proxies parsed',
     importInvalidRows: '{n} row(s) not recognized and will be ignored: line {rows}',
@@ -492,6 +493,7 @@ export default {
     errNameRequired: 'Name is required',
     errHostRequired: 'Host is required',
     errPortRequired: 'A valid port is required',
+    errPortRange: 'Port must be between 1 and 65535',
   },
   phone: {
     title: 'My Phones',

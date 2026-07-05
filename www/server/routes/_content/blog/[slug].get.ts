@@ -9,8 +9,10 @@ export default defineEventHandler(async (event) => {
   }
   const q = getQuery(event)
   const cfg = useRuntimeConfig()
-  return await contentFetch<PubArticleDetail>(`/articles/${encodeURIComponent(slug)}`, {
+  const post = await contentFetch<PubArticleDetail>(`/articles/${encodeURIComponent(slug)}`, {
     space: cfg.contentSpace as string,
     lang: langToApi(q.lang ? String(q.lang) : undefined),
   })
+  // 中台空 tags 切片会序列化为 null，兜底为数组，避免详情页 tags.length 崩溃。
+  return normalizeArticle(post)
 })

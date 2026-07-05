@@ -1,6 +1,19 @@
 // 内容中台 Pub API 的服务端调用封装。
 // 密钥只在服务端（runtimeConfig）读取，浏览器永不接触；页面只调用本站 /_content/*。
 import type { H3Event } from 'h3'
+import type { PubTaxon } from '~/types/content'
+
+/**
+ * 规整中台文章对象的可空数组字段。
+ * 中台（Go）把「空切片」序列化为 JSON `null`，但前端契约声明 `tags` 恒为数组，
+ * 且模板直接 `tags.length` / `tags.slice(...)`。此处在 BFF 边界兜底为 `[]`，
+ * 让无标签文章不再导致列表 / 详情页渲染崩溃（reading 'length' of null）。
+ * 传入空值时原样返回（详情不存在等情形由上游 404 处理，不在此臆造对象）。
+ */
+export function normalizeArticle<T extends { tags?: PubTaxon[] | null }>(a: T): T {
+  if (!a) return a
+  return { ...a, tags: Array.isArray(a.tags) ? a.tags : [] }
+}
 
 /**
  * 站点 i18n locale → 中台语言码。

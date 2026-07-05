@@ -9,6 +9,7 @@ import proxyApi from '@/api/modules/proxy'
 import type { CloudPhone } from '@/types/phone'
 import type { Proxy } from '@/types/proxy'
 import { formatDateTime } from '@/utils/date'
+import { buildPhoneFormSchema } from './phoneFormSchema'
 import { countBoundProxies, formatProxyAddress, formatProxyIp } from './proxyBind'
 import {
   Dialog,
@@ -116,8 +117,10 @@ watch(open, async (v) => {
 
 async function submit() {
   nameError.value = ''
-  if (!form.name.trim()) {
-    nameError.value = t('phone.errNameRequired')
+  // 校验交给 zod schema（@/views/phone/phoneFormSchema），错误映射回 nameError 就地显示。
+  const r = buildPhoneFormSchema(t).safeParse({ name: form.name })
+  if (!r.success) {
+    nameError.value = r.error.issues[0]?.message ?? t('phone.errNameRequired')
     return
   }
   submitting.value = true
@@ -161,8 +164,10 @@ async function submit() {
 
       <div class="space-y-4 py-2">
         <div class="space-y-2">
-          <Label for="ph-name">{{ t('phone.fName') }}</Label>
-          <Input id="ph-name" v-model="form.name" :disabled="readonly" :placeholder="t('phone.fNamePlaceholder')" />
+          <Label for="ph-name">
+            {{ t('phone.fName') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
+          </Label>
+          <Input id="ph-name" v-model="form.name" :disabled="readonly" :aria-invalid="!!nameError" :placeholder="t('phone.fNamePlaceholder')" />
           <p v-if="nameError" class="text-destructive text-xs">{{ nameError }}</p>
         </div>
         <div v-if="!isCreate" class="space-y-2">

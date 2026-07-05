@@ -1,0 +1,6444 @@
+basePath: /api/open/v1
+definitions:
+  article.ArticleCreateReq:
+    properties:
+      author_id:
+        description: 关联作者 ID，可为空
+        type: integer
+      first_translation:
+        allOf:
+          - $ref: "#/definitions/article.TranslationPayload"
+        description: 首个语言翻译（必填）
+      group_id:
+        description: 目录分组节点 ID，可为空（提供则把文章放入该分组）
+        example: 3
+        type: integer
+      path:
+        description: 相对子路径（必填，拼接到 base_url 后构成唯一 URL）
+        example: blog/hello-world
+        type: string
+      published_at:
+        description: 发布时间，可为空
+        type: string
+      slug:
+        description: URL 友好标识（必填）
+        example: hello-world
+        type: string
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 状态：draft / published
+        example: draft
+      tag_ids:
+        description: 关联标签 ID 列表
+        items:
+          type: integer
+        type: array
+    required:
+      - first_translation
+      - path
+      - slug
+    type: object
+  article.ArticleDetailView:
+    properties:
+      author:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_author.AuthorView"
+        description: 关联作者（按 lang 内嵌；开放面无独立作者接口，靠此直接展示；作者被删则空）
+      author_id:
+        description: 关联作者 ID（admin 前端可经作者库 store join）
+        type: integer
+      coverage:
+        allOf:
+          - $ref: "#/definitions/article.LangCoverage"
+        description: 语言覆盖（相对空间 SupportedLangs：covered/missing）
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      created_by_staff_id:
+        description: 创建者 staff ID
+        example: 1
+        type: integer
+      full_url:
+        description: 完整 URL
+        type: string
+      group:
+        allOf:
+          - $ref: "#/definitions/article.GroupBrief"
+        description: 所属目录分组（= 分类，精简）
+      group_id:
+        description: 所属目录分组节点 ID
+        type: integer
+      id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      path:
+        description: 相对子路径
+        type: string
+      published_at:
+        description: 发布时间，未发布为空
+        format: date-time
+        type: string
+      slug:
+        description: URL 友好标识，空间内唯一
+        example: hello-world
+        type: string
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 状态：draft / published
+        example: published
+      tag_ids:
+        description: 关联标签 ID 列表
+        items:
+          type: integer
+        type: array
+      tags:
+        description: 关联标签（精简）
+        items:
+          $ref: "#/definitions/article.TagBrief"
+        type: array
+      translations:
+        description: 全部语言翻译
+        items:
+          $ref: "#/definitions/article.TranslationView"
+        type: array
+      updated_at:
+        description: 更新时间
+        format: date-time
+        type: string
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  article.ArticleDirectoryNode:
+    properties:
+      article_id:
+        description: |-
+          ArticleID 仅 kind=article 非空；(space_id, article_id) 唯一 → 一文最多入树一次。
+          NULL 不计入唯一约束，故多个 group 节点可并存。
+        type: integer
+      collapsed:
+        description: 是否默认折叠（仅分组有意义）
+        example: false
+        type: boolean
+      created_at:
+        description: 创建时间
+        type: string
+      id:
+        description: 节点 ID
+        example: 1
+        type: integer
+      kind:
+        allOf:
+          - $ref: "#/definitions/article.DirNodeKind"
+        description: 节点类型：group 分组 / article 文章
+        example: group
+      parent_id:
+        description: 父节点 ID，可为空（顶级）
+        type: integer
+      path:
+        description: Path：分组聚合页相对 Space.base_url 的子路径（空间内唯一，service 层校验，与文章 path 同命名空间）。
+        example: guides
+        type: string
+      slug:
+        description: Slug：分组的正式 slug（空间内 group 唯一，service 层校验）；article 节点不用。
+        example: getting-started
+        type: string
+      sort:
+        description: 同级排序，越小越靠前
+        example: 0
+        type: integer
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      updated_at:
+        description: 更新时间
+        type: string
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  article.ArticleDirectoryNodeTranslation:
+    properties:
+      created_at:
+        description: 创建时间
+        type: string
+      lang:
+        description: 语言代码
+        example: zh-CN
+        type: string
+      name:
+        description: 该语言下的分组标题
+        example: 快速开始
+        type: string
+      node_id:
+        description: 所属节点 ID
+        example: 1
+        type: integer
+      updated_at:
+        description: 更新时间
+        type: string
+    type: object
+  article.ArticleListView:
+    properties:
+      author:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_author.AuthorView"
+        description: 关联作者（按 lang 内嵌；开放面无独立作者接口，靠此直接展示；作者被删则空）
+      author_id:
+        description: 关联作者 ID（admin 前端可经作者库 store join）
+        type: integer
+      coverage:
+        allOf:
+          - $ref: "#/definitions/article.LangCoverage"
+        description: 语言覆盖（相对空间 SupportedLangs：covered/missing）
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      created_by_staff_id:
+        description: 创建者 staff ID
+        example: 1
+        type: integer
+      full_url:
+        description: 完整 URL = Space.base_url + '/' + path
+        type: string
+      group:
+        allOf:
+          - $ref: "#/definitions/article.GroupBrief"
+        description: 所属目录分组（= 分类，精简）
+      id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      langs:
+        description: 已有翻译的语言列表
+        items:
+          type: string
+        type: array
+      path:
+        description: 相对子路径
+        type: string
+      primary_cover_url:
+        description: 主翻译封面图 URL
+        type: string
+      primary_summary:
+        description: 主翻译摘要
+        type: string
+      primary_translation:
+        allOf:
+          - $ref: "#/definitions/article.TranslationBrief"
+        description: 主翻译（用于列表标题展示）
+      published_at:
+        description: 发布时间，未发布为空
+        format: date-time
+        type: string
+      slug:
+        description: URL 友好标识，空间内唯一
+        example: hello-world
+        type: string
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 状态：draft / published
+        example: published
+      tags:
+        description: 关联标签（精简）
+        items:
+          $ref: "#/definitions/article.TagBrief"
+        type: array
+      updated_at:
+        description: 更新时间
+        format: date-time
+        type: string
+    type: object
+  article.ArticleTag:
+    properties:
+      created_at:
+        description: 创建时间
+        type: string
+      id:
+        description: 标签 ID
+        example: 1
+        type: integer
+      path:
+        description: 前台聚合页相对 URL，可为空
+        example: tag/golang
+        type: string
+      slug:
+        description: URL 友好标识，空间内唯一
+        example: golang
+        type: string
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      updated_at:
+        description: 更新时间
+        type: string
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  article.ArticleUpdateReq:
+    properties:
+      author_id:
+        description: 关联作者 ID（提供则设置/更换作者）
+        type: integer
+      clear_author:
+        description: 置为 true 时清空作者
+        type: boolean
+      clear_group:
+        description: 置为 true 时把文章移出目录树（未分类）
+        type: boolean
+      clear_path:
+        description: 已废弃：path 必填，置 true 会返回校验错误
+        type: boolean
+      clear_published_at:
+        description: 置为 true 时清空 published_at
+        type: boolean
+      group_id:
+        description: 目录分组节点 ID（提供则把文章放/移到该分组）
+        type: integer
+      path:
+        description: 相对子路径（不可为空；提供须非空）
+        type: string
+      published_at:
+        description: 发布时间
+        type: string
+      slug:
+        description: URL 友好标识
+        example: hello-world
+        type: string
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 状态：draft / published
+        example: published
+      tag_ids:
+        description: 关联标签 ID 列表（整组覆盖）
+        items:
+          type: integer
+        type: array
+    type: object
+  article.BodyFormat:
+    enum:
+      - markdown
+      - html
+      - json
+    type: string
+    x-enum-comments:
+      BodyHTML: 正文源为 HTML
+      BodyJSON: 正文源为 JSON（结构化）
+      BodyMarkdown: 正文源为 Markdown
+    x-enum-varnames:
+      - BodyMarkdown
+      - BodyHTML
+      - BodyJSON
+  article.CoAuthor:
+    properties:
+      name:
+        description: 协作者名称
+        example: Claude
+        type: string
+      type:
+        description: 协作者类型：ai / human，缺省 ai
+        enum:
+          - ai
+          - human
+        example: ai
+        type: string
+    type: object
+  article.DirArticleBrief:
+    properties:
+      id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      slug:
+        description: slug
+        example: hello-world
+        type: string
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 状态：draft / published
+        example: draft
+      title:
+        description: 标题
+        example: 你好世界
+        type: string
+    type: object
+  article.DirNodeCreateReq:
+    properties:
+      article_id:
+        description: 指向的文章 ID（kind=article 必填）
+        type: integer
+      collapsed:
+        description: 是否默认折叠
+        example: false
+        type: boolean
+      group_name:
+        description: 分组标题（kind=group 必填）
+        example: 快速开始
+        type: string
+      kind:
+        allOf:
+          - $ref: "#/definitions/article.DirNodeKind"
+        description: 节点类型：group / article（必填）
+        example: group
+      lang:
+        description: 初始翻译语言（kind=group 必填）
+        example: zh-CN
+        type: string
+      parent_id:
+        description: 父节点 ID，可为空（顶级）
+        type: integer
+      path:
+        description: 分组落地页相对 URL（kind=group 可选）
+        example: guides
+        type: string
+      slug:
+        description: 分组 slug（kind=group 可选，空间内唯一）
+        example: getting-started
+        type: string
+    required:
+      - kind
+    type: object
+  article.DirNodeKind:
+    enum:
+      - group
+      - article
+    type: string
+    x-enum-comments:
+      DirKindArticle: 文章节点（指向一篇文章）
+      DirKindGroup: 分组节点（可含子节点，聚合页）
+    x-enum-varnames:
+      - DirKindGroup
+      - DirKindArticle
+  article.DirNodeUpdateReq:
+    properties:
+      clear_path:
+        description: 置为 true 时清空 path
+        type: boolean
+      clear_slug:
+        description: 置为 true 时清空 slug
+        type: boolean
+      collapsed:
+        description: 是否默认折叠
+        type: boolean
+      path:
+        description: 分组落地页相对 URL
+        example: guides
+        type: string
+      slug:
+        description: 分组 slug
+        example: getting-started
+        type: string
+    type: object
+  article.DirNodeView:
+    properties:
+      article_count:
+        description: 递归文章数量（含子分组、排除软删/悬空）
+        example: 5
+        type: integer
+      article_id:
+        description: article 节点
+        type: integer
+      child_group_count:
+        description: group 节点懒加载计数（仅 group 节点；ListChildren 填充）
+        example: 2
+        type: integer
+      children:
+        description: 子节点
+        items:
+          $ref: "#/definitions/article.DirNodeView"
+        type: array
+      collapsed:
+        description: 是否默认折叠
+        example: false
+        type: boolean
+      full_url:
+        description: 文章完整 URL（仅 article 节点）
+        type: string
+      group_full_url:
+        description: 分组落地页完整 URL（仅 group 且有 path）
+        type: string
+      id:
+        description: 节点 ID
+        example: 1
+        type: integer
+      kind:
+        allOf:
+          - $ref: "#/definitions/article.DirNodeKind"
+        description: 节点类型：group / article
+        example: group
+      parent_id:
+        description: 父节点 ID
+        type: integer
+      path:
+        description: 分组落地页相对 URL
+        example: guides
+        type: string
+      published_at:
+        description: 文章发布时间（仅 article 节点）
+        type: string
+      slug:
+        description: 分组 slug
+        example: getting-started
+        type: string
+      sort:
+        description: 同级排序
+        example: 0
+        type: integer
+      status:
+        allOf:
+          - $ref: "#/definitions/article.Status"
+        description: 文章状态（仅 article 节点）
+        example: published
+      title:
+        description: 通用：group=分组名 fallback；article=文章标题 fallback
+        example: 快速开始
+        type: string
+      translations:
+        description: group 节点多语言（admin 编辑用）
+        items:
+          $ref: "#/definitions/article.ArticleDirectoryNodeTranslation"
+        type: array
+    type: object
+  article.DirReorderItem:
+    properties:
+      id:
+        description: 节点 ID（必填）
+        example: 1
+        type: integer
+      parent_id:
+        description: 新父节点 ID，可为空（顶级）
+        type: integer
+      sort:
+        description: 新的同级排序
+        example: 0
+        type: integer
+    required:
+      - id
+    type: object
+  article.DirReorderReq:
+    properties:
+      items:
+        description: 重排项列表（必填）
+        items:
+          $ref: "#/definitions/article.DirReorderItem"
+        type: array
+    required:
+      - items
+    type: object
+  article.DirStaffView:
+    properties:
+      tree:
+        description: 目录树（嵌套）
+        items:
+          $ref: "#/definitions/article.DirNodeView"
+        type: array
+      unplaced:
+        description: 未归入目录树的文章
+        items:
+          $ref: "#/definitions/article.DirArticleBrief"
+        type: array
+    type: object
+  article.FeedDescriptor:
+    properties:
+      feed_url:
+        example: https://www.example.com/api/open/v1/rss?space=blog&lang=en
+        type: string
+      lang:
+        example: en
+        type: string
+    type: object
+  article.FeedbackReq:
+    properties:
+      contact:
+        description: 可选联系方式
+        example: me@example.com
+        type: string
+      content:
+        description: 反馈正文（必填）
+        example: 这一段链接失效了
+        type: string
+      ip:
+        description: 终端访客 IP（业务传入；空则回退 ClientIP）
+        example: 203.0.113.7
+        type: string
+      lang:
+        description: 所在语言版本
+        example: zh-CN
+        type: string
+      meta:
+        description: 业务透传身份上下文
+        example: vip:gold
+        type: string
+      rating:
+        description: 提交时的打分快照（可选）
+        example: 4
+        type: integer
+      user_agent:
+        description: 终端 UA（业务传入；空则回退请求头）
+        type: string
+      visitor_id:
+        description: 访客标识，可空
+        example: v-abc123
+        type: string
+      vote:
+        description: 提交时的赞踩快照（可选）
+        example: 1
+        type: integer
+    required:
+      - content
+    type: object
+  article.FeedbackStatus:
+    enum:
+      - open
+      - resolved
+      - ignored
+    type: string
+    x-enum-comments:
+      FeedbackIgnored: 已忽略
+      FeedbackOpen: 待处理（默认）
+      FeedbackResolved: 已处理
+    x-enum-varnames:
+      - FeedbackOpen
+      - FeedbackResolved
+      - FeedbackIgnored
+  article.FeedbackStatusReq:
+    properties:
+      status:
+        allOf:
+          - $ref: "#/definitions/article.FeedbackStatus"
+        description: open/resolved/ignored
+        example: resolved
+    required:
+      - status
+    type: object
+  article.FeedbackSummary:
+    properties:
+      down_count:
+        description: 点踩数
+        example: 2
+        type: integer
+      feedback_count:
+        description: 文本反馈条数
+        example: 5
+        type: integer
+      my_reaction:
+        allOf:
+          - $ref: "#/definitions/article.MyReaction"
+        description: 当前访客的反应（带 visitor_id 时）
+      rating_avg:
+        description: 平均分（仅计 rating>0）
+        example: 4.2
+        type: number
+      rating_count:
+        description: 评分人数
+        example: 15
+        type: integer
+      rating_dist:
+        description: 1–5 各分桶计数（下标 0=1星）
+        items:
+          type: integer
+        type: array
+      up_count:
+        description: 点赞数
+        example: 30
+        type: integer
+    type: object
+  article.FeedbackView:
+    properties:
+      article_id:
+        description: 被反馈的文章 ID
+        example: 1
+        type: integer
+      article_title:
+        description: 文章标题（按 zh-CN fallback 取）
+        example: 你好世界
+        type: string
+      contact:
+        description: 访客留下的联系方式，可空
+        example: me@example.com
+        type: string
+      content:
+        description: 反馈正文
+        example: 这一段链接失效了
+        type: string
+      created_at:
+        description: 提交时间
+        format: date-time
+        type: string
+      handled_at:
+        description: 处理时间，未处理为空
+        format: date-time
+        type: string
+      handled_by_staff_id:
+        description: 处理该反馈的 staff ID，未处理为 0
+        example: 1
+        type: integer
+      id:
+        description: 反馈记录 ID
+        example: 1
+        type: integer
+      ip:
+        description: 终端访客 IP
+        example: 203.0.113.7
+        type: string
+      lang:
+        description: 反馈所在的语言版本
+        example: zh-CN
+        type: string
+      meta:
+        description: 业务透传身份上下文
+        example: vip:gold
+        type: string
+      rating_snapshot:
+        description: 提交时的打分快照（1–5，0=未打分）
+        example: 4
+        type: integer
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      status:
+        allOf:
+          - $ref: "#/definitions/article.FeedbackStatus"
+        description: 处理状态：open 待处理 / resolved 已处理 / ignored 已忽略
+        example: open
+      updated_at:
+        description: 更新时间
+        format: date-time
+        type: string
+      user_agent:
+        description: 浏览器/设备 UA
+        type: string
+      visitor_id:
+        description: 访客标识（前台 cookie UUID 或自定义用户标识），可空
+        example: v-abc123
+        type: string
+      vote_snapshot:
+        description: 提交时的赞踩快照（-1 踩 / 1 赞 / 0 未投票）
+        example: 1
+        type: integer
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  article.GroupBrief:
+    properties:
+      full_url:
+        description: 分组聚合页完整 URL（Space.base_url + '/' + path），无 path 则空
+        type: string
+      id:
+        description: 分组（目录节点）ID
+        example: 1
+        type: integer
+      name:
+        description: 当前语言下的分组名
+        example: 使用指南
+        type: string
+      slug:
+        description: 分组 slug
+        example: guides
+        type: string
+    type: object
+  article.LangCoverage:
+    properties:
+      covered:
+        description: 已有译文且 ∈ SupportedLangs 的语言
+        items:
+          type: string
+        type: array
+      missing:
+        description: SupportedLangs 中尚无译文的语言
+        items:
+          type: string
+        type: array
+    type: object
+  article.MyReaction:
+    properties:
+      rating:
+        description: 0–5
+        example: 4
+        type: integer
+      vote:
+        description: -1 / 0 / 1
+        example: 1
+        type: integer
+    type: object
+  article.PinAddReq:
+    properties:
+      article_id:
+        description: 文章 ID
+        example: 1
+        type: integer
+    required:
+      - article_id
+    type: object
+  article.PinReorderItem:
+    properties:
+      article_id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      sort:
+        description: 新顺序，越小越靠前
+        example: 0
+        type: integer
+    required:
+      - article_id
+    type: object
+  article.PinReorderReq:
+    properties:
+      items:
+        description: 重排项列表
+        items:
+          $ref: "#/definitions/article.PinReorderItem"
+        type: array
+    required:
+      - items
+    type: object
+  article.PubArticleView:
+    properties:
+      author:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_author.AuthorView"
+        description: 作者（仅详情内嵌，按 lang 解析；供前台展示）
+      available_langs:
+        description: 可用语言列表（仅详情返回）
+        items:
+          type: string
+        type: array
+      body_html:
+        description: 渲染后的 HTML 正文（仅详情返回）
+        type: string
+      cover_alt:
+        description: 封面图替代文本
+        type: string
+      cover_url:
+        description: 封面图 URL
+        type: string
+      coverage:
+        allOf:
+          - $ref: "#/definitions/article.LangCoverage"
+        description: 语言覆盖（相对空间 SupportedLangs：covered/missing）
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      full_url:
+        description: 完整 URL
+        type: string
+      group:
+        allOf:
+          - $ref: "#/definitions/article.GroupBrief"
+        description: 所属目录分组（= 分类，精简）
+      id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      lang:
+        description: 当前语言
+        example: zh-CN
+        type: string
+      path:
+        description: 相对子路径
+        type: string
+      published_at:
+        description: 发布时间，未发布为空
+        format: date-time
+        type: string
+      seo_description:
+        description: SEO 描述
+        type: string
+      seo_keywords:
+        description: SEO 关键字
+        type: string
+      seo_title:
+        description: SEO 标题
+        type: string
+      slug:
+        description: URL 友好标识，空间内唯一
+        example: hello-world
+        type: string
+      summary:
+        description: 摘要
+        type: string
+      tags:
+        description: 关联标签（精简）
+        items:
+          $ref: "#/definitions/article.TagBrief"
+        type: array
+      title:
+        description: 标题
+        example: 你好世界
+        type: string
+      updated_at:
+        description: 更新时间
+        format: date-time
+        type: string
+    type: object
+  article.PubDirNode:
+    properties:
+      children:
+        description: 子节点
+        items:
+          $ref: "#/definitions/article.PubDirNode"
+        type: array
+      collapsed:
+        description: 是否默认折叠
+        example: false
+        type: boolean
+      kind:
+        allOf:
+          - $ref: "#/definitions/article.DirNodeKind"
+        description: 节点类型：group / article
+        example: group
+      slug:
+        description: 锚点 slug
+        example: getting-started
+        type: string
+      title:
+        description: 标题
+        example: 快速开始
+        type: string
+      url:
+        description: 文章完整 URL（仅 article 节点）
+        type: string
+    type: object
+  article.ReactionAnalytics:
+    properties:
+      down_count:
+        description: 踩总数
+        example: 8
+        type: integer
+      most_down:
+        description: 最多踩文章
+        items:
+          $ref: "#/definitions/article.TopArticle"
+        type: array
+      most_up:
+        description: 最多赞文章
+        items:
+          $ref: "#/definitions/article.TopArticle"
+        type: array
+      rating_avg:
+        description: 平均分
+        example: 4.2
+        type: number
+      rating_count:
+        description: 评分人数
+        example: 50
+        type: integer
+      rating_dist:
+        description: 1–5 分桶
+        items:
+          type: integer
+        type: array
+      top_rated:
+        description: 最高分文章（rating_count>0）
+        items:
+          $ref: "#/definitions/article.TopArticle"
+        type: array
+      up_count:
+        description: 赞总数
+        example: 120
+        type: integer
+    type: object
+  article.ReactionReq:
+    properties:
+      ip:
+        description: 终端访客 IP（业务传入；空则服务端回退 ClientIP）
+        example: 203.0.113.7
+        type: string
+      lang:
+        description: 反应来自的语言版本
+        example: zh-CN
+        type: string
+      meta:
+        description: 业务透传身份上下文
+        example: vip:gold
+        type: string
+      rating:
+        description: 1–5；0 表示清除打分；省略=不改
+        example: 4
+        type: integer
+      user_agent:
+        description: 终端 UA（业务传入；空则回退请求头）
+        type: string
+      visitor_id:
+        description: 访客标识（前台 cookie UUID 或自定义用户标识）
+        example: v-abc123
+        type: string
+      vote:
+        description: -1 踩 / 1 赞；0 表示清除投票；省略=不改
+        example: 1
+        type: integer
+    required:
+      - visitor_id
+    type: object
+  article.ReactionView:
+    properties:
+      article_id:
+        description: 被反应的文章 ID
+        example: 1
+        type: integer
+      article_title:
+        description: 文章标题（按 zh-CN fallback 取）
+        example: 你好世界
+        type: string
+      created_at:
+        description: 首次提交时间
+        format: date-time
+        type: string
+      id:
+        description: 反应记录 ID
+        example: 1
+        type: integer
+      ip:
+        description: 终端访客 IP（业务传入或回退 ClientIP）
+        example: 203.0.113.7
+        type: string
+      lang:
+        description: 反应来自的语言版本
+        example: zh-CN
+        type: string
+      meta:
+        description: 业务透传身份上下文
+        example: vip:gold
+        type: string
+      rating:
+        description: 打分，1–5 有效，0 表示未打分
+        example: 4
+        type: integer
+      space_id:
+        description: 所属内容空间 ID
+        example: 1
+        type: integer
+      updated_at:
+        description: 最近一次 upsert 时间
+        format: date-time
+        type: string
+      user_agent:
+        description: 浏览器/设备 UA
+        type: string
+      visitor_id:
+        description: 访客标识（前台 cookie UUID 或自定义用户标识），与文章一起去重
+        example: v-abc123
+        type: string
+      vote:
+        description: 赞踩，-1 踩 / 1 赞 / 0 未投票
+        example: 1
+        type: integer
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  article.SortSettingReq:
+    properties:
+      default_sort:
+        description: 非置顶默认策略
+        example: directory
+        type: string
+    required:
+      - default_sort
+    type: object
+  article.SortSettingView:
+    properties:
+      default_sort:
+        example: directory
+        type: string
+    type: object
+  article.SpaceFeedsView:
+    properties:
+      feeds:
+        items:
+          $ref: "#/definitions/article.FeedDescriptor"
+        type: array
+    type: object
+  article.Status:
+    enum:
+      - draft
+      - published
+    type: string
+    x-enum-comments:
+      StatusDraft: 草稿（未发布，不对外可见）
+      StatusPublished: 已发布（对外可见）
+    x-enum-varnames:
+      - StatusDraft
+      - StatusPublished
+  article.TagBrief:
+    properties:
+      id:
+        description: 标签 ID
+        example: 2
+        type: integer
+      name:
+        description: 当前语言下的标签名
+        example: Go 语言
+        type: string
+      slug:
+        description: 标签 slug
+        example: golang
+        type: string
+    type: object
+  article.TagCreateReq:
+    properties:
+      lang:
+        description: 初始语言代码（必填）
+        example: zh-CN
+        type: string
+      name:
+        description: 初始语言下的标签名（必填）
+        example: Go 语言
+        type: string
+      path:
+        description: 前台聚合页相对 URL，可为空
+        example: tag/golang
+        type: string
+      slug:
+        description: URL 友好标识（必填）
+        example: golang
+        type: string
+    required:
+      - lang
+      - name
+      - slug
+    type: object
+  article.TagUpdateReq:
+    properties:
+      clear_path:
+        description: 置为 true 时清空 path
+        type: boolean
+      path:
+        description: 前台聚合页相对 URL
+        type: string
+      slug:
+        description: URL 友好标识
+        example: golang
+        type: string
+    type: object
+  article.TaxonomyTranslationUpsertReq:
+    properties:
+      name:
+        description: 该语言下的名称（必填）
+        example: 使用指南
+        type: string
+    required:
+      - name
+    type: object
+  article.TopArticle:
+    properties:
+      article_id:
+        description: 文章 ID
+        example: 1
+        type: integer
+      count:
+        description: 样本数（评分人数 / 赞数 / 踩数）
+        example: 12
+        type: integer
+      title:
+        description: 文章标题
+        example: 你好世界
+        type: string
+      value:
+        description: 指标值（平均分 / 赞数 / 踩数）
+        example: 4.5
+        type: number
+    type: object
+  article.TranslationBrief:
+    properties:
+      id:
+        description: 翻译 ID
+        example: 1
+        type: integer
+      lang:
+        description: 语言代码
+        example: zh-CN
+        type: string
+      title:
+        description: 该语言下的文章标题（列表标题展示用）
+        example: 你好世界
+        type: string
+    type: object
+  article.TranslationPayload:
+    properties:
+      body_format:
+        allOf:
+          - $ref: "#/definitions/article.BodyFormat"
+        description: 正文源格式：markdown / html / json（必填）
+        example: markdown
+      body_html:
+        description: 渲染后的 HTML 正文
+        type: string
+      body_raw:
+        description: 正文源内容
+        type: string
+      co_authors:
+        description: 软协作者（仅请求体，不落库；写历史版本时记录）
+        items:
+          $ref: "#/definitions/article.CoAuthor"
+        type: array
+      cover_alt:
+        description: 封面图替代文本
+        example: 封面替代文本
+        type: string
+      cover_url:
+        description: 封面图 URL
+        example: https://cdn.example.com/cover.png
+        type: string
+      lang:
+        description: 语言代码（必填）
+        example: zh-CN
+        type: string
+      seo_description:
+        description: SEO 描述
+        type: string
+      seo_keywords:
+        description: SEO 关键字
+        type: string
+      seo_title:
+        description: SEO 标题
+        type: string
+      summary:
+        description: 摘要
+        example: 这是一篇示例文章
+        type: string
+      title:
+        description: 标题（必填）
+        example: 你好世界
+        type: string
+    required:
+      - body_format
+      - lang
+      - title
+    type: object
+  article.TranslationUpdateReq:
+    properties:
+      body_format:
+        allOf:
+          - $ref: "#/definitions/article.BodyFormat"
+        description: 正文源格式：markdown / html / json
+        example: markdown
+      body_html:
+        description: 渲染后的 HTML 正文
+        type: string
+      body_raw:
+        description: 正文源内容
+        type: string
+      co_authors:
+        description: 软协作者（仅请求体，不落库；写历史版本时记录）
+        items:
+          $ref: "#/definitions/article.CoAuthor"
+        type: array
+      cover_alt:
+        description: 封面图替代文本
+        type: string
+      cover_url:
+        description: 封面图 URL
+        type: string
+      seo_description:
+        description: SEO 描述
+        type: string
+      seo_keywords:
+        description: SEO 关键字
+        type: string
+      seo_title:
+        description: SEO 标题
+        type: string
+      summary:
+        description: 摘要
+        type: string
+      title:
+        description: 标题
+        example: 新标题
+        type: string
+    type: object
+  article.TranslationView:
+    properties:
+      article_id:
+        description: 所属文章 ID
+        example: 1
+        type: integer
+      body_format:
+        allOf:
+          - $ref: "#/definitions/article.BodyFormat"
+        description: 正文源格式：markdown / html / json
+        example: markdown
+      body_html:
+        description: 渲染后的 HTML 正文
+        type: string
+      body_raw:
+        description: 正文源内容
+        type: string
+      cover_alt:
+        description: 封面图替代文本
+        type: string
+      cover_url:
+        description: 封面图 URL
+        type: string
+      created_at:
+        description: 创建时间
+        type: string
+      id:
+        description: 翻译 ID
+        example: 1
+        type: integer
+      lang:
+        description: 语言代码
+        example: zh-CN
+        type: string
+      seo_description:
+        description: SEO 描述
+        type: string
+      seo_keywords:
+        description: SEO 关键字
+        type: string
+      seo_title:
+        description: SEO 标题
+        type: string
+      summary:
+        description: 摘要
+        type: string
+      title:
+        description: 标题
+        example: 你好世界
+        type: string
+      updated_at:
+        description: 更新时间
+        type: string
+    type: object
+  author.AuthorRow:
+    properties:
+      avatar_url:
+        description: 头像 URL
+        example: https://cdn.example.com/avatars/alice.png
+        type: string
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      id:
+        description: 作者 ID
+        example: 1
+        type: integer
+      slug:
+        description: URL 友好标识，工作空间内唯一
+        example: alice
+        type: string
+      socials:
+        description: 该作者的社媒条目（已内嵌平台 slug/图标）
+        items:
+          $ref: "#/definitions/author.AuthorSocialView"
+        type: array
+      sort:
+        description: 手动排序，值越小越靠前
+        example: 0
+        type: integer
+      translations:
+        description: 各语言的姓名/职位/简介翻译
+        items:
+          $ref: "#/definitions/author.AuthorTransView"
+        type: array
+      updated_at:
+        description: 更新时间
+        format: date-time
+        type: string
+      workspace_id:
+        description: 所属 Workspace ID
+        example: 1
+        type: integer
+    type: object
+  author.AuthorSocialView:
+    properties:
+      icon_url:
+        description: 关联平台的图标 URL
+        example: https://cdn.example.com/gh.svg
+        type: string
+      id:
+        description: 作者社媒关联 ID
+        example: 1
+        type: integer
+      platform_id:
+        description: 关联的社媒平台 ID
+        example: 1
+        type: integer
+      platform_slug:
+        description: 关联平台的 URL 友好标识
+        example: github
+        type: string
+      sort:
+        description: 手动排序，值越小越靠前
+        example: 0
+        type: integer
+      url:
+        description: 该作者在此平台的主页地址
+        example: https://github.com/alice
+        type: string
+    type: object
+  author.AuthorTransView:
+    properties:
+      bio:
+        description: 该语言下的作者简介
+        example: 专注前端与设计系统。
+        type: string
+      lang:
+        description: 语言代码
+        example: zh-CN
+        type: string
+      name:
+        description: 该语言下的作者姓名
+        example: 爱丽丝
+        type: string
+      position:
+        description: 该语言下的作者职位
+        example: 前端工程师
+        type: string
+    type: object
+  covergen.AssetType:
+    enum:
+      - font
+      - image
+    type: string
+    x-enum-comments:
+      AssetFont: 字体素材（ttf/otf/woff/woff2），name 即 CSS font-family
+      AssetImage: 图片素材（png/jpg/svg 等），可作底图或 logo
+    x-enum-varnames:
+      - AssetFont
+      - AssetImage
+  covergen.CoverAsset:
+    properties:
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      created_by:
+        description: 上传者用户 ID
+        example: 3
+        type: integer
+      deleted_at:
+        $ref: "#/definitions/gorm.DeletedAt"
+      description:
+        description: Description 素材语义说明（给人/AI 看，如「品牌主 logo，深色透明底 PNG」）。
+        type: string
+      id:
+        description: 素材唯一标识
+        example: 1
+        type: integer
+      mime:
+        description: 文件 MIME 类型
+        example: image/png
+        type: string
+      name:
+        description: 显示名;字体即 CSS font-family
+        type: string
+      size:
+        description: 文件大小（字节）
+        example: 20480
+        type: integer
+      tags:
+        description: 素材标签（大小写不敏感去重，用于分类检索）
+        example:
+          - logo
+          - brand
+        items:
+          type: string
+        type: array
+      type:
+        allOf:
+          - $ref: "#/definitions/covergen.AssetType"
+        description: 素材类型：font 字体 / image 图片
+        enum:
+          - font
+          - image
+        example: image
+      url:
+        description: 素材文件的访问 URL
+        example: https://cdn.example.com/covers/logo.png
+        type: string
+      workspace_id:
+        description: 所属工作空间 ID
+        example: 10
+        type: integer
+    type: object
+  covergen.CoverTemplate:
+    properties:
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      created_by_staff_id:
+        example: 3
+        type: integer
+      deleted_at:
+        $ref: "#/definitions/gorm.DeletedAt"
+      description:
+        description: Description 模板用途说明（给人/AI 看，如「技术博客深色封面，左上大标题，右下角 logo」）。
+        example: 技术博客深色封面，左上大标题，右下角 logo
+        type: string
+      fields:
+        description: Fields 可填槽位清单。
+        items:
+          $ref: "#/definitions/covergen.Field"
+        type: array
+      height:
+        example: 630
+        type: integer
+      html_template:
+        description: HTMLTemplate 前端序列化出的自包含、带 mustache 占位符（双花括号包裹槽位 key）的完整 HTML 文档；后端原样渲染。
+        type: string
+      id:
+        example: 1
+        type: integer
+      layers:
+        description: Layers 编辑器可编辑真相。
+        items:
+          $ref: "#/definitions/covergen.Layer"
+        type: array
+      name:
+        example: 博客封面
+        type: string
+      thumb_url:
+        description: 模板缩略图 URL
+        example: https://cdn.example.com/covers/thumb.png
+        type: string
+      updated_at:
+        description: 最后更新时间
+        format: date-time
+        type: string
+      width:
+        example: 1200
+        type: integer
+      workspace_id:
+        example: 10
+        type: integer
+    type: object
+  covergen.CoverTemplateOpenCreateReq:
+    properties:
+      description:
+        description: 模板用途说明（供 AI/人理解）
+        example: 技术博客深色封面，左上大标题，右下角 logo
+        type: string
+      fields:
+        description: 可选，按 key 覆盖自动派生槽位的 label/default/description
+        items:
+          $ref: "#/definitions/covergen.Field"
+        type: array
+      height:
+        description: 画布高度 px（必填）
+        example: 630
+        type: integer
+      layers:
+        description: 结构化图层数组；数组顺序即栈序（index 0 最上层），后端据此推导 html_template
+        items:
+          $ref: "#/definitions/covergen.Layer"
+        type: array
+      name:
+        description: 模板名（必填）
+        example: 博客封面
+        type: string
+      width:
+        description: 画布宽度 px（必填）
+        example: 1200
+        type: integer
+    required:
+      - height
+      - name
+      - width
+    type: object
+  covergen.CoverTemplateOpenUpdateReq:
+    properties:
+      description:
+        description: 模板用途说明（供 AI/人理解）
+        type: string
+      fields:
+        description: 可选，按 key 覆盖自动派生槽位的 label/default/description
+        items:
+          $ref: "#/definitions/covergen.Field"
+        type: array
+      height:
+        description: 画布高度 px
+        type: integer
+      layers:
+        description: 结构化图层数组；传入时后端据此重新推导 html_template 与 fields
+        items:
+          $ref: "#/definitions/covergen.Layer"
+        type: array
+      name:
+        description: 模板名
+        type: string
+      width:
+        description: 画布宽度 px
+        type: integer
+    type: object
+  covergen.Field:
+    properties:
+      default:
+        description: 槽位默认值（未提供 data 时回落此值）
+        example: 默认标题
+        type: string
+      description:
+        description: Description 槽位语义指引（给人/AI 看，如「主标题，建议 ≤20 字」）；由 override 提供。
+        example: 主标题，建议 ≤20 字
+        type: string
+      key:
+        description: 槽位键（对应图层 bind_key，出图时用 data[key] 替换）
+        example: title
+        type: string
+      label:
+        description: 槽位显示名（供填数据表单展示）
+        example: 标题
+        type: string
+      type:
+        description: 槽位取值类型：text 文本 / image 图片 URL
+        enum:
+          - text
+          - image
+        example: text
+        type: string
+    type: object
+  covergen.Layer:
+    properties:
+      align:
+        description: 水平对齐：left / center / right（缺省 left）
+        enum:
+          - left
+          - center
+          - right
+        example: center
+        type: string
+      bind_key:
+        description: 槽位键；非空表示该图层内容为可填槽位，出图时被 data[bind_key] 替换
+        example: title
+        type: string
+      blur:
+        description: 高斯模糊半径（px）
+        example: 0
+        type: number
+      border_radius:
+        description: 非统一圆角（完整 CSS border-radius 串），存在时优先于 radius
+        type: string
+      color:
+        description: "文字颜色（CSS 颜色，缺省 #000000）"
+        example: "#ffffff"
+        type: string
+      content:
+        description: 文字内容（有 bind_key 时此值作为槽位默认值）
+        example: 标题文字
+        type: string
+      fill:
+        description: "色块实色填充（fill_type=solid 时生效，缺省 #000000）"
+        example: "#000000"
+        type: string
+      fill_type:
+        description: 填充类型：solid 实色 / gradient 线性渐变
+        enum:
+          - solid
+          - gradient
+        example: solid
+        type: string
+      fit:
+        description: 填充方式：cover / contain（image 缺省 cover，logo 缺省 contain）
+        enum:
+          - cover
+          - contain
+        example: cover
+        type: string
+      font_family:
+        description: 字体名；设成某字体素材的 name 即自动注入 @font-face
+        example: Source Han Sans
+        type: string
+      font_size:
+        description: 字号（px，缺省 32）
+        example: 64
+        type: number
+      font_weight:
+        description: 字重（如 400 / 700，缺省 400）
+        example: "700"
+        type: string
+      gradient_angle:
+        description: 渐变角度（deg，缺省 90）
+        example: 90
+        type: number
+      gradient_from:
+        description: 渐变起始色（fill_type=gradient 时生效）
+        example: "#000000"
+        type: string
+      gradient_to:
+        description: 渐变结束色（fill_type=gradient 时生效）
+        example: "#ffffff"
+        type: string
+      h:
+        description: 图层高度（px）
+        example: 200
+        type: number
+      id:
+        description: 图层唯一标识（同一模板内不可重复）
+        example: l1
+        type: string
+      letter_spacing:
+        description: 字间距（px）
+        example: 0
+        type: number
+      line_height:
+        description: 行高倍数（缺省 1.4）
+        example: 1.4
+        type: number
+      name:
+        description: 图层显示名（也用作派生槽位的 label）
+        example: 标题
+        type: string
+      opacity:
+        description: 不透明度（0-1，缺省 1）
+        example: 1
+        type: number
+      radius:
+        description: 统一圆角半径（px）
+        example: 12
+        type: number
+      rotation:
+        description: 旋转角度（deg，绕中心）
+        example: 0
+        type: number
+      scale_x:
+        description: 水平缩放（缺省 1）
+        example: 1
+        type: number
+      scale_y:
+        description: 垂直缩放（缺省 1）
+        example: 1
+        type: number
+      shadow_blur:
+        description: 投影模糊半径（px）
+        type: number
+      shadow_color:
+        description: "投影颜色（缺省 #000000）"
+        example: "#000000"
+        type: string
+      shadow_enabled:
+        description: 是否启用投影
+        type: boolean
+      shadow_x:
+        description: 投影水平偏移（px）
+        type: number
+      shadow_y:
+        description: 投影垂直偏移（px）
+        type: number
+      src:
+        description: 图片 URL（有 bind_key 时此值作为槽位默认值）
+        example: https://cdn.example.com/bg.jpg
+        type: string
+      type:
+        allOf:
+          - $ref: "#/definitions/covergen.LayerType"
+        description: 图层类型：text 文字 / image 底图 / logo 定点小图 / rect 色块或遮罩
+        example: text
+      valign:
+        description: 垂直对齐：top / middle / bottom（缺省 middle）
+        enum:
+          - top
+          - middle
+          - bottom
+        example: middle
+        type: string
+      w:
+        description: 图层宽度（px）
+        example: 600
+        type: number
+      x:
+        description: 左上角 X 坐标（px，相对画布左上）
+        example: 40
+        type: number
+      y:
+        description: 左上角 Y 坐标（px，相对画布左上）
+        example: 40
+        type: number
+      z:
+        description: 图层层级（数组顺序为权威栈序，index 0 在最上层）
+        example: 1
+        type: integer
+    type: object
+  covergen.LayerType:
+    enum:
+      - text
+      - image
+      - logo
+      - rect
+    type: string
+    x-enum-comments:
+      LayerImage: 底图 / 背景图
+      LayerLogo: 定点 logo / 小图
+      LayerRect: 纯色块 / 遮罩
+      LayerText: 文字（支持中文自动换行 / 可填槽位）
+    x-enum-varnames:
+      - LayerText
+      - LayerImage
+      - LayerLogo
+      - LayerRect
+  covergen.RenderData:
+    additionalProperties:
+      type: string
+    type: object
+  covergen.RenderReq:
+    properties:
+      data:
+        $ref: "#/definitions/covergen.RenderData"
+      format:
+        description: Format 输出格式:png(默认) / jpg(jpeg) / webp。
+        enum:
+          - png
+          - jpg
+          - webp
+        example: png
+        type: string
+      quality:
+        description: Quality 压缩质量(1-100),仅 jpg/webp 生效,缺省 90。
+        example: 90
+        type: integer
+      scale:
+        description: Scale 输出倍率;1=输出尺寸等于画布尺寸,2=两倍高清。缺省 1。
+        example: 1
+        type: number
+    type: object
+  covergen.RenderResp:
+    properties:
+      url:
+        description: 生成封面图的访问 URL
+        example: https://cdn.example.com/covers/xxx.png
+        type: string
+    type: object
+  framework.PageResponse:
+    properties:
+      list:
+        description: 当前页的数据列表，元素类型由各接口的 swagger 注解覆盖标出
+      total:
+        description: 满足查询条件的记录总数（用于前端计算总页数），非当前页条数
+        example: 42
+        type: integer
+    type: object
+  framework.Response:
+    properties:
+      code:
+        description: 业务状态码，0 表示成功，非 0 为错误码（错误时通常沿用 HTTP 状态码）
+        example: 0
+        type: integer
+      data:
+        description: 业务负载，随接口而异（对象、列表或分页结构），无数据时省略
+      message:
+        description: 面向用户的提示信息，成功为「成功」，失败为具体错误描述
+        example: 成功
+        type: string
+    type: object
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  internal.AuditFinding:
+    properties:
+      code:
+        description: 体检项编码，前端据此映射文案与图标
+        example: robots_txt
+        type: string
+      detail:
+        description: 补充说明或外链 URL（wayback / juziseo / ipvibe 等）
+        example: https://web.archive.org/web/*/example.com
+        type: string
+      severity:
+        description: 该结论的严重级别
+        enum:
+          - error
+          - warning
+          - info
+        example: info
+        type: string
+      value:
+        description: 展示值，如解析出的 IP、CDN 名或 robots 摘要
+        example: 203.0.113.10
+        type: string
+    type: object
+  internal.BrowserCheck:
+    properties:
+      axe_violation_count:
+        description: axe 可访问性违规数
+        example: 0
+        type: integer
+      axe_violations:
+        description: axe 可访问性违规列表的 JSON 字符串（仅桌面行有）
+        example: "[]"
+        type: string
+      console_error_count:
+        description: 控制台错误数
+        example: 0
+        type: integer
+      console_errors:
+        description: 控制台错误列表的 JSON 字符串
+        example: "[]"
+        type: string
+      created_at:
+        description: 存档生成时间
+        example: 2026-07-02T10:02:00Z
+        format: date-time
+        type: string
+      form_factor:
+        description: 渲染时的设备形态（桌面或移动）
+        enum:
+          - desktop
+          - mobile
+        example: desktop
+        type: string
+      id:
+        description: 浏览器存档记录 ID
+        example: 1
+        type: integer
+      is_seed:
+        description: 该页面是否为 seed 首页
+        example: true
+        type: boolean
+      load_ms:
+        description: 页面加载耗时（毫秒）
+        example: 800
+        type: integer
+      network_error_count:
+        description: 网络请求错误数
+        example: 0
+        type: integer
+      network_errors:
+        description: 网络请求错误列表的 JSON 字符串
+        example: "[]"
+        type: string
+      page_error_count:
+        description: 页面级 JS 异常数
+        example: 0
+        type: integer
+      page_errors:
+        description: 页面级 JS 异常列表的 JSON 字符串
+        example: "[]"
+        type: string
+      status_code:
+        description: 页面主文档的 HTTP 状态码
+        example: 200
+        type: integer
+      task_id:
+        description: 所属检测任务 ID
+        example: 1
+        type: integer
+      truncated:
+        description: 错误列表是否因数量过多被截断
+        example: false
+        type: boolean
+      url:
+        description: 被存档的页面 URL
+        example: https://example.com/
+        type: string
+      workspace_id:
+        description: 所属工作空间 ID
+        example: 1
+        type: integer
+    type: object
+  internal.HreflangRef:
+    properties:
+      href:
+        description: 该语言版本对应的页面 URL
+        example: https://example.com/en/
+        type: string
+      lang:
+        description: hreflang 语言/地区标记（如 en、zh-CN、x-default）
+        example: en
+        type: string
+    type: object
+  internal.LighthouseReport:
+    properties:
+      created_at:
+        description: 报告生成时间
+        example: 2026-07-02T10:03:00Z
+        format: date-time
+        type: string
+      form_factor:
+        description: 设备形态（桌面或移动）
+        enum:
+          - desktop
+          - mobile
+        example: desktop
+        type: string
+      html:
+        description: Lighthouse 完整报告 HTML，仅详情下发
+        type: string
+      id:
+        description: 报告 ID
+        example: 1
+        type: integer
+      metrics:
+        description: 关键性能指标的 JSON 字符串（如 LCP、FCP、CLS）
+        example: '{"lcp":1200}'
+        type: string
+      origin:
+        description: 被测源站（scheme + host）
+        example: https://example.com
+        type: string
+      scores:
+        description: 各分类得分的 JSON 字符串（如性能、SEO、可访问性）
+        example: '{"performance":0.95}'
+        type: string
+      task_id:
+        description: 所属检测任务 ID
+        example: 1
+        type: integer
+      workspace_id:
+        description: 所属工作空间 ID
+        example: 1
+        type: integer
+    type: object
+  internal.OGMeta:
+    properties:
+      description:
+        description: og:description，分享摘要
+        example: Acme 提供一站式建站服务
+        type: string
+      image:
+        description: og:image，分享缩略图 URL
+        example: https://example.com/og.png
+        type: string
+      site_name:
+        description: og:site_name，站点名称
+        example: Acme
+        type: string
+      title:
+        description: og:title，分享到社交平台时展示的标题
+        example: Acme 官网
+        type: string
+      type:
+        description: og:type，内容类型（如 website / article）
+        example: website
+        type: string
+      url:
+        description: og:url，页面规范分享地址
+        example: https://example.com/
+        type: string
+    type: object
+  internal.Page:
+    properties:
+      byte_size:
+        description: 抓取内容字节大小（优先取 Content-Length），HTML 与 img/css/js 均填充
+        example: 20480
+        type: integer
+      content_type:
+        description: 响应的 Content-Type
+        example: text/html
+        type: string
+      depth:
+        description: 相对 seed 的抓取深度（seed 为 0）
+        example: 1
+        type: integer
+      error_message:
+        description: 抓取错误信息，正常时为空
+        example: ""
+        type: string
+      fetched_at:
+        description: 该 URL 被抓取的时间
+        example: 2026-07-02T10:00:10Z
+        format: date-time
+        type: string
+      host:
+        description: 该 URL 的主机名
+        example: example.com
+        type: string
+      id:
+        description: 页面结果 ID
+        example: 1
+        type: integer
+      is_error:
+        description: 抓取是否失败（含超时、连接错误、非成功状态等）
+        example: false
+        type: boolean
+      is_internal:
+        description: 是否为站内资源（相对 seed 而言）
+        example: true
+        type: boolean
+      is_timeout:
+        description: 抓取是否因超时失败
+        example: false
+        type: boolean
+      links_found:
+        description: 从该页面解析出的链接 URL 列表
+        example:
+          - https://example.com/contact
+        items:
+          type: string
+        type: array
+      normalized_url:
+        description: NormalizedURL 规范化后的 URL，用于任务内去重；仅作展示/排查，唯一性实际建立在其哈希上。
+        example: https://example.com/about
+        type: string
+      parent_page_id:
+        description: 父页面结果 ID，0 表示 seed 或无父
+        example: 0
+        type: integer
+      referer:
+        description: 引用来源 URL（从哪个页面发现的本 URL）
+        example: https://example.com/
+        type: string
+      resource_type:
+        allOf:
+          - $ref: "#/definitions/internal.ResourceType"
+        description: 资源类型（超链接 / 图片 / CSS / JS）
+        example: link
+      response_time_ms:
+        description: 请求耗时（毫秒）
+        example: 120
+        type: integer
+      seo_canonical:
+        description: canonical 链接指向的规范 URL
+        example: https://example.com/about
+        type: string
+      seo_description:
+        description: meta description 内容
+        example: 了解 Acme 团队
+        type: string
+      seo_error_count:
+        description: error 级 SEO 问题数
+        example: 0
+        type: integer
+      seo_extra:
+        allOf:
+          - $ref: "#/definitions/internal.SEOExtra"
+        description: 社交（OG/Twitter）与多语言（hreflang）扩展元数据
+      seo_h1:
+        description: 页面首个 H1 文本
+        example: 关于我们
+        type: string
+      seo_h1_count:
+        description: 页面 H1 标签数量
+        example: 1
+        type: integer
+      seo_info_count:
+        description: info 级 SEO 问题数（仅展示，不计入问题总数）
+        example: 0
+        type: integer
+      seo_issue_count:
+        description: SEO 问题总数（error + warning，不含 info）
+        example: 0
+        type: integer
+      seo_issues:
+        description: 检出的 SEO 问题码列表
+        example:
+          - missing_description
+        items:
+          type: string
+        type: array
+      seo_keywords:
+        description: meta keywords 内容
+        example: acme,about
+        type: string
+      seo_lang:
+        description: html 标签声明的语言
+        example: zh-CN
+        type: string
+      seo_robots:
+        description: meta robots 指令
+        example: index,follow
+        type: string
+      seo_title:
+        description: SEO（仅内链 HTML 页填充）
+        example: 关于我们 - Acme
+        type: string
+      seo_warn_count:
+        description: warning 级 SEO 问题数
+        example: 0
+        type: integer
+      status_code:
+        description: HTTP 响应状态码，0 表示无响应
+        example: 200
+        type: integer
+      task_id:
+        description: 所属检测任务 ID
+        example: 1
+        type: integer
+      url:
+        description: 被抓取的原始 URL
+        example: https://example.com/about
+        type: string
+    type: object
+  internal.PageReport:
+    properties:
+      http:
+        allOf:
+          - $ref: "#/definitions/internal.PageReportHTTP"
+        description: HTTP 状态分族计数
+      resource_errors:
+        description: 按资源类型的错误统计
+        items:
+          $ref: "#/definitions/internal.ResourceErrorStat"
+        type: array
+      seo:
+        allOf:
+          - $ref: "#/definitions/internal.PageReportSEO"
+        description: SEO 严重级页数与问题数
+      seo_top_issues:
+        description: 全部 SEO 问题码，按出现次数降序
+        items:
+          $ref: "#/definitions/internal.SEOTopIssue"
+        type: array
+      status_codes:
+        description: 明细中出现过的去重状态码（升序），供筛选下拉
+        example:
+          - 200
+        items:
+          type: integer
+        type: array
+    type: object
+  internal.PageReportHTTP:
+    properties:
+      client_4xx:
+        description: 4xx 客户端错误数
+        example: 2
+        type: integer
+      error_total:
+        description: 失败请求总数
+        example: 3
+        type: integer
+      ok_2xx:
+        description: 2xx 成功响应数
+        example: 45
+        type: integer
+      other_error:
+        description: 其他错误数（非超时且非 4xx/5xx，如 DNS/连接失败，status=0）
+        example: 0
+        type: integer
+      redirect_3xx:
+        description: 3xx 重定向响应数
+        example: 2
+        type: integer
+      server_5xx:
+        description: 5xx 服务端错误数
+        example: 1
+        type: integer
+      timeout:
+        description: 超时的请求数
+        example: 0
+        type: integer
+      total:
+        description: 页面结果总行数
+        example: 50
+        type: integer
+    type: object
+  internal.PageReportSEO:
+    properties:
+      error_issues:
+        description: error 级 SEO 问题总数
+        example: 4
+        type: integer
+      error_pages:
+        description: 含 error 级 SEO 问题的页数
+        example: 3
+        type: integer
+      info_issues:
+        description: info 级 SEO 提示总数
+        example: 7
+        type: integer
+      info_pages:
+        description: 含 info 级 SEO 提示的页数
+        example: 5
+        type: integer
+      warn_issues:
+        description: warning 级 SEO 问题总数
+        example: 15
+        type: integer
+      warn_pages:
+        description: 含 warning 级 SEO 问题的页数
+        example: 10
+        type: integer
+    type: object
+  internal.PageStats:
+    properties:
+      external_links:
+        description: 站外超链接数
+        example: 8
+        type: integer
+      images:
+        description: 图片资源数
+        example: 15
+        type: integer
+      internal_links:
+        description: 站内超链接数
+        example: 42
+        type: integer
+      scripts:
+        description: 外联 JS 资源数
+        example: 6
+        type: integer
+      styles:
+        description: 外联 CSS 资源数
+        example: 3
+        type: integer
+    type: object
+  internal.PubApiDocBrief:
+    properties:
+      description:
+        description: 文档描述
+        example: 接口描述
+        type: string
+      lang:
+        description: 命中的语言码（按回退链解析；空=全局）
+        example: zh-CN
+        type: string
+      name:
+        description: 文档名称
+        example: 支付 API
+        type: string
+      slug:
+        description: 文档 slug（用于按 slug 获取 spec 原文）
+        example: payments-api
+        type: string
+      spec_title:
+        description: 从 spec 解析的 info.title
+        example: Payments API
+        type: string
+      spec_version:
+        description: 从 spec 解析的 info.version
+        example: 1.0.0
+        type: string
+      visibility:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_apidoc_internal.Visibility"
+        description: 可见性：public/internal/ai_only
+        example: public
+    type: object
+  internal.PubSpaceBrief:
+    properties:
+      base_url:
+        description: 内容对外访问的基础 URL
+        example: https://docs.example.com
+        type: string
+      id:
+        description: 内容空间 ID
+        example: 1
+        type: integer
+      lang_url_mode:
+        description: 语言 URL 模式：negotiated（不带语言段）/ prefix（非主语言加 /{lang} 前缀）
+        enum:
+          - negotiated
+          - prefix
+        example: negotiated
+        type: string
+      name:
+        description: 空间显示名称
+        example: 产品文档
+        type: string
+      primary_lang:
+        description: 主语言；prefix 模式下主语言为裸 URL，非主语言加 /{lang} 前缀
+        example: zh-CN
+        type: string
+      slug:
+        description: 空间标识
+        example: docs
+        type: string
+      supported_langs:
+        description: 支持语言清单（逗号分隔，语言契约）；创建译文须用其中之一，为空则不限制
+        example: zh-CN,en
+        type: string
+      visibility:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_contentspace_internal.Visibility"
+        description: 可见性：public/internal/ai_only
+        example: public
+    type: object
+  internal.PubWebFileBrief:
+    properties:
+      content_type:
+        description: 文件的 MIME 类型
+        example: text/plain; charset=utf-8
+        type: string
+      lang:
+        description: 语言码，形如 zh-CN/en；留空表示全局/语言中性
+        example: zh-CN
+        type: string
+      name:
+        description: 文件的展示名称
+        example: robots.txt
+        type: string
+      public_url:
+        description: 可直接对外访问该文件的完整公开 URL
+        example: https://cdn/blog/robots.txt
+        type: string
+      size:
+        description: 文件内容的字节大小
+        example: 128
+        type: integer
+      url_path:
+        description: 文件的逻辑访问路径（以 / 开头）
+        example: /robots.txt
+        type: string
+    type: object
+  internal.ResolveResult:
+    properties:
+      config_id:
+        description: 命中并胜出的 SEO 配置 ID；未命中时为 0。
+        example: 12
+        type: integer
+      matched:
+        description: 是否有 SEO 配置命中该路径；false 时其余字段为空。
+        example: true
+        type: boolean
+      tags:
+        description: 该路径最终解析出的 head 标签（已按语言回退并去重）。
+        items:
+          $ref: "#/definitions/internal.ResolvedTag"
+        type: array
+    type: object
+  internal.ResolvedTag:
+    properties:
+      attrs:
+        additionalProperties:
+          type: string
+        description: 该 meta/link 标签的完整 HTML 属性集，如 <meta name=.. content=..> 或 <link
+          rel=canonical href=..>；tag=title 时忽略。
+        type: object
+      content:
+        description: title 标签的元素文本（页面标题内容）；tag=meta/link 时忽略。
+        example: 页面标题
+        type: string
+      dedup_key:
+        description: 后端算好的身份键，标签合并/去重时以此判定重复。
+        example: link:canonical
+        type: string
+      tag:
+        description: 标签种类，决定渲染成 <title>、<meta> 还是 <link>。
+        enum:
+          - title
+          - meta
+          - link
+        example: meta
+        type: string
+    type: object
+  internal.ResourceErrorStat:
+    properties:
+      error_count:
+        description: 该类型中抓取失败的数量
+        example: 1
+        type: integer
+      total:
+        description: 该类型资源总数
+        example: 15
+        type: integer
+      type:
+        description: 资源类型
+        enum:
+          - link
+          - image
+          - style
+          - script
+        example: image
+        type: string
+    type: object
+  internal.ResourceType:
+    enum:
+      - link
+      - image
+      - style
+      - script
+    type: string
+    x-enum-comments:
+      ResourceImage: <img src> 图片
+      ResourceLink: <a href> 超链接
+      ResourceScript: <script src> 外联 JS
+      ResourceStyle: <link rel=stylesheet> 外联 CSS
+    x-enum-varnames:
+      - ResourceLink
+      - ResourceImage
+      - ResourceStyle
+      - ResourceScript
+  internal.SEOExtra:
+    properties:
+      hreflang:
+        description: 页面声明的多语言备用链接列表
+        items:
+          $ref: "#/definitions/internal.HreflangRef"
+        type: array
+      og:
+        allOf:
+          - $ref: "#/definitions/internal.OGMeta"
+        description: Open Graph 元数据
+      twitter:
+        allOf:
+          - $ref: "#/definitions/internal.TwitterMeta"
+        description: Twitter Card 元数据
+    type: object
+  internal.SEOTopIssue:
+    properties:
+      code:
+        description: SEO 问题码
+        example: missing_description
+        type: string
+      count:
+        description: 该问题码在本任务中的出现次数
+        example: 12
+        type: integer
+    type: object
+  internal.SiteAuditResult:
+    properties:
+      findings:
+        description: 该源站的全部体检结论
+        items:
+          $ref: "#/definitions/internal.AuditFinding"
+        type: array
+      origin:
+        description: 被体检的 seed 源站（scheme + host）
+        example: https://example.com
+        type: string
+    type: object
+  internal.SpaceCreateReq:
+    properties:
+      base_url:
+        description: 内容对外访问的基础 URL，必填，在 workspace 内唯一
+        example: https://docs.example.com
+        type: string
+      description:
+        description: 空间描述，可选
+        example: 对外产品使用文档
+        type: string
+      name:
+        description: 空间显示名称，必填
+        example: 产品文档
+        type: string
+      reserved_slugs:
+        description: 保留 slug 列表（JSON 数组），可选，如 `["search*","admin"]`
+        type: string
+      slug:
+        description: 空间标识，必填，在 workspace 内唯一
+        example: docs
+        type: string
+      sort:
+        description: 排序值，可选，越小越靠前
+        example: 0
+        type: integer
+      visibility:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_contentspace_internal.Visibility"
+        description: 可见性，可选，留空默认 public
+        example: public
+    required:
+      - base_url
+      - name
+      - slug
+    type: object
+  internal.SpaceStats:
+    properties:
+      article_count:
+        description: 空间内文章数量
+        example: 42
+        type: integer
+      group_count:
+        description: 空间内目录分组数量
+        example: 8
+        type: integer
+      tag_count:
+        description: 空间内标签数量
+        example: 15
+        type: integer
+    type: object
+  internal.SpaceUpdateReq:
+    properties:
+      base_url:
+        description: 内容对外访问的基础 URL，nil 时不更新
+        example: https://docs.example.com
+        type: string
+      description:
+        description: 空间描述，nil 时不更新
+        example: 对外产品使用文档
+        type: string
+      lang_url_mode:
+        description: 语言 URL 模式：negotiated / prefix，nil 时不更新
+        enum:
+          - negotiated
+          - prefix
+        example: negotiated
+        type: string
+      name:
+        description: 空间显示名称，nil 时不更新
+        example: 产品文档
+        type: string
+      primary_lang:
+        description: 主语言（须 ∈ SupportedLangs），nil 时不更新
+        example: zh-CN
+        type: string
+      reserved_slugs:
+        description: 保留 slug 列表（JSON 数组），nil 时不更新
+        type: string
+      slug:
+        description: 空间标识，nil 时不更新
+        example: docs
+        type: string
+      sort:
+        description: 排序值，nil 时不更新
+        example: 0
+        type: integer
+      supported_langs:
+        description: 支持语言清单（逗号分隔），nil 时不更新
+        example: zh-CN,en
+        type: string
+      visibility:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_contentspace_internal.Visibility"
+        description: 可见性，nil 时不更新
+        example: public
+    type: object
+  internal.SpaceView:
+    properties:
+      base_url:
+        description: 空间内容对外访问的基础 URL，在 workspace 内唯一
+        example: https://docs.example.com
+        type: string
+      created_at:
+        description: 创建时间
+        format: date-time
+        type: string
+      created_by_staff_id:
+        description: 创建者 staff ID
+        example: 3
+        type: integer
+      deleted_at:
+        description: 软删除时间（未删除时为空）
+        format: date-time
+        type: string
+      description:
+        description: 空间描述
+        example: 对外产品使用文档
+        type: string
+      id:
+        description: 内容空间 ID（主键）
+        example: 1
+        type: integer
+      lang_url_mode:
+        description: 语言 URL 模式：negotiated（不带语言段）/ prefix（非主语言加 /{lang} 前缀）
+        enum:
+          - negotiated
+          - prefix
+        example: negotiated
+        type: string
+      name:
+        description: 空间显示名称
+        example: 产品文档
+        type: string
+      primary_lang:
+        description: 主语言，须 ∈ SupportedLangs；为空回退全局默认 zh-CN
+        example: zh-CN
+        type: string
+      reserved_slugs:
+        description: 保留 slug 列表（JSON 数组），如 ["search*","admin"]；* 前缀匹配，无 * 精确匹配
+        type: string
+      slug:
+        description: 空间标识，在 workspace 内唯一
+        example: docs
+        type: string
+      sort:
+        description: 排序值，越小越靠前
+        example: 0
+        type: integer
+      stats:
+        allOf:
+          - $ref: "#/definitions/internal.SpaceStats"
+        description: 文章/分类/标签计数
+      supported_langs:
+        description: 支持语言清单（逗号分隔），作为该空间的语言契约
+        example: zh-CN,en
+        type: string
+      updated_at:
+        description: 最后更新时间
+        format: date-time
+        type: string
+      visibility:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_contentspace_internal.Visibility"
+        description: 可见性：public/internal/ai_only
+        example: public
+      workspace_id:
+        description: 所属 workspace ID
+        example: 10
+        type: integer
+    type: object
+  internal.Task:
+    properties:
+      browser_link_limit:
+        description: BrowserLinkLimit 首页存档时首页内链渲染上限（默认 100）。值恒 ≥1，故 default:100 不触发零值省略问题。
+        example: 100
+        type: integer
+      browser_render:
+        description: 浏览器能力开关（替代旧 kind 区分；任一开则检测器起浏览器）。
+        example: false
+        type: boolean
+      check_assets:
+        description: 是否抓取图片资源以检测其可用性
+        example: true
+        type: boolean
+      check_external:
+        description: 是否抓取外链（仅一跳）以检测其可用性
+        example: false
+        type: boolean
+      concurrency:
+        description: 单任务并发抓取数
+        example: 5
+        type: integer
+      created_at:
+        description: 任务创建时间
+        example: 2026-07-02T10:00:00Z
+        format: date-time
+        type: string
+      created_by_user_id:
+        description: 创建该任务的用户 ID
+        example: 1
+        type: integer
+      done_urls:
+        description: 已完成抓取的 URL 数
+        example: 0
+        type: integer
+      error_count:
+        description: 抓取失败的 URL 数
+        example: 0
+        type: integer
+      error_message:
+        description: 任务致命错误信息，正常时为空
+        example: ""
+        type: string
+      executor_id:
+        description: 实际执行本任务的检测器 ID，0 表示尚未派发
+        example: 0
+        type: integer
+      finished_at:
+        description: 任务结束时间（完成/失败/取消），未结束时为空
+        example: 2026-07-02T10:05:00Z
+        format: date-time
+        type: string
+      id:
+        description: 任务 ID
+        example: 1
+        type: integer
+      include_subdomains:
+        description: 内链判定是否将子域视为站内
+        example: false
+        type: boolean
+      kind:
+        allOf:
+          - $ref: "#/definitions/internal.TaskKind"
+        description: 检测引擎类型（HTTP 爬虫或无头浏览器）
+        example: crawl
+      last_pulled_bc_id:
+        description: 增量拉取浏览器存档结果的游标
+        example: 0
+        type: integer
+      last_pulled_lh_id:
+        description: 增量拉取 Lighthouse 报告的游标
+        example: 0
+        type: integer
+      last_pulled_page_id:
+        description: 增量拉取页面结果的游标（已同步到的检测器 page ID）
+        example: 0
+        type: integer
+      max_depth:
+        description: 最大抓取深度，0 表示不限
+        example: 0
+        type: integer
+      max_pages:
+        description: 最多抓取的页面数，0 表示不限
+        example: 0
+        type: integer
+      politeness_delay_ms:
+        description: 对同一 host 相邻请求之间的礼貌延迟（毫秒）
+        example: 200
+        type: integer
+      probe_css_js:
+        description: 是否用 HEAD 请求探测外联 CSS/JS 的可用性
+        example: false
+        type: boolean
+      region:
+        description: 远程执行：任务派发给哪个区域的哪个检测器，及增量拉取游标。
+        example: cn-east
+        type: string
+      remote_task_id:
+        description: 检测器侧对应的本地任务 ID
+        example: 0
+        type: integer
+      request_timeout_ms:
+        description: 单个请求的超时时间（毫秒）
+        example: 15000
+        type: integer
+      respect_robots:
+        description: 抓取是否遵守目标站点的 robots.txt 规则
+        example: true
+        type: boolean
+      run_lighthouse:
+        description: 是否对每个 seed 源站跑桌面 + 移动端 Lighthouse
+        example: false
+        type: boolean
+      seeds:
+        description: 配置
+        example:
+          - https://example.com
+        items:
+          type: string
+        type: array
+      site_audit:
+        description: 站点级体检（每 seed origin 一组），任务启动时填充。
+        items:
+          $ref: "#/definitions/internal.SiteAuditResult"
+        type: array
+      started_at:
+        description: 任务开始执行时间，未开始时为空
+        example: 2026-07-02T10:00:05Z
+        format: date-time
+        type: string
+      status:
+        allOf:
+          - $ref: "#/definitions/internal.TaskStatus"
+        description: 任务当前生命周期状态
+        example: pending
+      total_urls:
+        description: 进度计数（边跑边更新）
+        example: 0
+        type: integer
+      workspace_id:
+        description: 所属工作空间 ID（数据隔离维度）
+        example: 1
+        type: integer
+    type: object
+  internal.TaskCreateReq:
+    properties:
+      browser_link_limit:
+        description: 首页内链渲染上限，默认 100（自动钳制到 1..500）
+        example: 100
+        type: integer
+      browser_render:
+        description: 是否对首页做浏览器存档，默认 false
+        example: false
+        type: boolean
+      check_assets:
+        description: 是否抓取图片测可用性，默认 true
+        example: true
+        type: boolean
+      check_external:
+        description: 是否抓取外链（仅一跳）测可用性，默认 true
+        example: true
+        type: boolean
+      concurrency:
+        description: 单任务并发抓取数，默认 5
+        example: 5
+        type: integer
+      include_subdomains:
+        description: 内链判定是否将子域视为站内
+        example: false
+        type: boolean
+      kind:
+        allOf:
+          - $ref: "#/definitions/internal.TaskKind"
+        description: 检测引擎类型，crawl（默认）/ browser
+        example: crawl
+      max_depth:
+        description: 最大抓取深度，0 = 不限
+        example: 0
+        type: integer
+      max_pages:
+        description: 最多抓取页面数，0 = 不限
+        example: 0
+        type: integer
+      politeness_delay_ms:
+        description: 同 host 礼貌延迟（毫秒），默认 200
+        example: 200
+        type: integer
+      probe_css_js:
+        description: 是否 HEAD 探测外联 css/js 可用性，默认 false
+        example: false
+        type: boolean
+      region:
+        description: 路由区域标签，空=任意可用检测器
+        example: cn-east
+        type: string
+      request_timeout_ms:
+        description: 单请求超时（毫秒），默认 15000
+        example: 15000
+        type: integer
+      respect_robots:
+        description: 是否遵守 robots.txt，默认 true
+        example: true
+        type: boolean
+      run_lighthouse:
+        description: 是否对每个 seed 源站跑桌面 + 移动端 Lighthouse，默认 false
+        example: false
+        type: boolean
+      seeds:
+        description: 起始网址列表，至少一个，可跨 host
+        example:
+          - https://example.com
+        items:
+          type: string
+        type: array
+    required:
+      - seeds
+    type: object
+  internal.TaskKind:
+    enum:
+      - crawl
+      - browser
+    type: string
+    x-enum-comments:
+      KindBrowser: 无头浏览器（Playwright），可渲染页面并采集运行时信息
+      KindCrawl: HTTP 爬虫，仅抓取与解析页面，不启动浏览器
+    x-enum-varnames:
+      - KindCrawl
+      - KindBrowser
+  internal.TaskStatus:
+    enum:
+      - pending
+      - running
+      - completed
+      - failed
+      - canceled
+      - interrupted
+    type: string
+    x-enum-comments:
+      StatusCanceled: 用户手动停止
+      StatusCompleted: 正常跑完
+      StatusFailed: 致命错误中止
+      StatusInterrupted: 进程重启导致中断（不自动续爬）
+      StatusPending: 已创建待启动
+      StatusRunning: 抓取中
+    x-enum-varnames:
+      - StatusPending
+      - StatusRunning
+      - StatusCompleted
+      - StatusFailed
+      - StatusCanceled
+      - StatusInterrupted
+  internal.TwitterMeta:
+    properties:
+      card:
+        description: twitter:card，卡片类型（summary / summary_large_image 等）
+        example: summary_large_image
+        type: string
+      description:
+        description: twitter:description，卡片摘要
+        example: Acme 提供一站式建站服务
+        type: string
+      image:
+        description: twitter:image，卡片图片 URL
+        example: https://example.com/tw.png
+        type: string
+      title:
+        description: twitter:title，卡片标题
+        example: Acme 官网
+        type: string
+    type: object
+  internal.WebFile:
+    properties:
+      content_type:
+        description: 文件的 MIME 类型
+        example: text/plain; charset=utf-8
+        type: string
+      created_at:
+        description: 记录创建时间
+        example: 2026-07-02T09:30:00Z
+        format: date-time
+        type: string
+      created_by_staff_id:
+        description: 创建该文件的后台管理员 staff ID
+        example: 1
+        type: integer
+      id:
+        description: 文件记录的自增主键
+        example: 1
+        type: integer
+      is_text:
+        description: 是否为可在线编辑的文本文件
+        example: true
+        type: boolean
+      lang:
+        description: 语言码，形如 zh-CN/en；留空表示全局/语言中性
+        example: zh-CN
+        type: string
+      name:
+        description: 文件的展示名称，用于后台列表显示
+        example: robots.txt
+        type: string
+      object_key:
+        description: 内容在工作空间 S3 中的对象键
+        example: blog/robots.txt
+        type: string
+      public_url:
+        description: 可直接对外访问该文件的完整公开 URL
+        example: https://cdn/blog/robots.txt
+        type: string
+      size:
+        description: 文件内容的字节大小
+        example: 128
+        type: integer
+      sort:
+        description: 列表排序权重，数值越小越靠前
+        example: 0
+        type: integer
+      updated_at:
+        description: 记录最后更新时间
+        example: 2026-07-02T09:30:00Z
+        format: date-time
+        type: string
+      url_path:
+        description: 工作空间内唯一的逻辑访问路径，必须以 / 开头
+        example: /robots.txt
+        type: string
+      workspace_id:
+        description: 所属工作空间 ID
+        example: 10
+        type: integer
+    type: object
+  internal.WebFileContentReq:
+    properties:
+      content:
+        description: 覆盖写入的文本正文（仅 is_text 文件可用）
+        example: |-
+          User-agent: *
+          Disallow:
+        type: string
+    type: object
+  internal.WebFileCreateReq:
+    properties:
+      content:
+        description: 文本内容
+        example: |-
+          User-agent: *
+          Allow: /
+        type: string
+      content_type:
+        description: MIME（默认按扩展名推断）
+        example: text/plain
+        type: string
+      lang:
+        description: 语言码（空=全局；非空须形如 zh-CN/en）
+        example: zh-CN
+        type: string
+      name:
+        description: 展示名（默认取 url_path 文件名）
+        example: robots.txt
+        type: string
+      url_path:
+        description: 逻辑路径（必填）
+        example: /robots.txt
+        type: string
+    required:
+      - url_path
+    type: object
+  internal.WebFileDetail:
+    properties:
+      content:
+        type: string
+      content_type:
+        description: 文件的 MIME 类型
+        example: text/plain; charset=utf-8
+        type: string
+      created_at:
+        description: 记录创建时间
+        example: 2026-07-02T09:30:00Z
+        format: date-time
+        type: string
+      created_by_staff_id:
+        description: 创建该文件的后台管理员 staff ID
+        example: 1
+        type: integer
+      id:
+        description: 文件记录的自增主键
+        example: 1
+        type: integer
+      is_text:
+        description: 是否为可在线编辑的文本文件
+        example: true
+        type: boolean
+      lang:
+        description: 语言码，形如 zh-CN/en；留空表示全局/语言中性
+        example: zh-CN
+        type: string
+      name:
+        description: 文件的展示名称，用于后台列表显示
+        example: robots.txt
+        type: string
+      object_key:
+        description: 内容在工作空间 S3 中的对象键
+        example: blog/robots.txt
+        type: string
+      public_url:
+        description: 可直接对外访问该文件的完整公开 URL
+        example: https://cdn/blog/robots.txt
+        type: string
+      size:
+        description: 文件内容的字节大小
+        example: 128
+        type: integer
+      sort:
+        description: 列表排序权重，数值越小越靠前
+        example: 0
+        type: integer
+      updated_at:
+        description: 记录最后更新时间
+        example: 2026-07-02T09:30:00Z
+        format: date-time
+        type: string
+      url_path:
+        description: 工作空间内唯一的逻辑访问路径，必须以 / 开头
+        example: /robots.txt
+        type: string
+      workspace_id:
+        description: 所属工作空间 ID
+        example: 10
+        type: integer
+    type: object
+  internal.WebFileUpdateReq:
+    properties:
+      name:
+        description: 新的展示名称，省略则保持不变
+        example: robots.txt
+        type: string
+      sort:
+        description: 新的排序权重，省略则保持不变
+        example: 1
+        type: integer
+      url_path:
+        description: 新的逻辑访问路径（须以 / 开头），省略则保持不变
+        example: /robots.txt
+        type: string
+    type: object
+  manager-backend_modules_apidoc_internal.Visibility:
+    enum:
+      - public
+      - internal
+      - ai_only
+    type: string
+    x-enum-comments:
+      VisibilityAIOnly: 仅 AI：仅持有 ai_only scope 的 API Key 可见
+      VisibilityInternal: 内部：仅持有 internal scope 的 API Key 可见
+      VisibilityPublic: 公开：任意持有相应 scope 的 API Key 可见
+    x-enum-varnames:
+      - VisibilityPublic
+      - VisibilityInternal
+      - VisibilityAIOnly
+  manager-backend_modules_author.AuthorView:
+    properties:
+      avatar_url:
+        description: 头像 URL
+        example: https://cdn.example.com/avatars/alice.png
+        type: string
+      bio:
+        description: 按当前语言解析的作者简介
+        example: 专注前端与设计系统。
+        type: string
+      id:
+        description: 作者 ID
+        example: 1
+        type: integer
+      name:
+        description: 按当前语言解析的作者姓名
+        example: 爱丽丝
+        type: string
+      position:
+        description: 按当前语言解析的作者职位
+        example: 前端工程师
+        type: string
+      socials:
+        description: 该作者的社媒精简条目（平台名已按语言解析）
+        items:
+          $ref: "#/definitions/manager-backend_modules_author_internal.SocialView"
+        type: array
+    type: object
+  manager-backend_modules_author_internal.SocialView:
+    properties:
+      icon_url:
+        description: 平台图标 URL
+        example: https://cdn.example.com/gh.svg
+        type: string
+      name:
+        description: 按当前语言解析的平台名
+        example: GitHub
+        type: string
+      slug:
+        description: 平台的 URL 友好标识
+        example: github
+        type: string
+      url:
+        description: 该作者在此平台的主页地址
+        example: https://github.com/alice
+        type: string
+    type: object
+  manager-backend_modules_contentspace_internal.Visibility:
+    enum:
+      - public
+      - internal
+      - ai_only
+    type: string
+    x-enum-comments:
+      VisibilityAIOnly: 仅 AI：仅供 AI 检索使用，不对前端公开展示
+      VisibilityInternal: 内部：仅授予 internal scope 的 API Key 可访问
+      VisibilityPublic: 公开：任何具备相应 scope 的 API Key 均可访问
+    x-enum-varnames:
+      - VisibilityPublic
+      - VisibilityInternal
+      - VisibilityAIOnly
+  manager-backend_modules_workspace_internal.Role:
+    enum:
+      - viewer
+      - editor
+      - owner
+    type: string
+    x-enum-comments:
+      RoleEditor: 可写：在 viewer 基础上可上传素材
+      RoleOwner: 管理员：可管理成员、S3 配置、API Key
+      RoleViewer: 只读：可查看 workspace 及其成员
+    x-enum-varnames:
+      - RoleViewer
+      - RoleEditor
+      - RoleOwner
+  share.ResolvedShare:
+    properties:
+      icon_url:
+        description: 图标 URL（外链或上传回填）
+        example: https://cdn.example.com/icons/x.svg
+        type: string
+      id:
+        description: 平台 ID
+        example: 1
+        type: integer
+      name:
+        description: 当前语言下的平台名
+        example: X（推特）
+        type: string
+      slug:
+        description: URL 友好标识，工作空间内唯一
+        example: x
+        type: string
+      sort:
+        description: 排序值，越小越靠前
+        example: 0
+        type: integer
+      url_template:
+        description: 分享链接模板，含 {url}/{title} 占位符
+        example: https://x.com/intent/tweet?url={url}&text={title}
+        type: string
+    type: object
+  workspace.PubWorkspaceView:
+    properties:
+      id:
+        description: 工作空间的数字主键，可用于关联该空间下的其它资源
+        example: 1
+        type: integer
+      name:
+        description: 工作空间的展示名称，供业务方界面呈现
+        example: Acme 内容站
+        type: string
+      public_base_url:
+        description: 素材/内容的公开访问基址，拼接对象键即得可访问 URL；S3 未配置时为空
+        example: https://cdn.example.com/acme
+        type: string
+      slug:
+        description: 工作空间的唯一短标识，用于路由与人类可读定位
+        example: acme
+        type: string
+    type: object
+  workspace.SvcWhoamiView:
+    properties:
+      name:
+        description: 工作空间名称
+        example: Acme 内容站
+        type: string
+      role:
+        allOf:
+          - $ref: "#/definitions/manager-backend_modules_workspace_internal.Role"
+        description: 当前 key 的服务账号角色
+        example: editor
+      scopes:
+        description: 当前 key 授权 scopes（命名空间形式）——供消费方在调用前自查可见性，避免撞 403
+        example:
+          - content:public
+          - webfile:public
+        items:
+          type: string
+        type: array
+      slug:
+        description: 工作空间唯一标识
+        example: acme
+        type: string
+      workspace_id:
+        description: 工作空间ID（对外开放面由 key 注入，无需在路径传）
+        example: 1
+        type: integer
+    type: object
+  workspace.UploadResp:
+    properties:
+      mime:
+        description: 探测到的 MIME 类型
+        example: image/png
+        type: string
+      object_key:
+        description: 写入对象存储的对象键
+        example: assets/x.png
+        type: string
+      size:
+        description: 文件字节大小
+        example: 20480
+        type: integer
+      url:
+        description: 可公开访问的完整 URL
+        example: https://cdn.example.com/acme/assets/x.png
+        type: string
+    type: object
+host: test-seo.xiaoxitech.com
+info:
+  contact: {}
+  description: >-
+    内容中台对外 API。所有接口用 `X-API-Key` 鉴权，按 key 能力分两类场景：
+
+
+    - **只读 key**：前台业务取数（消费读按 key 的 `scopes` 可见性过滤）、AI 读取内容。
+
+    - **可写 key（editor+ 角色）**：交给 AI / MCP 做内容创作——写文章、传图配图、管理分类标签目录。
+
+
+    key 在后台「工作空间 → API Keys」创建，可设角色（viewer/editor/owner）与
+    scopes，创建后可随时重看明文。每个接口标题下首行（🔑）标注所需 key。
+
+
+    文章正文 `body_html` 可含「内嵌占位（embed
+    placeholder）」——中台交付干净占位、由业务前台浏览器端识别并改写，用法与契约见帮助中心《正文内嵌占位（Embed 占位）》一文。
+
+
+    ---
+
+
+    Content platform external API. All endpoints authenticate via `X-API-Key`,
+    split into two scenarios by key capability:
+
+
+    - **Read-only key**: frontend data fetching (consumer reads filtered by the
+    key's `scopes` visibility) and AI reading.
+
+    - **Write key (editor+ role)**: hand to AI / MCP for content authoring —
+    write articles, upload images, manage taxonomy.
+
+
+    Create keys under "Workspace → API Keys" in the admin; each request's first
+    description line (🔑) marks the key it needs.
+  title: 内容中台对外 API
+  version: "1.0"
+paths:
+  /api-docs:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 列出当前 API Key 可访问且已发布（published）的 API
+        文档（按 key.scopes 与文档可见性过滤；仅返回安全字段）。多语言按 slug 去重，每 slug 用回退链（请求语→全局→en）选一条
+      parameters:
+        - description: 语言码（如 zh-CN/en）；回退链：请求语→全局→en
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.PubApiDocBrief"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 列出已发布 API 文档
+      tags:
+        - API 文档
+  /api-docs/{slug}/spec:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 按 slug 返回已发布 API 文档的原始 OpenAPI 文档（直接返回
+        spec 原文，非 JSON 信封；支持 ETag/If-None-Match 缓存）。多语言按回退链（请求语→全局→en）解析
+      parameters:
+        - description: API 文档 slug
+          in: path
+          name: slug
+          required: true
+          type: string
+        - description: 语言码（如 zh-CN/en）；回退链：请求语→全局→en
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OpenAPI 文档原文
+          schema:
+            type: string
+        "304":
+          description: 未修改（命中 If-None-Match）
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 获取 API 文档 spec 原文
+      tags:
+        - API 文档
+  /article-tags:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 返回当前内容空间的全部标签（按 lang 取名，带 fallback）
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/article.TagBrief"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 标签列表（已发布）
+      tags:
+        - 标签
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 创建一个标签并写入初始语言名称
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TagCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleTag"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建标签
+      tags:
+        - 标签
+  /article-tags/{tid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除一个标签（含其全部翻译与文章关联）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 标签 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除标签
+      tags:
+        - 标签
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 更新标签的 slug/path 等字段
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 标签 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TagUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleTag"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新标签
+      tags:
+        - 标签
+  /article-tags/{tid}/translations/{lang}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除指定语言的标签名称
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 标签 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+        - description: 语言代码
+          in: path
+          name: lang
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除标签翻译
+      tags:
+        - 标签
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 写入指定语言的标签名称（已存在则覆盖）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 标签 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+        - description: 语言代码
+          in: path
+          name: lang
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TaxonomyTranslationUpsertReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 新增/更新标签翻译
+      tags:
+        - 标签
+  /articles:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 分页返回当前内容空间已发布的文章（按 lang 展平，无该语言翻译的文章会被跳过）
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）
+          in: query
+          name: lang
+          type: string
+        - description: 关键字（标题/摘要模糊匹配）
+          in: query
+          name: q
+          type: string
+        - description: 按目录分组 slug 过滤（递归含子分组）
+          in: query
+          name: group
+          type: string
+        - description: 按标签 ID 过滤
+          in: query
+          name: tag_id
+          type: integer
+        - description: 排序：pinned（默认，置顶在前+其余按空间默认策略）/ directory（目录树顺序）/ published_desc /
+            published_asc / updated_desc / updated_asc
+          in: query
+          name: sort
+          type: string
+        - description: 页码，从 1 开始
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    allOf:
+                      - $ref: "#/definitions/framework.PageResponse"
+                      - properties:
+                          list:
+                            items:
+                              $ref: "#/definitions/article.PubArticleView"
+                            type: array
+                        type: object
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 文章列表（已发布）
+      tags:
+        - 文章
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 创建一篇文章并写入首个语言翻译。first_translation.lang 必须 ∈
+        该内容空间 supported_langs（未配置 supported_langs 时不限制）。
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.ArticleCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleDetailView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建文章
+      tags:
+        - 文章
+  /articles/manage:
+    get:
+      description: 🔑 只读 key · editor+ ｜ editor 分页返回内容空间下的文章（含草稿，不含正文）；与消费读 GET
+        /articles（仅 published）区分
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（影响分类/标签名展示）
+          in: query
+          name: lang
+          type: string
+        - description: 状态过滤：draft / published
+          in: query
+          name: status
+          type: string
+        - description: 按目录分组 slug 过滤（递归含子分组）
+          in: query
+          name: group
+          type: string
+        - description: 按标签 ID 过滤
+          in: query
+          name: tag_id
+          type: integer
+        - description: 关键字（slug + 任一语言的标题/摘要/正文 模糊）
+          in: query
+          name: q
+          type: string
+        - description: 排序：directory / published_desc / published_asc / updated_desc /
+            updated_asc（空=按 ID 倒序）
+          in: query
+          name: sort
+          type: string
+        - description: 页码，从 1 开始
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    allOf:
+                      - $ref: "#/definitions/framework.PageResponse"
+                      - properties:
+                          list:
+                            items:
+                              $ref: "#/definitions/article.ArticleListView"
+                            type: array
+                        type: object
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 文章列表（管理·含草稿）
+      tags:
+        - 文章
+  /articles/manage/{aid}:
+    get:
+      description: 🔑 只读 key · editor+ ｜ 按 ID 返回单篇文章的完整管理详情（不限状态，含正文与全部语言翻译）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+        - description: 语言（影响分类/标签名展示）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleDetailView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 文章详情（管理·含草稿）
+      tags:
+        - 文章
+  /articles/trash:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回已软删除（在回收站）的文章
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    allOf:
+                      - $ref: "#/definitions/framework.PageResponse"
+                      - properties:
+                          list:
+                            items:
+                              $ref: "#/definitions/article.ArticleListView"
+                            type: array
+                        type: object
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 回收站列表
+      tags:
+        - 文章
+  /articles/{aid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 软删除文章，移入回收站，可经 restore 恢复
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除文章（移入回收站）
+      tags:
+        - 文章
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 按 slug 返回已发布文章的指定语言详情（含正文 body_html 与可用语言列表）
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 slug
+          in: path
+          name: aid
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.PubArticleView"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 文章详情（已发布）
+      tags:
+        - 文章
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 更新文章身份字段（slug/path/状态/分类/标签等）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.ArticleUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleDetailView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新文章
+      tags:
+        - 文章
+  /articles/{aid}/feedback:
+    post:
+      consumes:
+        - application/json
+      description: 🔑 写 key（需 feedback:write）｜ 追加一条文本反馈（可携带打分/赞踩快照）；返回最新聚合
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 slug
+          in: path
+          name: aid
+          required: true
+          type: string
+        - description: 文本反馈
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.FeedbackReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.FeedbackSummary"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 提交文本反馈
+      tags:
+        - 反馈
+  /articles/{aid}/feedback-summary:
+    get:
+      description: 🔑 只读 key ｜ 返回文章的打分/赞踩/反馈聚合；带 visitor_id 时附带该访客当前反应
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 slug
+          in: path
+          name: aid
+          required: true
+          type: string
+        - description: 访客标识（返回 my_reaction）
+          in: query
+          name: visitor_id
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.FeedbackSummary"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 文章反馈聚合
+      tags:
+        - 反馈
+  /articles/{aid}/reaction:
+    post:
+      consumes:
+        - application/json
+      description: 🔑 写 key（需 feedback:write）｜ 按 (文章, visitor_id) upsert：rating
+        1–5、vote -1/1，至少其一；返回最新聚合
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 slug
+          in: path
+          name: aid
+          required: true
+          type: string
+        - description: 打分 / 赞踩
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.ReactionReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.FeedbackSummary"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 提交打分 / 赞踩
+      tags:
+        - 反馈
+  /articles/{aid}/restore:
+    post:
+      description: 🔑 可写 key · editor+ ｜ 从回收站恢复一篇已软删除的文章
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 恢复文章
+      tags:
+        - 文章
+  /articles/{aid}/translations:
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 为指定文章新增一个语言的翻译。lang 必须 ∈ 该内容空间
+        supported_langs（未配置 supported_langs 时不限制）。
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TranslationPayload"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.TranslationView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 新增文章翻译
+      tags:
+        - 文章
+  /articles/{aid}/translations/{tid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除指定文章的某个语言翻译
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+        - description: 翻译 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除文章翻译
+      tags:
+        - 文章
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 更新指定文章某个翻译的标题/正文/SEO 等字段
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+        - description: 翻译 ID
+          in: path
+          name: tid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TranslationUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.TranslationView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新文章翻译
+      tags:
+        - 文章
+  /authors:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 列出工作空间下全部作者（含全部语言翻译与社媒条目）。用于在 POST/PATCH
+        /articles 前发现 author_id。
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/author.AuthorRow"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 作者列表（开放读）
+      tags:
+        - 作者
+  /authors/{aid}:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 按 ID 返回单个作者（含全部语言翻译与社媒条目）。
+      parameters:
+        - description: 作者 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/author.AuthorRow"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 作者详情（开放读）
+      tags:
+        - 作者
+  /content-spaces:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 业务方通过 X-API-Key 获取所属 workspace 中、当前 Key
+        scope 可见的内容空间清单（仅暴露安全字段）
+      parameters:
+        - description: Workspace API Key
+          in: header
+          name: X-API-Key
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.PubSpaceBrief"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 内容空间列表（已发布）
+      tags:
+        - 内容空间
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 在 workspace 下创建一个内容空间
+      parameters:
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.SpaceCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.SpaceView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建内容空间
+      tags:
+        - 内容空间
+  /content-spaces/{sid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除指定内容空间（force=true 连同空间内内容强删）
+      parameters:
+        - description: 内容空间 ID
+          in: path
+          name: sid
+          required: true
+          type: integer
+        - description: 为 true 时连同空间内内容一并强制删除
+          in: query
+          name: force
+          type: boolean
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除内容空间
+      tags:
+        - 内容空间
+    get:
+      description: 🔑 只读 key · viewer+ 且需 content:<visibility> ｜ 返回指定内容空间详情及统计计数（scope
+        与列表一致，防越权读受限空间）
+      parameters:
+        - description: 内容空间 ID
+          in: path
+          name: sid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.SpaceView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 内容空间详情（管理）
+      tags:
+        - 内容空间
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 局部更新指定内容空间
+      parameters:
+        - description: 内容空间 ID
+          in: path
+          name: sid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.SpaceUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.SpaceView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新内容空间
+      tags:
+        - 内容空间
+  /cover-assets:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回当前 workspace 全部素材（含 description），可按
+        type（font/image）与 tag 过滤，供 AI 发现品牌素材
+      parameters:
+        - description: font / image
+          in: query
+          name: type
+          type: string
+        - description: 标签(大小写不敏感)
+          in: query
+          name: tag
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/covergen.CoverAsset"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 素材库列表
+      tags:
+        - 封面素材
+    post:
+      consumes:
+        - multipart/form-data
+      description: 🔑 写 key · editor+ ｜ 上传字体/图片素材（带 description 语义说明，供 AI 理解）
+      parameters:
+        - description: 文件
+          in: formData
+          name: file
+          required: true
+          type: file
+        - description: font / image
+          in: formData
+          name: type
+          required: true
+          type: string
+        - description: 显示名(字体即 font-family)
+          in: formData
+          name: name
+          type: string
+        - description: 标签,逗号分隔
+          in: formData
+          name: tags
+          type: string
+        - description: 素材语义说明(供 AI/人理解)
+          in: formData
+          name: description
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/covergen.CoverAsset"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 上传素材
+      tags:
+        - 封面素材
+  /cover-assets/{id}:
+    delete:
+      description: 🔑 写 key · editor+ ｜ 软删除指定素材
+      parameters:
+        - description: 素材 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除素材
+      tags:
+        - 封面素材
+  /cover-templates:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回当前 workspace 全部封面模板的完整视图（含
+        layers/fields/description），供 AI 发现与选型
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/covergen.CoverTemplate"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 封面模板列表
+      tags:
+        - 封面
+    post:
+      consumes:
+        - application/json
+      description: 🔑 写 key · editor+ ｜ 传结构化 layers（位置/字体/颜色/槽位），后端据此推导 html_template
+        与 fields 落库；无需传 html_template
+      parameters:
+        - description: 建模板（结构化 layers）
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/covergen.CoverTemplateOpenCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/covergen.CoverTemplate"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 创建封面模板
+      tags:
+        - 封面
+  /cover-templates/{id}:
+    delete:
+      description: 🔑 写 key · editor+ ｜ 软删除指定封面模板
+      parameters:
+        - description: 模板 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除封面模板
+      tags:
+        - 封面
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 按 ID 返回模板完整视图（含结构化 layers、槽位 fields 与 description）
+      parameters:
+        - description: 模板 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/covergen.CoverTemplate"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 封面模板详情
+      tags:
+        - 封面
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 写 key · editor+ ｜ 局部更新模板 layers/尺寸/名称/description；传入 layers
+        时后端重新推导 html_template 与 fields
+      parameters:
+        - description: 模板 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 更新模板
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/covergen.CoverTemplateOpenUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/covergen.CoverTemplate"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 更新封面模板
+      tags:
+        - 封面
+  /cover-templates/{id}/render:
+    post:
+      consumes:
+        - application/json
+      description: 🔑 写 key · editor+ ｜ 填 data 填充模板槽位，同步渲染（headless Chromium）并上传 S3，返回成图 URL
+      parameters:
+        - description: 模板 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 填入数据
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/covergen.RenderReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/covergen.RenderResp"
+                type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 套模板出图
+      tags:
+        - 封面
+  /directory:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 返回当前内容空间已发布、按 lang 展平并剪枝后的嵌套导航目录树
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/article.PubDirNode"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 导航目录树（已发布）
+      tags:
+        - 目录
+  /directory/manage:
+    get:
+      description: 🔑 只读 key · editor+ 且按 content:visibility scope 过滤 ｜ 返回完整导航目录树（含
+        node id/parent_id、未发布节点、分组多语言）及未归类文章；用于拿 node ID 调用
+        /directory/nodes/:nid 写接口。
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（影响分组名展示）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.DirStaffView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 目录树（管理·含 node ID）
+      tags:
+        - 目录
+  /directory/nodes:
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 新增分组节点（kind=group）或文章节点（kind=article）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.DirNodeCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleDirectoryNode"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建目录节点
+      tags:
+        - 目录
+  /directory/nodes/{nid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除一个目录节点（及其子树/翻译，文章本身不受影响）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 目录节点 ID
+          in: path
+          name: nid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除目录节点
+      tags:
+        - 目录
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 更新节点的锚点 slug 或折叠状态
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 目录节点 ID
+          in: path
+          name: nid
+          required: true
+          type: integer
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.DirNodeUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ArticleDirectoryNode"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新目录节点
+      tags:
+        - 目录
+  /directory/nodes/{nid}/translations/{lang}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除指定语言的分组节点标题
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 目录节点 ID
+          in: path
+          name: nid
+          required: true
+          type: integer
+        - description: 语言代码
+          in: path
+          name: lang
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除分组节点翻译
+      tags:
+        - 目录
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 写入指定语言的分组节点标题（仅 kind=group；已存在则覆盖）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 目录节点 ID
+          in: path
+          name: nid
+          required: true
+          type: integer
+        - description: 语言代码
+          in: path
+          name: lang
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.TaxonomyTranslationUpsertReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 新增/更新分组节点翻译
+      tags:
+        - 目录
+  /directory/reorder:
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 批量更新节点的父级与排序（拖拽排序后提交）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.DirReorderReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 重排目录树
+      tags:
+        - 目录
+  /feedback:
+    get:
+      description: 🔑 只读 key · editor+（含访客文本）｜ 分页返回文本反馈，可按文章/语言/状态/关键字/时间过滤
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 按文章过滤
+          in: query
+          name: article_id
+          type: integer
+        - description: 按语言过滤
+          in: query
+          name: lang
+          type: string
+        - description: 状态：open/resolved/ignored
+          in: query
+          name: status
+          type: string
+        - description: 正文模糊
+          in: query
+          name: q
+          type: string
+        - description: 提交时间下界（含）
+          in: query
+          name: from
+          type: string
+        - description: 提交时间上界（含）
+          in: query
+          name: to
+          type: string
+        - description: 页码
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    allOf:
+                      - $ref: "#/definitions/framework.PageResponse"
+                      - properties:
+                          list:
+                            items:
+                              $ref: "#/definitions/article.FeedbackView"
+                            type: array
+                        type: object
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 反馈明细列表
+      tags:
+        - 反馈
+  /feedback/{fid}:
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 将反馈标记为 resolved/ignored（或退回 open），记录处理人与时间
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 反馈 ID
+          in: path
+          name: fid
+          required: true
+          type: integer
+        - description: 目标状态
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.FeedbackStatusReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 更新反馈处理状态
+      tags:
+        - 反馈
+  /pins:
+    get:
+      description: 🔑 只读 key · 需 content:<visibility> ｜ 返回内容空间的置顶文章（按拖拽序），含标题/封面等简要信息
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（影响标题展示）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/article.ArticleListView"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 置顶列表
+      tags:
+        - 文章-置顶
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 把文章加入置顶（追加到末尾）；已置顶则幂等
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.PinAddReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 加入置顶
+      tags:
+        - 文章-置顶
+  /pins/reorder:
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 批量更新置顶文章的顺序
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.PinReorderReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 置顶重排
+      tags:
+        - 文章-置顶
+  /pins/{aid}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 把文章移出置顶（幂等）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 文章 ID
+          in: path
+          name: aid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 取消置顶
+      tags:
+        - 文章-置顶
+  /reactions:
+    get:
+      description: 🔑 只读 key · editor+（含访客 PII）｜
+        分页返回反应明细（一访客一文章一行，按最近反应时间倒序），可按文章/语言/类型/关键字/时间过滤
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 按文章过滤
+          in: query
+          name: article_id
+          type: integer
+        - description: 按语言过滤
+          in: query
+          name: lang
+          type: string
+        - description: 类型：any/rated/up/down
+          in: query
+          name: kind
+          type: string
+        - description: 匹配 visitor_id 或 ip
+          in: query
+          name: q
+          type: string
+        - description: 时间下界（含）
+          in: query
+          name: from
+          type: string
+        - description: 时间上界（含）
+          in: query
+          name: to
+          type: string
+        - description: 页码
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    allOf:
+                      - $ref: "#/definitions/framework.PageResponse"
+                      - properties:
+                          list:
+                            items:
+                              $ref: "#/definitions/article.ReactionView"
+                            type: array
+                        type: object
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 评分/赞踩明细列表
+      tags:
+        - 反馈
+  /reactions-analytics:
+    get:
+      description: 🔑 只读 key · 需 content:<visibility> ｜ 返回内容空间级评分/赞踩总览（平均分、分布、赞踩数）与按文章 Top 榜
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.ReactionAnalytics"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 评分/赞踩聚合分析
+      tags:
+        - 反馈
+  /rss:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 返回该内容空间已发布文章的 RSS 2.0 feed（实时生成，带 ETag/缓存）
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（默认取空间主语言）
+          in: query
+          name: lang
+          type: string
+        - description: 站点根 origin（覆盖工作空间域名，用于拼绝对链接）
+          in: query
+          name: site
+          type: string
+      produces:
+        - application/rss+xml
+      responses:
+        "200":
+          description: RSS XML
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: RSS 订阅（已发布）
+      tags:
+        - 文章
+  /seo/resolve:
+    get:
+      description: 🔑 只读 key ｜ 业务方传 ?path=/blog/hello，返回该 path 优先级最高的命中配置的 metas；无命中时
+        matched=false。
+      parameters:
+        - description: Workspace API Key
+          in: header
+          name: X-API-Key
+          required: true
+          type: string
+        - description: 页面 pathname，如 /blog/hello
+          in: query
+          name: path
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）；回退：请求语→全局→zh-CN
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.ResolveResult"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 解析 URL 的 SEO 配置
+      tags:
+        - SEO配置
+  /share-platforms:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 返回该内容空间解析后（override 或继承目录）的有序分享平台
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 语言（默认 zh-CN）
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/share.ResolvedShare"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 内容空间分享平台（已解析）
+      tags:
+        - 分享平台
+  /sitecheck/regions:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 列出当前有可用检测器的区域标签；创建任务时 region 须取其一（留空=任意可用检测器）。
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      type: string
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 可用检测区域
+      tags:
+        - 网站检测
+  /sitecheck/tasks:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 分页列出 workspace 下的网站检测任务（含进度计数）
+      parameters:
+        - description: 按状态过滤：pending/running/completed/failed/canceled/interrupted
+          in: query
+          name: status
+          type: string
+        - description: 页码，默认 1
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数，默认 20
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.Task"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 检测任务列表（管理）
+      tags:
+        - 网站检测
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 创建并启动一次网站检测任务（seeds 起始网址 ≥1）
+      parameters:
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.TaskCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.Task"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建检测任务
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除指定检测任务及其全部抓取结果
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除检测任务
+      tags:
+        - 网站检测
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回指定检测任务详情及进度计数
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.Task"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 检测任务详情（管理）
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/browser-checks:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 列出任务的首页浏览器渲染检查结果（仅 browser_render=true 时有）。
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.BrowserCheck"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 浏览器检查列表
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/browser-checks/{bid}:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回单条浏览器渲染检查详情。
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 浏览器检查 ID
+          in: path
+          name: bid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.BrowserCheck"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 浏览器检查详情
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/lighthouse:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 列出任务各 seed origin 的 Lighthouse 报告（桌面+移动；仅
+        run_lighthouse=true 时有）。
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.LighthouseReport"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: Lighthouse 报告列表
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/lighthouse/{rid}:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回单份 Lighthouse 报告详情（含各分类明细）。
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Lighthouse 报告 ID
+          in: path
+          name: rid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.LighthouseReport"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: Lighthouse 报告详情
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/pages:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 分页列出某任务逐 URL 的抓取结果（可按报错/SEO 问题/状态码/关键词筛选）
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 为 true 时仅返回报错/超时的页
+          in: query
+          name: only_errors
+          type: boolean
+        - description: 为 true 时仅返回有 SEO 问题的页
+          in: query
+          name: only_seo_issues
+          type: boolean
+        - description: 按状态码精确过滤，0 表示不过滤
+          in: query
+          name: status
+          type: integer
+        - description: 按 URL 模糊搜索
+          in: query
+          name: search
+          type: string
+        - description: 按资源类型过滤：link/image/style/script
+          in: query
+          name: type
+          type: string
+        - description: 按内外链过滤：internal/external
+          in: query
+          name: scope
+          type: string
+        - description: 排序列：resource_type/is_internal/seo_issue_count/byte_size/status_code/response_time_ms
+          in: query
+          name: sort
+          type: string
+        - description: 排序方向：ascending/descending
+          in: query
+          name: order
+          type: string
+        - description: 页码，默认 1
+          in: query
+          name: page
+          type: integer
+        - description: 每页条数，默认 20
+          in: query
+          name: size
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.Page"
+                    type: array
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 检测结果页列表（管理）
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/pages/{pid}:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回单条抓取结果详情（含 SEO 解析）
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 结果页 ID
+          in: path
+          name: pid
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.Page"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 检测结果页详情（管理）
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/report:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回任务的页面级聚合报告（状态码分布、SEO 问题汇总等）。
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.PageReport"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 任务聚合报告
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/rerun:
+    post:
+      description: 🔑 可写 key · editor+ ｜ 克隆指定任务的配置并启动一个新任务
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.Task"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 重跑检测任务
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/stats:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 返回任务结果的分类计数（内/外链、图片、js、css），按结果实时统计
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.PageStats"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 检测结果统计
+      tags:
+        - 网站检测
+  /sitecheck/tasks/{id}/stop:
+    post:
+      description: 🔑 可写 key · editor+ ｜ 停止一个运行中的检测任务
+      parameters:
+        - description: 检测任务 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 停止检测任务
+      tags:
+        - 网站检测
+  /sort-setting:
+    get:
+      description: 🔑 只读 key · 需 content:<visibility> ｜ 返回内容空间的非置顶默认排序策略（未配置回落 directory）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.SortSettingView"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 获取默认排序策略
+      tags:
+        - 文章-置顶
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜
+        设置非置顶默认排序策略（directory/published_desc/published_asc/updated_desc/updated_asc）
+      parameters:
+        - description: 内容空间 slug
+          in: query
+          name: space
+          required: true
+          type: string
+        - description: 请求体
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/article.SortSettingReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 设置默认排序策略
+      tags:
+        - 文章-置顶
+  /space/feeds:
+    get:
+      description: 🔑 只读 key · 按 scopes 可见性 ｜ 返回该内容空间可订阅的多语言 RSS feed 列表（语言 = 声明支持 ∩
+        至少一篇已发布译文；未声明则取有已发布译文的语言）。feed_url 在工作空间已配域名时为绝对 URL，否则为相对路径。
+      parameters:
+        - description: 内容空间标识（slug 或 ID）
+          in: query
+          name: space
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/article.SpaceFeedsView"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 可订阅 feed 列表（多语言）
+      tags:
+        - 文章
+  /upload:
+    post:
+      consumes:
+        - multipart/form-data
+      description: 🔑 可写 key · editor+ ｜ 服务账号（含 AI / MCP 配图）上传文件到该 workspace 配的 S3；不落库
+      parameters:
+        - description: 文件
+          in: formData
+          name: file
+          required: true
+          type: file
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/workspace.UploadResp"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 上传素材
+      tags:
+        - 素材
+  /web-files:
+    get:
+      description: 🔑 只读 key · 需 webfile:public ｜ 列出当前 workspace 下的文件（元信息 + 公开 URL）
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    items:
+                      $ref: "#/definitions/internal.PubWebFileBrief"
+                    type: array
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 列出文本/文件
+      tags:
+        - 文件
+    post:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 以 JSON 创建一条文本文件记录（name + url_path + 文本内容）
+      parameters:
+        - description: 创建参数
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.WebFileCreateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.WebFile"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 创建文本文件（服务账号）
+      tags:
+        - 文件
+  /web-files/by-path:
+    get:
+      description: 🔑 只读 key · 需 webfile:public ｜ 按 url_path 从 S3 流式回源返回文件字节（带
+        content-type 与 ETag/Cache-Control）
+      parameters:
+        - description: 文件 url_path，如 /robots.txt
+          in: query
+          name: path
+          required: true
+          type: string
+        - description: 语言码（如 zh-CN/en）；回退链：请求语→全局→zh-CN
+          in: query
+          name: lang
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: 文件内容
+          schema:
+            type: string
+        "304":
+          description: 未修改（命中 If-None-Match）
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "403":
+          description: Forbidden
+          schema:
+            $ref: "#/definitions/framework.Response"
+        "404":
+          description: Not Found
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 取回文件内容
+      tags:
+        - 文件
+  /web-files/upload:
+    post:
+      consumes:
+        - multipart/form-data
+      description: 🔑 可写 key · editor+ ｜ multipart 上传任意文件（二进制/文本均可）
+      parameters:
+        - description: 文件
+          in: formData
+          name: file
+          required: true
+          type: file
+        - description: 展示名
+          in: formData
+          name: name
+          type: string
+        - description: 逻辑路径
+          in: formData
+          name: url_path
+          type: string
+        - description: 语言码（空=全局；非空如 zh-CN/en）
+          in: formData
+          name: lang
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.WebFile"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 上传文件（服务账号）
+      tags:
+        - 文件
+  /web-files/{id}:
+    delete:
+      description: 🔑 可写 key · editor+ ｜ 删除文件记录（S3 对象 + DB 行均硬删）
+      parameters:
+        - description: 文件 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 删除文件（服务账号）
+      tags:
+        - 文件
+    get:
+      description: 🔑 只读 key · 需 webfile:public ｜ 返回单条文件元信息；文本文件附带正文（scope 与列表一致，防越权按
+        ID 读正文）
+      parameters:
+        - description: 文件 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.WebFileDetail"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 文件详情（服务账号）
+      tags:
+        - 文件
+    patch:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 部分更新 name/url_path/sort；改 url_path 搬迁底层对象
+      parameters:
+        - description: 文件 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 更新参数
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.WebFileUpdateReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.WebFile"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 更新文件元信息（服务账号）
+      tags:
+        - 文件
+  /web-files/{id}/content:
+    put:
+      consumes:
+        - application/json
+      description: 🔑 可写 key · editor+ ｜ 覆盖保存可编辑文本文件的正文（仅 is_text）
+      parameters:
+        - description: 文件 ID
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: 正文
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal.WebFileContentReq"
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/internal.WebFile"
+                type: object
+      security:
+        - ApiKeyAuth: []
+      summary: 保存文件正文（服务账号）
+      tags:
+        - 文件
+  /whoami:
+    get:
+      description: 🔑 只读 key · viewer+ ｜ 服务账号通过 X-API-Key 获取所属 workspace 基本信息、当前 key
+        角色与授权 scopes（用于发现 wid、自查角色/可见性能力，避免撞 403）
+      parameters:
+        - description: Workspace API Key
+          in: header
+          name: X-API-Key
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/workspace.SvcWhoamiView"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 服务账号 whoami（含角色）
+      tags:
+        - 账号
+  /workspace:
+    get:
+      consumes:
+        - application/json
+      description: 🔑 只读 key · viewer+ ｜ 业务方通过 X-API-Key 获取所属 workspace 的基本信息
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+              - $ref: "#/definitions/framework.Response"
+              - properties:
+                  data:
+                    $ref: "#/definitions/workspace.PubWorkspaceView"
+                type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/framework.Response"
+      security:
+        - ApiKeyAuth: []
+      summary: 公开 whoami
+      tags:
+        - 账号
+securityDefinitions:
+  ApiKeyAuth:
+    description: 内容中台 pub 接口的接入凭证（在后台 workspace 下签发）。
+    in: header
+    name: X-API-Key
+    type: apiKey
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+  - description: 文章的消费读（已发布）与管理读写（含草稿、翻译）。
+    name: 文章
+  - description: 文章分类的消费读与管理读写（含多语言翻译）。
+    name: 分类
+  - description: 文章标签的消费读与管理读写（含多语言翻译）。
+    name: 标签
+  - description: 导航目录树的消费读与管理读写（节点、重排、分组翻译）。
+    name: 目录
+  - description: 内容空间（ContentSpace）的消费读与管理读写。
+    name: 内容空间
+  - description: 已发布 API 文档的列表与 OpenAPI 原文（只读消费）。
+    name: API 文档
+  - description: 网站检测任务的管理读写（创建/停止/重跑/删除任务、逐 URL 抓取结果与 SEO）。
+    name: 网站检测
+  - description: 对象存储素材上传（含 AI / MCP 配图）。
+    name: 素材
+  - description: API Key 的 whoami：所属 workspace 与（服务账号）角色。
+    name: 账号

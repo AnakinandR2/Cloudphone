@@ -68,7 +68,7 @@ useSeoMeta({
         <h1>{{ post.title }}</h1>
         <ArticleBody :html="post.body_html" />
 
-        <div v-if="post.tags.length" class="article-tags">
+        <div v-if="post.tags?.length" class="article-tags">
           <span class="article-tags__label">{{ t.blog.tags }}:</span>
           <NuxtLink
             v-for="tg in post.tags"

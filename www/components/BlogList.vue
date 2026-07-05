@@ -164,7 +164,7 @@ const crumbs = computed(() => {
                 </div>
                 <h3 class="blog-card__title">{{ p.title }}</h3>
                 <p class="blog-card__excerpt">{{ p.summary }}</p>
-                <div v-if="p.tags.length" class="blog-card__tags">
+                <div v-if="p.tags?.length" class="blog-card__tags">
                   <span v-for="tg in p.tags.slice(0, 3)" :key="tg.id" class="blog-card__tag">#{{ tg.name }}</span>
                 </div>
               </div>

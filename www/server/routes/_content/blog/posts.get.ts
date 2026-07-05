@@ -5,7 +5,7 @@ import type { PubList } from '~/types/content'
 export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const cfg = useRuntimeConfig()
-  return await contentFetch<PubList>('/articles', {
+  const res = await contentFetch<PubList>('/articles', {
     space: cfg.contentSpace as string,
     lang: langToApi(q.lang ? String(q.lang) : undefined),
     page: q.page,
@@ -14,4 +14,9 @@ export default defineEventHandler(async (event) => {
     tag_id: q.tag_id,
     sort: q.sort || 'published_desc',
   })
+  // 中台空切片会序列化为 null：list / 每项 tags 均兜底为数组，保证前端契约成立。
+  return {
+    list: Array.isArray(res?.list) ? res.list.map(normalizeArticle) : [],
+    total: res?.total ?? 0,
+  }
 })

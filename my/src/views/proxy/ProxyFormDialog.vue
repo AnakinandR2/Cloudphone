@@ -7,6 +7,7 @@ import { toast } from 'vue-sonner'
 
 import proxyApi from '@/api/modules/proxy'
 import { formatDateTime } from '@/utils/date'
+import { buildProxyFormSchema } from './proxyFormSchema'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -124,24 +125,29 @@ async function doProbe() {
   }
 }
 
+// 校验交给 zod schema（@/views/proxy/proxyFormSchema，纯函数便于单测），
+// 再把各字段首条错误映射回既有的 error ref 以就地显示。
 function validate() {
   nameError.value = ''
   hostError.value = ''
   portError.value = ''
-  let ok = true
-  if (!form.name.trim()) {
-    nameError.value = t('proxy.errNameRequired')
-    ok = false
+  const r = buildProxyFormSchema(t).safeParse({
+    name: form.name,
+    host: form.host,
+    port: form.port,
+  })
+  if (r.success)
+    return true
+  for (const issue of r.error.issues) {
+    const field = issue.path[0]
+    if (field === 'name' && !nameError.value)
+      nameError.value = issue.message
+    else if (field === 'host' && !hostError.value)
+      hostError.value = issue.message
+    else if (field === 'port' && !portError.value)
+      portError.value = issue.message
   }
-  if (!String(form.host).trim()) {
-    hostError.value = t('proxy.errHostRequired')
-    ok = false
-  }
-  if (!String(form.port).toString().trim() || Number(form.port) <= 0) {
-    portError.value = t('proxy.errPortRequired')
-    ok = false
-  }
-  return ok
+  return false
 }
 
 async function submit() {
@@ -186,8 +192,10 @@ async function submit() {
 
       <div class="space-y-4 py-2">
         <div class="space-y-2">
-          <Label for="p-name">{{ t('proxy.fName') }}</Label>
-          <Input id="p-name" v-model="form.name" :disabled="readonly" :placeholder="t('proxy.fNamePlaceholder')" />
+          <Label for="p-name">
+            {{ t('proxy.fName') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
+          </Label>
+          <Input id="p-name" v-model="form.name" :disabled="readonly" :aria-invalid="!!nameError" :placeholder="t('proxy.fNamePlaceholder')" />
           <p v-if="nameError" class="text-destructive text-xs">{{ nameError }}</p>
         </div>
         <div class="grid grid-cols-3 gap-3">
@@ -197,15 +205,19 @@ async function submit() {
             <Input id="p-protocol" :model-value="form.protocol || 'socks5'" disabled />
           </div>
           <div class="space-y-2 col-span-2">
-            <Label for="p-host">{{ t('proxy.fHost') }}</Label>
-            <Input id="p-host" v-model="form.host" :disabled="readonly" :placeholder="t('proxy.fHostPlaceholder')" />
+            <Label for="p-host">
+              {{ t('proxy.fHost') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
+            </Label>
+            <Input id="p-host" v-model="form.host" :disabled="readonly" :aria-invalid="!!hostError" :placeholder="t('proxy.fHostPlaceholder')" />
             <p v-if="hostError" class="text-destructive text-xs">{{ hostError }}</p>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-2">
-            <Label for="p-port">{{ t('proxy.fPort') }}</Label>
-            <Input id="p-port" v-model="form.port" type="number" :disabled="readonly" :placeholder="t('proxy.fPortPlaceholder')" />
+            <Label for="p-port">
+              {{ t('proxy.fPort') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
+            </Label>
+            <Input id="p-port" v-model="form.port" type="number" :disabled="readonly" :aria-invalid="!!portError" :placeholder="t('proxy.fPortPlaceholder')" />
             <p v-if="portError" class="text-destructive text-xs">{{ portError }}</p>
           </div>
           <div class="space-y-2">

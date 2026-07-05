@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { blogListPath, formatBlogDate, pageWindow, readingMinutes } from '../composables/useBlog.ts'
-import { langToApi } from '../server/utils/content.ts'
+import { langToApi, normalizeArticle } from '../server/utils/content.ts'
 
 test('blogListPath 构造伪静态路径', () => {
   assert.equal(blogListPath('all'), '/blog')
@@ -30,6 +30,21 @@ test('langToApi 映射站点 locale → 中台语言码', () => {
   assert.equal(langToApi('en'), 'en')
   assert.equal(langToApi(undefined), 'en')
   assert.equal(langToApi('fr'), 'en') // 未知语言回退英文
+})
+
+test('normalizeArticle 把中台 null/缺省 标签兜底为数组（Go 空切片 → JSON null）', () => {
+  // 无标签文章：中台回 null → 兜底为 []，避免模板 tags.length 崩溃
+  assert.deepEqual(normalizeArticle({ id: 1, title: 't', tags: null }).tags, [])
+  // 字段缺省同样兜底
+  assert.deepEqual(normalizeArticle({ id: 2, title: 't' }).tags, [])
+  // 已是数组时原样保留
+  const tags = [{ id: 9, slug: 'go', name: 'Go' }]
+  assert.deepEqual(normalizeArticle({ id: 3, title: 't', tags }).tags, tags)
+  // 不改动其它字段
+  assert.equal(normalizeArticle({ id: 4, title: '你好', tags: null }).title, '你好')
+  // 传入空值安全返回（不抛错）
+  assert.equal(normalizeArticle(null), null)
+  assert.equal(normalizeArticle(undefined), undefined)
 })
 
 test('readingMinutes 估算阅读时长（至少 1 分钟）', () => {

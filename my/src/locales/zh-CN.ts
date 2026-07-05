@@ -449,6 +449,7 @@ export default {
     lastChecked: '最近检测',
     importTitle: '批量导入代理',
     importDesc: '每行一条，支持以下格式（协议默认 socks5）：',
+    importLabel: '代理列表',
     importPlaceholder: '在此粘贴代理列表，每行一条…',
     importParsed: '已解析 {n} 条有效代理',
     importInvalidRows: '{n} 行无法识别，将被忽略：第 {rows} 行',
@@ -492,6 +493,7 @@ export default {
     errNameRequired: '请输入名称',
     errHostRequired: '请输入主机',
     errPortRequired: '请输入有效端口',
+    errPortRange: '端口需在 1–65535 之间',
   },
   phone: {
     title: '我的云手机',

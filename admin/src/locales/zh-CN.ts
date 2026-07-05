@@ -952,6 +952,15 @@ export default {
     confirmDelete: '确认删除',
     confirmDeleteDesc: '确定要删除「{name}」吗？此操作不可撤销。',
   },
+  valid: {
+    nameRequired: '请输入姓名',
+    nameMin: '姓名至少 2 个字符',
+    emailRequired: '请输入邮箱',
+    emailInvalid: '邮箱格式不正确',
+    roleRequired: '请选择角色',
+    agreeRequired: '请先勾选同意服务条款',
+    bioMax: '简介不能超过 200 个字符',
+  },
   blank: {
     title: '空白页',
     desc: '这是一个用于演示多级菜单的占位页面。',

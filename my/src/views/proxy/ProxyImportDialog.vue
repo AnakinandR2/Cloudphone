@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
 const open = defineModel<boolean>({ default: false })
@@ -73,7 +74,10 @@ async function submit() {
 
       <div class="space-y-3 py-2">
         <pre class="bg-muted/50 text-muted-foreground rounded-md p-2 text-xs leading-relaxed">{{ FORMATS }}</pre>
-        <Textarea v-model="raw" :placeholder="t('proxy.importPlaceholder')" class="min-h-48 font-mono text-sm" />
+        <Label for="import-raw">
+          {{ t('proxy.importLabel') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
+        </Label>
+        <Textarea id="import-raw" v-model="raw" :placeholder="t('proxy.importPlaceholder')" class="min-h-48 font-mono text-sm" />
         <p class="text-muted-foreground text-xs">
           {{ t('proxy.importParsed', { n: parsed.length }) }}
         </p>

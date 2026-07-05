@@ -16,6 +16,8 @@ import '@fontsource/plus-jakarta-sans/700.css'
 import '@fontsource/fira-code/400.css'
 import '@fontsource/fira-code/500.css'
 import './assets/index.css'
+// vue-sonner v2 样式需手动引入，否则 <Toaster> 无 fixed/z-index，提示掉进文档流看似不弹出
+import 'vue-sonner/style.css'
 
 const app = createApp(App)
 
