@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
 import proxyApi from '@/api/modules/proxy'
-import { parseProxyLines } from '@/utils/proxyParse'
+import { parseProxyImport } from '@/utils/proxyParse'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,15 +24,19 @@ const raw = ref('')
 const submitting = ref(false)
 
 // 支持的格式示例（技术文本，含 @ / ://，不走 i18n —— vue-i18n 会把 @ 当链接语法报错）
+// 首列可选「名称,」——不填则名称自动取 host:port。
 const FORMATS = [
+  'name,host:port',
   'host:port',
   'host:port:user:pass',
   'socks5://user:pass@host:port',
   'user:pass@host:port',
 ].join('\n')
 
-// 解析逻辑抽到 @/utils/proxyParse（纯函数，便于单测）
-const parsed = computed(() => parseProxyLines(raw.value))
+// 解析逻辑抽到 @/utils/proxyParse（纯函数，便于单测）：区分有效条目与无法识别的行号。
+const result = computed(() => parseProxyImport(raw.value))
+const parsed = computed(() => result.value.items)
+const invalidRows = computed(() => result.value.invalidRows)
 
 watch(open, (v) => {
   if (v) {
@@ -72,6 +76,10 @@ async function submit() {
         <Textarea v-model="raw" :placeholder="t('proxy.importPlaceholder')" class="min-h-48 font-mono text-sm" />
         <p class="text-muted-foreground text-xs">
           {{ t('proxy.importParsed', { n: parsed.length }) }}
+        </p>
+        <!-- 无法识别的行提示（#48）：避免非法行被静默丢弃，导入前给出行号。 -->
+        <p v-if="invalidRows.length" class="text-destructive text-xs">
+          {{ t('proxy.importInvalidRows', { n: invalidRows.length, rows: invalidRows.join('、') }) }}
         </p>
       </div>
 

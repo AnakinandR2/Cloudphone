@@ -451,6 +451,7 @@ export default {
     importDesc: 'One per line. Supported formats (protocol defaults to socks5):',
     importPlaceholder: 'Paste your proxy list here, one per line…',
     importParsed: '{n} valid proxies parsed',
+    importInvalidRows: '{n} row(s) not recognized and will be ignored: line {rows}',
     importEmpty: 'No valid proxies parsed; please check the format',
     importOk: 'Imported {created} / {total} proxies',
     searchPlaceholder: 'Name / address, fuzzy match',
@@ -952,6 +953,15 @@ export default {
     added: 'Added {name}',
     confirmDelete: 'Confirm deletion',
     confirmDeleteDesc: 'Are you sure you want to delete "{name}"? This cannot be undone.',
+  },
+  valid: {
+    nameRequired: 'Please enter your name',
+    nameMin: 'Name must be at least 2 characters',
+    emailRequired: 'Please enter your email',
+    emailInvalid: 'Invalid email address',
+    roleRequired: 'Please select a role',
+    agreeRequired: 'Please agree to the terms first',
+    bioMax: 'Bio cannot exceed 200 characters',
   },
   blank: {
     title: 'Blank Page',

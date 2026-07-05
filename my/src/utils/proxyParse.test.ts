@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseProxyLine, parseProxyLines } from './proxyParse'
+import { parseProxyImport, parseProxyLine, parseProxyLines } from './proxyParse'
 
 describe('parseProxyLine', () => {
   it('host:port', () => {
@@ -48,6 +48,20 @@ describe('parseProxyLine', () => {
     expect(parseProxyLine('  1.2.3.4:1080  ')).toMatchObject({ host: '1.2.3.4', port: 1080 })
   })
 
+  it('optional leading name column (name,address)', () => {
+    const r = parseProxyLine('美西1, 1.2.3.4:1080:alice:pw')
+    expect(r).toMatchObject({ name: '美西1', host: '1.2.3.4', port: 1080, username: 'alice', password: 'pw' })
+  })
+
+  it('name column with scheme/@ address', () => {
+    const r = parseProxyLine('香港节点,socks5://u:p@example.com:1081')
+    expect(r).toMatchObject({ name: '香港节点', host: 'example.com', port: 1081, username: 'u', password: 'p' })
+  })
+
+  it('falls back to host:port when name omitted', () => {
+    expect(parseProxyLine('1.2.3.4:1080')).toMatchObject({ name: '1.2.3.4:1080' })
+  })
+
   it.each([
     ['', 'empty'],
     ['   ', 'blank'],
@@ -77,5 +91,27 @@ describe('parseProxyLines', () => {
 
   it('returns empty array for all-invalid input', () => {
     expect(parseProxyLines('\n\nnonsense\n')).toEqual([])
+  })
+})
+
+describe('parseProxyImport', () => {
+  it('separates valid items from invalid rows (1-based, skips blanks)', () => {
+    const raw = [
+      '1.1.1.1:1080', // row 1 ok
+      '', // row 2 blank → skipped, not counted
+      'garbage-line', // row 3 invalid
+      '名称,2.2.2.2:1081', // row 4 ok, custom name
+      '3.3.3.3:abc', // row 5 invalid port
+    ].join('\n')
+    const { items, invalidRows } = parseProxyImport(raw)
+    expect(items).toHaveLength(2)
+    expect(items.map(p => p.name)).toEqual(['1.1.1.1:1080', '名称'])
+    expect(invalidRows).toEqual([3, 5])
+  })
+
+  it('no invalid rows when all lines parse', () => {
+    const { items, invalidRows } = parseProxyImport('1.1.1.1:1080\n2.2.2.2:1081')
+    expect(items).toHaveLength(2)
+    expect(invalidRows).toEqual([])
   })
 })

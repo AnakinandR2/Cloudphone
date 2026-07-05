@@ -451,6 +451,7 @@ export default {
     importDesc: '每行一条，支持以下格式（协议默认 socks5）：',
     importPlaceholder: '在此粘贴代理列表，每行一条…',
     importParsed: '已解析 {n} 条有效代理',
+    importInvalidRows: '{n} 行无法识别，将被忽略：第 {rows} 行',
     importEmpty: '没有解析到有效代理，请检查格式',
     importOk: '成功导入 {created} / {total} 条代理',
     searchPlaceholder: '请输入名称 / 地址，支持模糊查询',
@@ -952,6 +953,15 @@ export default {
     added: '已添加 {name}',
     confirmDelete: '确认删除',
     confirmDeleteDesc: '确定要删除「{name}」吗？此操作不可撤销。',
+  },
+  valid: {
+    nameRequired: '请输入姓名',
+    nameMin: '姓名至少 2 个字符',
+    emailRequired: '请输入邮箱',
+    emailInvalid: '邮箱格式不正确',
+    roleRequired: '请选择角色',
+    agreeRequired: '请先勾选同意服务条款',
+    bioMax: '简介不能超过 200 个字符',
   },
   blank: {
     title: '空白页',
