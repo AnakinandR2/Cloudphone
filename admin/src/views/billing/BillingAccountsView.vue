@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatDateTime } from '@/utils/date'
-import { fmtCents } from '@/utils/money'
+import { fmtCents, validateAdjustYuan } from '@/utils/money'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -168,18 +168,33 @@ function openBalanceDialog() {
   balanceDialog.value = true
 }
 
+// 余额调整金额校验（CP-0070 / #59）：超两位小数就地飘红，绝不静默截断/进位。
+const balanceCheck = computed(() =>
+  validateAdjustYuan(balanceForm.yuan === '' ? null : Number(balanceForm.yuan)),
+)
+// 仅对「已输入但小数位过多」就地飘红；空/0 沿用提交时 toast 提示。
+const balanceAmountError = computed(() =>
+  balanceForm.yuan !== '' && balanceCheck.value.error === 'precision'
+    ? t('billing.fAdjustAmountPrecision')
+    : '',
+)
+
 async function submitBalance() {
   if (!currentUserId.value) return
   if (!balanceForm.reason.trim()) {
     toast.error(t('billing.errReasonRequired'))
     return
   }
-  const yuan = Number(balanceForm.yuan)
-  const cents = Math.round(yuan * 100)
-  if (Number.isNaN(yuan) || cents === 0) {
+  const check = validateAdjustYuan(balanceForm.yuan === '' ? null : Number(balanceForm.yuan))
+  if (check.error === 'precision') {
+    toast.error(t('billing.fAdjustAmountPrecision')) // 超两位小数：拒绝提交，不再静默改写输入
+    return
+  }
+  if (check.error) {
     toast.error(t('billing.errInvalidAmount'))
     return
   }
+  const cents = check.cents
   balanceSubmitting.value = true
   try {
     await billingApi.adjustBalance(currentUserId.value, cents, balanceForm.reason.trim())
@@ -347,8 +362,15 @@ async function submitResource() {
         <div class="space-y-4 py-2">
           <div class="space-y-1.5">
             <Label>{{ t('billing.fAdjustAmount') }}</Label>
-            <Input v-model="balanceForm.yuan" type="number" step="0.01" :placeholder="t('billing.fAdjustAmountPlaceholder')" />
-            <p class="text-muted-foreground text-xs">
+            <Input
+              v-model="balanceForm.yuan" type="number" step="0.01"
+              :class="balanceAmountError ? 'border-destructive focus-visible:ring-destructive' : ''"
+              :placeholder="t('billing.fAdjustAmountPlaceholder')"
+            />
+            <p v-if="balanceAmountError" class="text-destructive text-xs">
+              {{ balanceAmountError }}
+            </p>
+            <p v-else class="text-muted-foreground text-xs">
               {{ t('billing.fAdjustAmountHint') }}
             </p>
           </div>
@@ -361,7 +383,7 @@ async function submitResource() {
           <Button variant="outline" @click="balanceDialog = false">
             {{ t('crud.cancel') }}
           </Button>
-          <Button :disabled="balanceSubmitting" @click="submitBalance">
+          <Button :disabled="balanceSubmitting || !!balanceAmountError" @click="submitBalance">
             {{ balanceSubmitting ? t('common.loading') : t('crud.confirm') }}
           </Button>
         </DialogFooter>

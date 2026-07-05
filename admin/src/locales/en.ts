@@ -563,6 +563,7 @@ export default {
     fAdjustAmount: 'Amount (¥)',
     fAdjustAmountPlaceholder: 'Positive = credit, negative = deduct',
     fAdjustAmountHint: 'In yuan. Positive credits the balance; negative deducts it (use for refunds).',
+    fAdjustAmountPrecision: 'At most two decimal places (precision to cents).',
     fAdjustSubject: 'Subject',
     fAdjustDelta: 'Quantity (integer)',
     fAdjustDeltaPlaceholder: 'Positive = add, negative = remove',

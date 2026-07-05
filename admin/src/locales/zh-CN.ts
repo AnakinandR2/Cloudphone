@@ -565,6 +565,7 @@ export default {
     fAdjustAmount: '金额（元）',
     fAdjustAmountPlaceholder: '正数赠送，负数扣减',
     fAdjustAmountHint: '单位：元（正数赠送余额，负数扣减余额，即退款入口）',
+    fAdjustAmountPrecision: '金额最多两位小数（精确到分）',
     fAdjustSubject: '科目',
     fAdjustDelta: '数量（整数）',
     fAdjustDeltaPlaceholder: '正数增加，负数减少',
