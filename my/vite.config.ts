@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
         include: 'src/mock',
         infixName: false,
         basename: 'mock-api',
-        enableProd: false,
+        enableProd: enableMock,
         enableDev: enableMock,
       }),
     ],
