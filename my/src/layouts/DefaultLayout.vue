@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Command, LogOut, Moon, Sun, User } from 'lucide-vue-next'
+import { ArrowDoorOut3 as LogOut, Command, Moon, Sun } from 'reicon-vue'
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
@@ -8,7 +8,7 @@ import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import Icon from '@/components/Icon.vue'
 
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -181,7 +181,7 @@ async function logout() {
     </Sidebar>
 
     <!-- 主区域 -->
-    <SidebarInset>
+    <SidebarInset class="min-h-0 min-w-0 flex-1 overflow-hidden">
       <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger class="-ml-1" />
         <Separator orientation="vertical" class="h-4!" />
@@ -195,12 +195,7 @@ async function logout() {
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <button class="hover:bg-accent flex items-center gap-2 rounded-md px-2 py-1">
-              <Avatar class="size-8">
-                <AvatarImage :src="userStore.avatar" :alt="userStore.phone" />
-                <AvatarFallback>
-                  <User class="text-muted-foreground size-4" />
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar />
               <span class="text-sm font-medium">{{ userStore.displayName }}</span>
             </button>
           </DropdownMenuTrigger>
@@ -214,10 +209,10 @@ async function logout() {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <main class="bg-muted/30 flex-1 overflow-auto p-6">
+      <main class="bg-muted/30 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-6">
         <RouterView v-slot="{ Component }">
           <Transition :name="transitionName" mode="out-in" appear>
-            <component :is="Component" :key="route.path" />
+            <component :is="Component" :key="route.path" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto" />
           </Transition>
         </RouterView>
       </main>

@@ -76,6 +76,13 @@ export const asyncRoutes: AppMainRoute[] = [
         meta: { title: 'menu.billingPurchase', icon: 'ShoppingCart' },
       },
       {
+        // 余额充值页暂时隐藏（恢复时改回 BillingRechargeView 并去掉 menu: false）
+        path: '/billing/recharge',
+        name: 'billingRecharge',
+        redirect: '/billing',
+        meta: { menu: false },
+      },
+      {
         // 费用日志（聚合到开机会话的运行计费记录，设计 §5.5 / 契约 §1.6）
         path: '/billing/runtime-log',
         name: 'billingRuntimeLog',
@@ -133,7 +140,7 @@ export const asyncRoutes: AppMainRoute[] = [
       {
         // 多级菜单示例（菜单中间节点，无 component）
         name: 'nested',
-        meta: { title: 'menu.nested', icon: 'Layers' },
+        meta: { title: 'menu.nested', icon: 'MenuSquare' },
         children: [
           {
             path: '/demo/nested/menu1',

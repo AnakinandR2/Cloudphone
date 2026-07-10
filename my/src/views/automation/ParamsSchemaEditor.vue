@@ -6,7 +6,13 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
 // v-model 是参数定义的 JSON 字符串（我们的数组格式）。
@@ -137,11 +143,16 @@ function removeRow(rid: number) {
             <Input v-model="r.key" class="h-8 font-mono" :placeholder="t('script.params.key')" />
           </td>
           <td>
-            <NativeSelect v-model="r.type" class="h-8 w-24">
-              <NativeSelectOption v-for="ty in types" :key="ty.value" :value="ty.value">
-                {{ ty.label }}
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-model="r.type">
+              <SelectTrigger class="h-8 w-28 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="ty in types" :key="ty.value" :value="ty.value">
+                  {{ ty.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </td>
           <td>
             <label v-if="r.type === 'boolean'" class="flex h-8 items-center gap-2">

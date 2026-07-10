@@ -32,7 +32,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import GroupPhoneCell from './GroupPhoneCell.vue'
 import RemoteAppPanel from './RemoteAppPanel.vue'
 import RemoteFilePanel from './RemoteFilePanel.vue'
@@ -89,6 +95,20 @@ function togglePanel(name: Exclude<Panel, null>) {
 const groupRes = ref('720x1280')
 const groupQuality = ref(30)
 const groupFps = ref(30)
+const groupQualityModel = computed({
+  get: () => String(groupQuality.value),
+  set: (value) => {
+    groupQuality.value = Number(value)
+    applyStream()
+  },
+})
+const groupFpsModel = computed({
+  get: () => String(groupFps.value),
+  set: (value) => {
+    groupFps.value = Number(value)
+    applyStream()
+  },
+})
 
 const cellEls = ref<InstanceType<typeof GroupPhoneCell>[]>([])
 function setCell(i: number, el: unknown) {
@@ -256,27 +276,42 @@ onMounted(async () => {
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.resolution') }}</label>
-          <NativeSelect v-model="groupRes" class="h-9 w-full" @update:model-value="applyStream">
-            <NativeSelectOption v-for="r in RES_OPTIONS" :key="r.label" :value="r.label">
-              {{ r.label }}
-            </NativeSelectOption>
-          </NativeSelect>
+          <Select v-model="groupRes" @update:model-value="applyStream">
+            <SelectTrigger class="h-9 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="r in RES_OPTIONS" :key="r.label" :value="r.label">
+                {{ r.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.quality') }}</label>
-          <NativeSelect v-model.number="groupQuality" class="h-9 w-full" @update:model-value="applyStream">
-            <NativeSelectOption v-for="q in QUALITY_OPTIONS" :key="q.value" :value="q.value">
-              {{ q.label }}
-            </NativeSelectOption>
-          </NativeSelect>
+          <Select v-model="groupQualityModel">
+            <SelectTrigger class="h-9 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="q in QUALITY_OPTIONS" :key="q.value" :value="String(q.value)">
+                {{ q.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.fps') }}</label>
-          <NativeSelect v-model.number="groupFps" class="h-9 w-full" @update:model-value="applyStream">
-            <NativeSelectOption v-for="f in FPS_OPTIONS" :key="f" :value="f">
-              {{ f }}fps
-            </NativeSelectOption>
-          </NativeSelect>
+          <Select v-model="groupFpsModel">
+            <SelectTrigger class="h-9 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="f in FPS_OPTIONS" :key="f" :value="String(f)">
+                {{ f }}fps
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button variant="outline" class="w-full justify-start gap-2" @click="groupFullscreen">
           <Maximize class="size-4" />

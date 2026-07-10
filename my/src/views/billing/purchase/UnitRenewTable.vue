@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate } from '@/utils/date'
+import { phoneStatusBadge } from '@/utils/statusBadge'
 
 // 续费单元表：ID / 创建 / 到期 / 坐着的实例[名称,ID,状态]；多选；过滤到期 + 搜索名称。
 const props = defineProps<{
@@ -72,13 +73,6 @@ function toggleOne(id: number, v: boolean) {
   else {
     selected.value = selected.value.filter(x => x !== id)
   }
-}
-
-// 实例状态徽章配色，与云手机列表一致（RUNNING 主色 / 失败异常红 / 其余次要）。
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'RUNNING') return 'default'
-  if (status === 'CREATE_FAILED' || status === 'ERROR') return 'destructive'
-  return 'secondary'
 }
 
 defineExpose({ reload: load })
@@ -157,7 +151,7 @@ defineExpose({ reload: load })
             <TableCell v-if="isSeat">
               <div v-if="u.instance" class="flex min-w-0 items-center gap-2">
                 <span class="truncate text-sm font-medium">{{ u.instance.name }}</span>
-                <Badge :variant="statusVariant(u.instance.status)" class="shrink-0 text-[10px]">
+                <Badge v-bind="phoneStatusBadge(u.instance.status)" class="shrink-0 text-[10px]">
                   {{ t(`phone.status_${u.instance.status}`, u.instance.status) }}
                 </Badge>
                 <span class="text-muted-foreground shrink-0 font-mono text-xs">{{ u.instance.cp_id }}</span>

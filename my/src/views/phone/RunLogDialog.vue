@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import phoneApi from '@/api/modules/phone'
+import { runSessionStatusBadge } from '@/utils/statusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -63,12 +64,6 @@ watch(open, (v) => {
   }
 })
 
-// 运行中行用绿色徽章，异常关机原因用红色。
-function statusClass(s: string) {
-  return s === '运行中'
-    ? 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400'
-    : 'text-muted-foreground'
-}
 function reasonClass(log: RunLog) {
   return log.powerOffReasonCode && log.powerOffReasonCode !== 'SHUTDOWN'
     ? 'text-destructive'
@@ -107,7 +102,7 @@ function reasonClass(log: RunLog) {
               <td class="px-3 py-2 tabular-nums">{{ log.powerOffTime }}</td>
               <td class="px-3 py-2 tabular-nums">{{ log.duration }}</td>
               <td class="px-3 py-2">
-                <Badge variant="outline" :class="statusClass(log.sessionStatus)">{{ log.sessionStatus }}</Badge>
+                <Badge v-bind="runSessionStatusBadge(log.sessionStatus)">{{ log.sessionStatus }}</Badge>
               </td>
               <td class="px-3 py-2" :class="reasonClass(log)">{{ log.powerOffReason }}</td>
             </tr>

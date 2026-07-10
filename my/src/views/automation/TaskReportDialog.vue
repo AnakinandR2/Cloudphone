@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, XCircle } from 'lucide-vue-next'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import automationApi from '@/api/modules/automation'
+import { taskReportStatusBadge } from '@/utils/statusBadge'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -34,14 +35,6 @@ function clearTimer() {
   }
 }
 
-const statusTone = computed(() => {
-  const s = detail.value?.status
-  if (s === 'COMPLETED')
-    return 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400'
-  if (s === 'FAILED' || s === 'CANCELLED')
-    return 'text-destructive border-destructive/40 bg-destructive/10'
-  return 'text-amber-600 border-amber-500/40 bg-amber-500/10'
-})
 const succeeded = computed(() => detail.value?.status === 'COMPLETED')
 const polling = computed(() => loading.value || (detail.value != null && !detail.value.terminal))
 
@@ -96,7 +89,7 @@ onUnmounted(clearTimer)
           <CheckCircle2 v-else-if="succeeded" class="size-4 text-green-600" />
           <XCircle v-else-if="detail?.terminal" class="size-4 text-destructive" />
           <span class="text-muted-foreground">{{ t('taskLog.colStatus') }}：</span>
-          <Badge v-if="detail" variant="outline" :class="statusTone">
+          <Badge v-if="detail" v-bind="taskReportStatusBadge(detail.status)">
             {{ detail.statusDesc || detail.status }}
           </Badge>
           <span v-if="detail?.taskNo" class="ml-auto font-mono text-xs text-muted-foreground">#{{ detail.taskNo }}</span>

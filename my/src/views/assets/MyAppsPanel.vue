@@ -12,13 +12,11 @@ import DataTable from '@/components/DataTable.vue'
 import Popconfirm from '@/components/Popconfirm.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { fmtBytes } from '@/utils/bytes'
 import { formatDateTime } from '@/utils/date'
+import { parseStatusBadge } from '@/utils/statusBadge'
 import UploadAppDialog from '@/views/app/UploadAppDialog.vue'
 
 const props = defineProps<{ overview: LibraryOverview | null }>()
@@ -78,13 +76,12 @@ const columns = computed<ColumnDef<UserApp>[]>(() => [
   {
     id: 'select',
     enableHiding: false,
-    header: () => h('input', {
-      'type': 'checkbox',
-      'class': 'size-3.5 align-middle accent-primary',
-      'checked': allSelected.value,
-      'onChange': (e: Event) => toggleAll((e.target as HTMLInputElement).checked),
+    header: () => h(Checkbox, {
+      modelValue: allSelected.value,
+      class: 'size-4',
+      'onUpdate:modelValue': (checked: boolean | 'indeterminate') => toggleAll(checked === true),
     }),
-    meta: { cellClass: 'w-8' },
+    meta: { headClass: 'w-12 pl-4', cellClass: 'w-12 pl-4' },
   },
   { accessorKey: 'app_name', id: 'app_name', header: t('app.colName'), meta: { label: 'app.colName' } },
   { accessorKey: 'package_name', id: 'package_name', header: t('app.colPackage'), meta: { label: 'app.colPackage' } },
@@ -92,7 +89,7 @@ const columns = computed<ColumnDef<UserApp>[]>(() => [
   { accessorKey: 'size_bytes', id: 'size_bytes', header: t('app.colSize'), meta: { label: 'app.colSize' } },
   { accessorKey: 'parse_status', id: 'parse_status', header: t('app.colStatus'), meta: { label: 'app.colStatus' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('app.colUploadTime'), meta: { label: 'app.colUploadTime' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 async function removeOne(row: UserApp) {
@@ -133,83 +130,70 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Card>
-    <CardHeader>
-      <div class="flex items-start justify-between gap-4">
-        <p class="text-muted-foreground text-sm">
-          {{ t('app.desc') }}
-        </p>
-        <div class="flex shrink-0 items-center gap-2">
-          <Popconfirm tone="danger" :title="t('app.batchDeleteConfirm', { n: selectedIds.size })" @confirm="removeSelected">
-            <Button size="sm" variant="outline" :disabled="!selectedIds.size">
-              <Trash class="size-4" /> {{ t('app.batchDelete') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
-            </Button>
-          </Popconfirm>
-          <Button size="sm" :disabled="locked" @click="openUpload">
-            <Upload class="size-4" /> {{ t('app.upload') }}
-          </Button>
-        </div>
+  <DataTable
+    v-model:search-value="search"
+    pin-actions-column
+    class="w-full"
+    :columns="columns"
+    :data="data"
+    :loading="loading"
+    :get-row-id="(r) => String(r.file_id)"
+    :search-label="t('app.searchLabel')"
+    :search-placeholder="t('app.searchPlaceholder')"
+  >
+    <template #leading-actions>
+      <Popconfirm tone="danger" :title="t('app.batchDeleteConfirm', { n: selectedIds.size })" @confirm="removeSelected">
+        <Button size="sm" variant="outline" class="h-10" :disabled="!selectedIds.size">
+          <Trash class="size-4" /> {{ t('app.batchDelete') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
+        </Button>
+      </Popconfirm>
+      <Button size="sm" class="h-10" :disabled="locked" @click="openUpload">
+        <Upload class="size-4" /> {{ t('app.upload') }}
+      </Button>
+    </template>
+
+    <template #cell-select="{ row }">
+      <Checkbox
+        :model-value="selectedIds.has(row.file_id)"
+        @update:model-value="checked => toggleSelect(row.file_id, checked === true)"
+      />
+    </template>
+    <template #cell-app_name="{ row }">
+      <div class="flex items-center gap-2">
+        <img v-if="row.icon_url" :src="row.icon_url" class="size-7 shrink-0 rounded" alt="">
+        <span v-else class="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
+          <Package class="size-4 text-muted-foreground" />
+        </span>
+        <span class="font-medium">{{ row.app_name || '-' }}</span>
       </div>
-    </CardHeader>
-    <CardContent>
-      <DataTable
-        v-model:search-value="search"
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        :get-row-id="(r) => String(r.file_id)"
-        :search-placeholder="t('app.searchPlaceholder')"
-      >
-        <template #cell-select="{ row }">
-          <input
-            type="checkbox"
-            class="size-3.5 accent-primary"
-            :checked="selectedIds.has(row.file_id)"
-            @change="toggleSelect(row.file_id, ($event.target as HTMLInputElement).checked)"
-          >
-        </template>
-        <template #cell-app_name="{ row }">
-          <div class="flex items-center gap-2">
-            <img v-if="row.icon_url" :src="row.icon_url" class="size-7 shrink-0 rounded" alt="">
-            <span v-else class="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
-              <Package class="size-4 text-muted-foreground" />
-            </span>
-            <span class="font-medium">{{ row.app_name || '-' }}</span>
-          </div>
-        </template>
-        <template #cell-package_name="{ row }">
-          <span class="text-muted-foreground">{{ row.package_name || '-' }}</span>
-        </template>
-        <template #cell-version="{ row }">
-          <span class="tabular-nums">{{ row.version || '-' }}</span>
-        </template>
-        <template #cell-size_bytes="{ row }">
-          <span class="text-muted-foreground tabular-nums">{{ fmtBytes(row.size_bytes) }}</span>
-        </template>
-        <template #cell-parse_status="{ row }">
-          <Badge v-if="row.parse_status === 'parsing'" variant="outline" class="animate-pulse border-amber-500 text-amber-600 dark:text-amber-400">
-            {{ t('app.statusParsing') }}
-          </Badge>
-          <Badge v-else-if="row.parse_status === 'failed'" variant="outline" class="border-red-500 text-red-600 dark:text-red-400" :title="row.parse_error || ''">
-            {{ t('app.statusFailed') }}
-          </Badge>
-          <Badge v-else variant="default">
-            {{ t('app.statusReady') }}
-          </Badge>
-        </template>
-        <template #cell-created_at="{ row }">
-          <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <Popconfirm tone="danger" :title="t('app.deleteConfirm', { name: row.app_name || row.package_name })" @confirm="removeOne(row)">
-            <Button size="sm" variant="ghost" class="text-destructive hover:text-destructive">
-              <Trash class="size-4" /> {{ t('crud.delete') }}
-            </Button>
-          </Popconfirm>
-        </template>
-      </DataTable>
-    </CardContent>
-  </Card>
+    </template>
+    <template #cell-package_name="{ row }">
+      <span class="text-muted-foreground">{{ row.package_name || '-' }}</span>
+    </template>
+    <template #cell-version="{ row }">
+      <span class="tabular-nums">{{ row.version || '-' }}</span>
+    </template>
+    <template #cell-size_bytes="{ row }">
+      <span class="text-muted-foreground tabular-nums">{{ fmtBytes(row.size_bytes) }}</span>
+    </template>
+    <template #cell-parse_status="{ row }">
+      <Badge v-bind="parseStatusBadge(row.parse_status)" :title="row.parse_status === 'failed' ? (row.parse_error || '') : undefined">
+        {{ row.parse_status === 'parsing' ? t('app.statusParsing') : row.parse_status === 'failed' ? t('app.statusFailed') : t('app.statusReady') }}
+      </Badge>
+    </template>
+    <template #cell-created_at="{ row }">
+      <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
+    </template>
+    <template #cell-actions="{ row }">
+      <div class="flex items-center justify-end gap-2">
+        <Popconfirm tone="danger" :title="t('app.deleteConfirm', { name: row.app_name || row.package_name })" @confirm="removeOne(row)">
+          <Button size="sm" variant="ghost" class="text-destructive hover:text-destructive">
+            <Trash class="size-4" /> {{ t('crud.delete') }}
+          </Button>
+        </Popconfirm>
+      </div>
+    </template>
+  </DataTable>
 
   <UploadAppDialog v-model:open="uploadOpen" @success="onUploaded" />
 </template>

@@ -47,16 +47,31 @@
   --shadow-sm: 0 1px 2px rgb(15 17 26 / 0.05);
   --shadow-md: 0 4px 20px -6px rgb(15 17 26 / 0.10), 0 2px 6px -2px rgb(15 17 26 / 0.06);
   --shadow-lg: 0 20px 50px -16px rgb(15 17 26 / 0.18), 0 8px 20px -6px rgb(15 17 26 / 0.10);
-  --btn-shadow: 0 6px 20px -6px color-mix(in oklch, var(--primary) 55%, transparent);
-  --btn-shadow-hover: 0 14px 30px -14px color-mix(in oklch, var(--primary) 70%, transparent);
-  /* 危险按钮：阴影用危险色，保持颜色语义一致 */
-  --btn-shadow-destructive: 0 6px 20px -6px color-mix(in oklch, var(--destructive) 55%, transparent);
-  --btn-shadow-destructive-hover: 0 14px 30px -14px color-mix(in oklch, var(--destructive) 70%, transparent);
-  --shadow-card-hover:
-    0 18px 40px -22px color-mix(in oklch, var(--primary) 55%, transparent),
-    0 8px 20px -14px rgb(0 0 0 / 0.18);
-  --card-hover-border: color-mix(in oklch, var(--primary) 45%, transparent);
-
+  --btn-inset-shadow: inset 0 2px 2px 0 rgb(255 255 255 / 0.24);
+  --btn-shadow:
+    0 2px 3px 0 color-mix(in oklch, var(--primary) 24%, transparent),
+    var(--btn-inset-shadow);
+  --btn-shadow-hover:
+    0 2px 3px 0 color-mix(in oklch, var(--primary) 24%, transparent),
+    var(--btn-inset-shadow);
+  /* 危险按钮：外阴影用危险色，内高光一致 */
+  --btn-shadow-destructive:
+    0 2px 3px 0 color-mix(in oklch, var(--destructive) 24%, transparent),
+    var(--btn-inset-shadow);
+  --btn-shadow-destructive-hover:
+    0 2px 3px 0 color-mix(in oklch, var(--destructive) 24%, transparent),
+    var(--btn-inset-shadow);
+  /* 警告按钮 */
+  --btn-shadow-warning:
+    0 2px 3px 0 color-mix(in oklch, rgb(245 158 11) 24%, transparent),
+    var(--btn-inset-shadow);
+  --btn-shadow-warning-hover:
+    0 2px 3px 0 color-mix(in oklch, rgb(245 158 11) 24%, transparent),
+    var(--btn-inset-shadow);
+  /* 彩色按钮描边（比底色深一档） */
+  --btn-border-primary: var(--primary-strong);
+  --btn-border-destructive: color-mix(in oklch, var(--destructive) 85%, #000);
+  --btn-border-warning: rgb(180 83 9);
   /* 数据可视化色板（绿色主导） */
   --chart-1: rgb(34 197 94);
   --chart-2: rgb(22 163 74);
@@ -101,9 +116,6 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 20px -6px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 24px 60px -20px rgb(0 0 0 / 0.7), 0 8px 20px -6px rgb(0 0 0 / 0.4);
-  --shadow-card-hover:
-    0 18px 40px -22px color-mix(in oklch, var(--primary) 60%, transparent),
-    0 8px 20px -14px rgb(0 0 0 / 0.5);
   --chart-1: rgb(34 197 94);
   --chart-2: rgb(74 222 128);
   --chart-3: oklch(76.9% 0.166 70.0);
@@ -410,3 +422,44 @@
    页面动效完全由设置面板显式控制（含「无」选项），尊重用户在应用内的主动选择；
    否则系统“减弱动态效果”开启时，会把所选的 slide/slide-up/zoom/blur 静默降级成
    只剩淡入淡出，造成“设置里切换其它效果没反应”。需要完全静止的用户请在设置里选「无」。 */
+
+/* 表格右侧钉住列：仅 sticky + 背景，整列左侧阴影由 DataTable 单条 overlay 绘制 */
+@layer components {
+  .pinned-col-right-head,
+  .pinned-col-right-cell {
+    position: sticky;
+    right: 0;
+    white-space: nowrap;
+    /* 避免 sticky 被表格层叠上下文吞掉 */
+    background-clip: padding-box;
+  }
+
+  .pinned-col-right-head {
+    z-index: 30;
+    background-color: var(--muted);
+  }
+
+  .pinned-col-right-cell {
+    z-index: 20;
+    background-color: var(--card);
+  }
+
+  tr.group:hover .pinned-col-right-cell {
+    background-color: color-mix(in oklab, var(--muted) 50%, var(--card));
+  }
+
+  tr.group[data-state='selected'] .pinned-col-right-cell {
+    background-color: var(--muted);
+  }
+
+  /* 操作列左缘：整条纵向渐变阴影，向左投射到滚动区域 */
+  .pinned-col-shadow {
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    z-index: 25;
+    width: 16px;
+    transform: translateX(-100%);
+    background: linear-gradient(to left, rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.015) 55%, transparent);
+  }
+}

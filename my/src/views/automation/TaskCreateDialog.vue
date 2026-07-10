@@ -19,7 +19,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { extractSchemaComment, parseSchema } from '@/utils/paramsComment'
 import ParamsForm from './ParamsForm.vue'
@@ -37,6 +43,10 @@ const mode = ref<'once' | 'plan'>('once')
 const scripts = ref<AutomationScript[]>([])
 const phones = ref<CloudPhone[]>([])
 const scriptId = ref<number>(0)
+const scriptIdModel = computed({
+  get: () => String(scriptId.value || 0),
+  set: value => (scriptId.value = Number(value) || 0),
+})
 const selected = ref<Set<string>>(new Set())
 const name = ref('')
 const frequency = ref<'INTERVAL' | 'DAILY'>('INTERVAL')
@@ -265,14 +275,19 @@ async function submit() {
 
         <div class="grid gap-2">
           <Label>{{ t('taskSchedule.colScript') }}</Label>
-          <NativeSelect v-model="scriptId">
-            <NativeSelectOption v-if="!scripts.length" :value="0" disabled>
+          <Select v-model="scriptIdModel">
+            <SelectTrigger class="w-full">
+              <SelectValue :placeholder="t('taskSchedule.noScript')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-if="!scripts.length" value="0" disabled>
               {{ t('taskSchedule.noScript') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="s in scripts" :key="s.id" :value="s.id">
+              </SelectItem>
+              <SelectItem v-for="s in scripts" :key="s.id" :value="String(s.id)">
               {{ s.name }}{{ s.store ? ` · ${t('script.tabStore')}` : '' }}
-            </NativeSelectOption>
-          </NativeSelect>
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div class="grid gap-2">

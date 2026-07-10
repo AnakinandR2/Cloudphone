@@ -4,6 +4,9 @@ import { ChevronRight, Info } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
+import FilterBar from '@/components/FilterBar.vue'
+import FilterField from '@/components/FilterField.vue'
+import { filterInputClass } from '@/components/filterField'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -156,27 +159,27 @@ function segMinutes(segs: RuntimeLogSegment[]) {
       </CardHeader>
       <CardContent>
         <!-- 时间段筛选 -->
-        <div class="mb-4 flex flex-wrap items-end gap-3">
-          <div class="flex flex-col gap-1">
-            <label class="text-muted-foreground text-xs">{{ t('billing.runtimeLog.filterFrom') }}</label>
-            <input
-              v-model="fromInput"
-              type="datetime-local"
-              class="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
-            >
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-muted-foreground text-xs">{{ t('billing.runtimeLog.filterTo') }}</label>
-            <input
-              v-model="toInput"
-              type="datetime-local"
-              class="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
-            >
-          </div>
-          <Button size="sm" class="h-9" @click="applyFilter">
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <FilterBar class="min-w-0 flex-1">
+            <FilterField :label="t('billing.runtimeLog.filterFrom')">
+              <input
+                v-model="fromInput"
+                type="datetime-local"
+                :class="filterInputClass"
+              >
+            </FilterField>
+            <FilterField :label="t('billing.runtimeLog.filterTo')">
+              <input
+                v-model="toInput"
+                type="datetime-local"
+                :class="filterInputClass"
+              >
+            </FilterField>
+          </FilterBar>
+          <Button size="sm" class="h-10" @click="applyFilter">
             {{ t('billing.runtimeLog.filterApply') }}
           </Button>
-          <Button v-if="hasFilter" variant="ghost" size="sm" class="h-9" @click="resetFilter">
+          <Button v-if="hasFilter" variant="outline" size="sm" class="h-10" @click="resetFilter">
             {{ t('billing.runtimeLog.filterReset') }}
           </Button>
         </div>

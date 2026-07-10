@@ -218,6 +218,8 @@ export interface TrialPolicy {
   per_user_limit: number
   allow_new_user: boolean
   invite_code: string // 前台恒为空(后端抹除)
+  coupon_id?: string
+  expire_at?: string
   items: TrialPolicyItem[]
 }
 export interface ClaimableItem {

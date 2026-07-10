@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { TAG_COLORS, tagClass, tagDot } from '@/utils/tagColor'
+import { PHONE_TEXT_MAX } from './phoneFormSchema'
 
 const props = defineProps<{ ids: number[], initial?: Tag[] }>()
 const emit = defineEmits<{ success: [] }>()
@@ -49,6 +50,10 @@ function addTag(name: string, color: string) {
   const v = name.trim()
   if (!v)
     return
+  if ([...v].length > PHONE_TEXT_MAX) {
+    toast.error(t('phone.tag.errMax'))
+    return
+  }
   if (selected.value.some(s => s.name === v)) {
     toast.info(t('phone.tag.exists'))
     input.value = ''
@@ -117,7 +122,18 @@ async function submit() {
 
         <!-- 输入新标签 -->
         <div class="flex gap-2">
-          <Input v-model="input" :placeholder="t('phone.tag.placeholder')" @keyup.enter="addTag(input, currentColor)" />
+          <div class="relative min-w-0 flex-1">
+            <Input
+              v-model="input"
+              class="pr-14"
+              :maxlength="PHONE_TEXT_MAX"
+              :placeholder="t('phone.tag.placeholder')"
+              @keyup.enter="addTag(input, currentColor)"
+            />
+            <span class="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs tabular-nums">
+              {{ t('phone.textMaxHint', { n: [...input].length, max: PHONE_TEXT_MAX }) }}
+            </span>
+          </div>
           <Button type="button" variant="outline" :disabled="!input.trim()" @click="addTag(input, currentColor)">
             <Plus class="size-4" /> {{ t('phone.tag.add') }}
           </Button>

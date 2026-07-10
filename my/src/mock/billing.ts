@@ -368,9 +368,129 @@ const runtimeLog = [
 
 // ---------- 旧端点保留所需状态 ----------
 const account = { id: 1, user_id: 1, balance_cents: wallet.balance_cents, created_at: '2026-01-01 00:00:00', updated_at: now() }
-const trialPolicies = [
-  { policy: { id: 1, code: 'newbie', name: '新用户试用', enabled: true, per_user_limit: 1, allow_new_user: true, invite_code: '', items: [{ id: 1, policy_id: 1, subject: 'seat', quantity: 1, expire_days: 7 }, { id: 2, policy_id: 1, subject: 'runtime_minute', quantity: 600, expire_days: 0 }] }, claimable: true, need_invite: false, claimed_count: 0, reason: '' },
-]
+
+const TRIAL_COUPON_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+
+function buildTrialCouponId(seed: number) {
+  let hash = (seed * 7919 + 104729) >>> 0
+  let out = ''
+  for (let i = 0; i < 20; i++) {
+    hash = (hash * 1103515245 + 12345) >>> 0
+    out += TRIAL_COUPON_CHARS[hash % TRIAL_COUPON_CHARS.length]
+  }
+  return out
+}
+
+function buildTrialExpireAt(seed: number) {
+  const date = new Date('2026-12-31T23:59:00')
+  date.setDate(date.getDate() - (seed % 120))
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}/${m}/${d}/23:59`
+}
+
+function buildTrialPolicies() {
+  const subjects = ['seat', 'boot_slot', 'runtime_minute'] as const
+  const list: Array<{
+    policy: {
+      id: number
+      code: string
+      name: string
+      enabled: boolean
+      per_user_limit: number
+      allow_new_user: boolean
+      invite_code: string
+      coupon_id: string
+      expire_at: string
+      items: Array<{ id: number, policy_id: number, subject: string, quantity: number, expire_days: number }>
+    }
+    claimable: boolean
+    need_invite: boolean
+    claimed_count: number
+    reason: string
+  }> = []
+  let policyId = 1
+  let grantId = 1
+
+  for (let i = 1; i <= 120; i++) {
+    const subject = subjects[(i - 1) % subjects.length]
+    const pid = policyId++
+    list.push({
+      policy: {
+        id: pid,
+        code: `trial_pending_${i}`,
+        name: '新用户试用',
+        enabled: true,
+        per_user_limit: 1,
+        allow_new_user: true,
+        invite_code: '',
+        coupon_id: i === 1 ? 'CZ9A7EXB7D0IZB79W9R7' : buildTrialCouponId(i),
+        expire_at: i === 1 ? '2024/09/05/23:59' : buildTrialExpireAt(i),
+        items: [
+          { id: grantId++, policy_id: pid, subject, quantity: (i % 3) + 1, expire_days: i % 2 === 0 ? 7 : 0 },
+          ...(i % 3 === 0
+            ? [{ id: grantId++, policy_id: pid, subject: 'runtime_minute', quantity: 60 * i, expire_days: 0 }]
+            : []),
+        ],
+      },
+      claimable: true,
+      need_invite: false,
+      claimed_count: 0,
+      reason: '',
+    })
+  }
+
+  for (let i = 1; i <= 12; i++) {
+    const subject = subjects[(i - 1) % subjects.length]
+    const pid = policyId++
+    list.push({
+      policy: {
+        id: pid,
+        code: `trial_claimed_${i}`,
+        name: '新用户试用',
+        enabled: true,
+        per_user_limit: 1,
+        allow_new_user: false,
+        invite_code: '',
+        coupon_id: buildTrialCouponId(100 + i),
+        expire_at: buildTrialExpireAt(100 + i),
+        items: [{ id: grantId++, policy_id: pid, subject, quantity: (i % 2) + 1, expire_days: 3 }],
+      },
+      claimable: false,
+      need_invite: false,
+      claimed_count: 1,
+      reason: '',
+    })
+  }
+
+  for (let i = 1; i <= 12; i++) {
+    const subject = subjects[(i - 1) % subjects.length]
+    const pid = policyId++
+    list.push({
+      policy: {
+        id: pid,
+        code: `trial_unavailable_${i}`,
+        name: '新用户试用',
+        enabled: true,
+        per_user_limit: 1,
+        allow_new_user: false,
+        invite_code: '',
+        coupon_id: buildTrialCouponId(200 + i),
+        expire_at: buildTrialExpireAt(200 + i),
+        items: [{ id: grantId++, policy_id: pid, subject, quantity: i % 4 + 1, expire_days: 0 }],
+      },
+      claimable: false,
+      need_invite: false,
+      claimed_count: 0,
+      reason: i === 1 ? '仅限会员用户领取' : `暂不符合领取条件（示例 ${i}）`,
+    })
+  }
+
+  return list
+}
+
+const trialPolicies = buildTrialPolicies()
 let ledgerSeq = 1
 const ledger: any[] = []
 

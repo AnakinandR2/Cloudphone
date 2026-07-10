@@ -8,12 +8,9 @@ import { useI18n } from 'vue-i18n'
 import appApi from '@/api/modules/app'
 import DataTable from '@/components/DataTable.vue'
 import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card'
 import { fmtBytes } from '@/utils/bytes'
 import { formatDateTime } from '@/utils/date'
+import { parseStatusBadge } from '@/utils/statusBadge'
 
 const { t } = useI18n()
 const data = ref<MarketApp[]>([])
@@ -44,22 +41,23 @@ onMounted(load)
 </script>
 
 <template>
-  <Card>
-    <CardContent class="flex flex-col gap-3 pt-6">
-      <!-- 应用市场不占用容量提示 -->
-      <div class="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
-        <Info class="size-4 shrink-0" />
-        <span>{{ t('assets.marketNoQuota') }}</span>
-      </div>
+  <div class="flex flex-col gap-3">
+    <!-- 应用市场不占用容量提示 -->
+    <div class="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
+      <Info class="size-4 shrink-0" />
+      <span>{{ t('assets.marketNoQuota') }}</span>
+    </div>
 
-      <DataTable
-        v-model:search-value="search"
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        :get-row-id="(r) => String(r.id)"
-        :search-placeholder="t('app.searchPlaceholder')"
-      >
+    <DataTable
+      v-model:search-value="search"
+      class="w-full"
+      :columns="columns"
+      :data="data"
+      :loading="loading"
+      :get-row-id="(r) => String(r.id)"
+      :search-label="t('app.searchLabel')"
+      :search-placeholder="t('app.searchPlaceholder')"
+    >
         <template #cell-app_name="{ row }">
           <div class="flex items-center gap-2">
             <img v-if="row.icon_url" :src="row.icon_url" class="size-7 shrink-0 rounded" alt="">
@@ -79,20 +77,13 @@ onMounted(load)
           <span class="text-muted-foreground tabular-nums">{{ fmtBytes(row.size_bytes) }}</span>
         </template>
         <template #cell-parse_status="{ row }">
-          <Badge v-if="row.parse_status === 'parsing'" variant="outline" class="animate-pulse border-amber-500 text-amber-600 dark:text-amber-400">
-            {{ t('app.statusParsing') }}
-          </Badge>
-          <Badge v-else-if="row.parse_status === 'failed'" variant="outline" class="border-red-500 text-red-600 dark:text-red-400">
-            {{ t('app.statusFailed') }}
-          </Badge>
-          <Badge v-else variant="default">
-            {{ t('app.statusReady') }}
+          <Badge v-bind="parseStatusBadge(row.parse_status)">
+            {{ row.parse_status === 'parsing' ? t('app.statusParsing') : row.parse_status === 'failed' ? t('app.statusFailed') : t('app.statusReady') }}
           </Badge>
         </template>
         <template #cell-created_at="{ row }">
           <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
         </template>
       </DataTable>
-    </CardContent>
-  </Card>
+  </div>
 </template>

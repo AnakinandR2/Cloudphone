@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useQuerySync } from '@/composables/useQuerySync'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
 import NoteFormDialog from './NoteFormDialog.vue'
 
@@ -32,7 +33,7 @@ const columns = computed<ColumnDef<Note>[]>(() => [
   { accessorKey: 'title', id: 'title', header: t('note.colTitle'), meta: { label: 'note.colTitle' } },
   { accessorKey: 'content', id: 'content', header: t('note.colContent'), meta: { label: 'note.colContent' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('table.createdAt'), meta: { label: 'table.createdAt' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 const dialog = ref({ open: false, id: 0, mode: 'create' as 'create' | 'edit' | 'view' })
@@ -74,9 +75,11 @@ onMounted(load)
     <CardContent>
       <DataTable
         v-model:search-value="filters.q"
+        pin-actions-column
         :columns="columns"
         :data="data"
         :loading="loading"
+        :search-label="t('note.searchLabel')"
         :search-placeholder="t('note.searchPlaceholder')"
       >
         <template #actions>
@@ -98,17 +101,19 @@ onMounted(load)
           <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
         </template>
         <template #cell-actions="{ row }">
-          <Button variant="ghost" size="sm" @click="openView(row)">
-            {{ t('crud.view') }}
-          </Button>
-          <Button variant="ghost" size="sm" @click="openEdit(row)">
-            {{ t('crud.edit') }}
-          </Button>
-          <Popconfirm :title="t('note.deleteConfirm', { name: row.title })" @confirm="deleteRow(row)">
-            <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">
-              {{ t('crud.delete') }}
+          <div class="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" @click="openView(row)">
+              {{ t('crud.view') }}
             </Button>
-          </Popconfirm>
+            <Button variant="ghost" size="sm" @click="openEdit(row)">
+              {{ t('crud.edit') }}
+            </Button>
+            <Popconfirm :title="t('note.deleteConfirm', { name: row.title })" @confirm="deleteRow(row)">
+              <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                {{ t('crud.delete') }}
+              </Button>
+            </Popconfirm>
+          </div>
         </template>
       </DataTable>
     </CardContent>

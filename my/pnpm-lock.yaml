@@ -32,6 +32,9 @@ importers:
       '@internationalized/date':
         specifier: ^3.12.2
         version: 3.12.2
+      '@lucide/vue':
+        specifier: ^1.23.0
+        version: 1.23.0(vue@3.5.35(typescript@5.8.3))
       '@tanstack/vue-table':
         specifier: ^8.21.3
         version: 8.21.3(vue@3.5.35(typescript@5.8.3))
@@ -65,6 +68,9 @@ importers:
       pinia:
         specifier: ^3.0.3
         version: 3.0.4(typescript@5.8.3)(vue@3.5.35(typescript@5.8.3))
+      reicon-vue:
+        specifier: ^1.1.2
+        version: 1.1.2(vue@3.5.35(typescript@5.8.3))
       reka-ui:
         specifier: ^2.9.8
         version: 2.9.8(vue@3.5.35(typescript@5.8.3))
@@ -922,6 +928,11 @@ packages:
 
   '@lezer/lr@1.4.10':
     resolution: {integrity: sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A==}
+
+  '@lucide/vue@1.23.0':
+    resolution: {integrity: sha512-9SIYeY5K+R1iv8F8JUKMGSL7Pck/86BJ8djtZz/lnYsoHtKFUj1H2z6+PvKnC/8blZ8tqTDeDXAoTKobuX80hg==}
+    peerDependencies:
+      vue: '>=3.0.1'
 
   '@mapbox/geojson-rewind@0.5.2':
     resolution: {integrity: sha512-tJaT+RbYGJYStt7wI3cq4Nl4SXxG8W7JDG5DMJu97V25RnbNg3QtQtf+KD+VLjNpWKYsRvXDNmNrBgEETr1ifA==}
@@ -3488,6 +3499,11 @@ packages:
     resolution: {integrity: sha512-dLsljMd9sqwRkby8zhO1gSg3PnJIBFid8f4CQj/sXx+7cKx+E7u0PKhZ+U4wmhx7EfmtvnA318oVaIkAB1lRJw==}
     hasBin: true
 
+  reicon-vue@1.1.2:
+    resolution: {integrity: sha512-TXMfXVJrq7kWmTFSEzS/cTt5cymLKrOol2pwNZCsHpUfurZ2Lf+KmhEgrRYMaSrPaLcNL6W1Rr34yAPOF53OQg==}
+    peerDependencies:
+      vue: '>=3.2.0'
+
   reka-ui@2.9.8:
     resolution: {integrity: sha512-7dxaBJ6nQ0zOQZXPV45219tTEgZPstmihBLS9ABPhSiPiJ8SiF0sacfZHFaBptS0v9N4tzsevq+8MNBpE4p5JQ==}
     peerDependencies:
@@ -4796,6 +4812,10 @@ snapshots:
   '@lezer/lr@1.4.10':
     dependencies:
       '@lezer/common': 1.5.2
+
+  '@lucide/vue@1.23.0(vue@3.5.35(typescript@5.8.3))':
+    dependencies:
+      vue: 3.5.35(typescript@5.8.3)
 
   '@mapbox/geojson-rewind@0.5.2':
     dependencies:
@@ -7678,6 +7698,10 @@ snapshots:
   regjsparser@0.13.1:
     dependencies:
       jsesc: 3.1.0
+
+  reicon-vue@1.1.2(vue@3.5.35(typescript@5.8.3)):
+    dependencies:
+      vue: 3.5.35(typescript@5.8.3)
 
   reka-ui@2.9.8(vue@3.5.35(typescript@5.8.3)):
     dependencies:

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
 import type { Proxy } from '@/types/proxy'
-import { Activity, Loader2, Plus, SquarePen, Trash2, Upload } from 'lucide-vue-next'
+import { Add2 as Plus } from 'reicon-vue'
+import { Activity, Loader2, SquarePen, Trash2, Upload } from 'lucide-vue-next'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -20,7 +21,9 @@ import {
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuerySync } from '@/composables/useQuerySync'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
+import { proxyStatusBadge } from '@/utils/statusBadge'
 import PartnerRecommendPanel from './PartnerRecommendPanel.vue'
 import ProxyFormDialog from './ProxyFormDialog.vue'
 import ProxyImportDialog from './ProxyImportDialog.vue'
@@ -43,19 +46,11 @@ const columns = computed<ColumnDef<Proxy>[]>(() => [
   { accessorKey: 'egress_ip', id: 'egress_ip', header: t('proxy.colEgressIp'), meta: { label: 'proxy.colEgressIp' } },
   { accessorKey: 'remark', id: 'remark', header: t('proxy.fRemark'), meta: { label: 'proxy.fRemark' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('table.createdAt'), meta: { label: 'table.createdAt' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 const dialog = ref({ open: false, id: 0, mode: 'create' as 'create' | 'edit' | 'view' })
 const importOpen = ref(false)
-
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'ok')
-    return 'default'
-  if (status === 'fail')
-    return 'destructive'
-  return 'secondary'
-}
 
 function asnText(row: Proxy): string {
   if (!row.asn)
@@ -119,24 +114,36 @@ onMounted(load)
     <TabsContent value="mine">
       <Card>
         <CardHeader>
-          <CardTitle>{{ t('proxy.title') }}</CardTitle>
-          <CardDescription>{{ t('proxy.desc') }}</CardDescription>
+          <div class="flex items-center justify-between gap-4">
+            <div class="space-y-1.5">
+              <CardTitle>{{ t('proxy.title') }}</CardTitle>
+              <CardDescription>{{ t('proxy.desc') }}</CardDescription>
+            </div>
+            <div class="flex shrink-0">
+              <Button
+                class="h-[52px] gap-2.5 rounded-xl px-[32px] has-[>svg]:px-[32px] text-lg font-semibold shadow-[var(--btn-shadow-hover)]"
+                @click="openCreate"
+              >
+                <Plus class="size-6 shrink-0" stroke-width="2.5" />
+                {{ t('proxy.add') }}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <DataTable
             v-model:search-value="filters.q"
+            pin-actions-column
             :columns="columns"
             :data="data"
             :loading="loading"
+            :search-label="t('proxy.searchLabel')"
             :search-placeholder="t('proxy.searchPlaceholder')"
             expandable
           >
             <template #actions>
               <Button size="sm" variant="outline" @click="importOpen = true">
                 <Upload class="size-4" /> {{ t('proxy.import') }}
-              </Button>
-              <Button size="sm" @click="openCreate">
-                <Plus class="size-4" /> {{ t('proxy.add') }}
               </Button>
             </template>
 
@@ -150,7 +157,7 @@ onMounted(load)
               <span class="text-muted-foreground font-mono">{{ row.protocol }}://{{ row.host }}:{{ row.port }}</span>
             </template>
             <template #cell-status="{ row }">
-              <Badge :variant="statusVariant(row.status)">
+              <Badge v-bind="proxyStatusBadge(row.status)">
                 {{ t(`proxy.status_${row.status}`, row.status) }}
               </Badge>
             </template>
@@ -182,19 +189,21 @@ onMounted(load)
             </template>
 
             <template #cell-actions="{ row }">
-              <Button variant="outline" size="sm" :disabled="testingId === row.id" @click="testRow(row)">
-                <Loader2 v-if="testingId === row.id" class="size-4 animate-spin" />
-                <Activity v-else class="size-4" />
-                {{ t('proxy.test') }}
-              </Button>
-              <Button variant="outline" size="sm" @click="openEdit(row)">
-                <SquarePen class="size-4" /> {{ t('crud.edit') }}
-              </Button>
-              <Popconfirm :title="t('proxy.deleteConfirm', { name: row.name })" @confirm="deleteRow(row)">
-                <Button variant="outline" size="sm" class="text-destructive hover:text-destructive">
-                  <Trash2 class="size-4" /> {{ t('crud.delete') }}
+              <div class="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" :disabled="testingId === row.id" @click="testRow(row)">
+                  <Loader2 v-if="testingId === row.id" class="size-4 animate-spin" />
+                  <Activity v-else class="size-4" />
+                  {{ t('proxy.test') }}
                 </Button>
-              </Popconfirm>
+                <Button variant="outline" size="sm" @click="openEdit(row)">
+                  <SquarePen class="size-4" /> {{ t('crud.edit') }}
+                </Button>
+                <Popconfirm :title="t('proxy.deleteConfirm', { name: row.name })" @confirm="deleteRow(row)">
+                  <Button variant="outline" size="sm" class="text-destructive hover:text-destructive">
+                    <Trash2 class="size-4" /> {{ t('crud.delete') }}
+                  </Button>
+                </Popconfirm>
+              </div>
             </template>
           </DataTable>
         </CardContent>

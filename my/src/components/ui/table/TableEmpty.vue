@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{ class?: HTMLAttributes['class']; colspa
 
 <template>
   <tr>
-    <td :colspan="props.colspan" :class="cn('text-muted-foreground p-4 text-center align-middle text-sm', props.class)">
+    <td :colspan="props.colspan" :class="cn('!h-auto text-muted-foreground p-4 text-center align-middle text-sm', props.class)">
       <slot />
     </td>
   </tr>

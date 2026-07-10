@@ -45,7 +45,7 @@ export default {
   createOrder2: (req: OrderCreateReq2) => api.post<unknown, R<OrderCreateResult>>('billing/orders', req),
   // 订单列表（新形状）。后端 OKWithPage 返回 { list, total }，每单随附 items + gift。
   // 支持按状态与创建时间区间（from/to，ISO 串）过滤。
-  orders2: (params: { page?: number, size?: number, status?: string, from?: string, to?: string }) =>
+  orders2: (params: { page?: number, size?: number, status?: string, from?: string, to?: string, biz_type?: string }) =>
     api.get<unknown, R<Page<Order2>>>('billing/orders', { params }),
   // 订单详情（含 items）
   orderDetail2: (id: number) => api.get<unknown, R<OrderDetail2>>(`billing/orders/${id}`),

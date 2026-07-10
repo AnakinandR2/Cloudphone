@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPhoneFormSchema } from './phoneFormSchema'
+import { buildPhoneFormSchema, PHONE_TEXT_MAX } from './phoneFormSchema'
 
 const t = (k: string) => k
 const schema = buildPhoneFormSchema(t)
@@ -14,5 +14,19 @@ describe('phoneFormSchema', () => {
     expect(r.success).toBe(false)
     if (!r.success)
       expect(r.error.issues[0]?.message).toBe('phone.errNameRequired')
+  })
+
+  it('name 超过上限报错', () => {
+    const r = schema.safeParse({ name: 'x'.repeat(PHONE_TEXT_MAX + 1) })
+    expect(r.success).toBe(false)
+    if (!r.success)
+      expect(r.error.issues[0]?.message).toBe('phone.errNameMax')
+  })
+
+  it('remark 超过上限报错', () => {
+    const r = schema.safeParse({ name: 'ok', remark: 'y'.repeat(PHONE_TEXT_MAX + 1) })
+    expect(r.success).toBe(false)
+    if (!r.success)
+      expect(r.error.issues.some(i => i.message === 'phone.errRemarkMax')).toBe(true)
   })
 })

@@ -179,7 +179,7 @@ function promiseToast() {
 
           <AlertDialog>
             <AlertDialogTrigger as-child>
-              <Button variant="warning">
+              <Button variant="destructive">
                 {{ t('comp.openAlert') }}
               </Button>
             </AlertDialogTrigger>

@@ -7,6 +7,7 @@ import { toast } from 'vue-sonner'
 
 import proxyApi from '@/api/modules/proxy'
 import { formatDateTime } from '@/utils/date'
+import { probeStatusBadge } from '@/utils/statusBadge'
 import { buildProxyFormSchema } from './proxyFormSchema'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -274,7 +275,7 @@ async function submit() {
           </div>
           <div v-if="probeResult" class="text-xs">
             <div class="mb-2 flex items-center gap-2">
-              <Badge :variant="probeResult.status === 'ok' ? 'default' : 'destructive'">
+              <Badge v-bind="probeStatusBadge(probeResult.status === 'ok')">
                 {{ probeResult.status === 'ok' ? t('proxy.status_ok') : t('proxy.status_fail') }}
               </Badge>
               <span v-if="probeResult.status === 'ok'" class="text-muted-foreground tabular-nums">{{ probeResult.latency }} ms</span>

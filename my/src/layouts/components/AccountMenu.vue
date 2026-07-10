@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ChevronsUpDown, House, LogOut, Settings, User } from 'lucide-vue-next'
+import { ArrowDoorOut3 as LogOut, ChevronDown as ChevronsUpDown, House2 as House, Settings } from 'reicon-vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import UserAvatar from '@/components/UserAvatar.vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,23 +59,13 @@ async function logout() {
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
       <!-- 折叠态：仅头像（双层模式窄图标栏专用） -->
-      <Avatar v-if="props.collapsed" class="mx-auto size-9 cursor-pointer">
-        <AvatarImage :src="userStore.avatar" :alt="userStore.phone" />
-        <AvatarFallback>
-          <User class="text-muted-foreground size-4" />
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar v-if="props.collapsed" class="mx-auto size-9 cursor-pointer" />
       <!-- 展开态：头像 + 名称 + 展开图标；侧栏折叠时自动收起为居中头像 -->
       <button
         v-else
         class="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex w-full items-center gap-2 rounded-md p-2 text-left transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1.5"
       >
-        <Avatar class="size-8 shrink-0">
-          <AvatarImage :src="userStore.avatar" :alt="userStore.phone" />
-          <AvatarFallback>
-            <User class="text-muted-foreground size-4" />
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar class="size-8 shrink-0" />
         <div class="grid min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
           <span class="truncate text-sm font-medium">{{ displayName }}</span>
           <span class="text-muted-foreground truncate text-xs">{{ userStore.phone }}</span>
@@ -95,12 +85,7 @@ async function logout() {
           {{ t('account.current') }}
         </div>
         <div class="flex items-center gap-2">
-          <Avatar class="size-9">
-            <AvatarImage :src="userStore.avatar" :alt="userStore.phone" />
-            <AvatarFallback>
-              <User class="text-muted-foreground size-4" />
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar class="size-9" />
           <div class="grid min-w-0 flex-1 leading-tight">
             <span class="truncate text-sm font-semibold">{{ displayName }}</span>
             <span class="text-muted-foreground truncate text-xs">{{ userStore.phone }}</span>

@@ -9,6 +9,31 @@ function fail(message: string) {
 function now() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
+function normalizeIds(raw: unknown): number[] {
+  if (!Array.isArray(raw))
+    return []
+  return raw.map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0)
+}
+function parseBody(body: unknown): Record<string, any> {
+  if (body == null)
+    return {}
+  if (typeof body === 'string') {
+    try {
+      return JSON.parse(body) as Record<string, any>
+    }
+    catch {
+      return {}
+    }
+  }
+  if (typeof body === 'object')
+    return body as Record<string, any>
+  return {}
+}
+
+interface TagRec {
+  name: string
+  color: string
+}
 
 interface PhoneRec {
   id: number
@@ -20,6 +45,7 @@ interface PhoneRec {
   image_id: string
   proxy_id: number
   remark: string
+  tags: TagRec[]
   created_at: string
   updated_at: string
 }
@@ -35,6 +61,7 @@ const phones: PhoneRec[] = Array.from({ length: 4 }).map((_, i) => ({
   image_id: `img-android13`,
   proxy_id: i % 2 === 0 ? (4 - i) : 0,
   remark: '',
+  tags: [],
   created_at: `2026-0${(i % 9) + 1}-1${i % 9} 10:30:00`,
   updated_at: `2026-0${(i % 9) + 1}-1${i % 9} 10:30:00`,
 }))
@@ -69,9 +96,11 @@ export default defineFakeRoute([
       const size = Number(query.size) || 10
       const kw = (query.kw as string) || ''
       const status = (query.status as string) || ''
+      const tag = (query.tag as string) || ''
       let list = phones
       if (kw) list = list.filter(p => p.name.includes(kw) || p.cp_id.includes(kw))
       if (status) list = list.filter(p => p.status === status)
+      if (tag) list = list.filter(p => p.tags.some(tg => tg.name === tag))
       const total = list.length
       const start = (page - 1) * size
       const items = list.slice(start, start + size).map(p => ({
@@ -80,6 +109,46 @@ export default defineFakeRoute([
         rooted: rootState[p.id] ?? false,
       }))
       return ok({ list: items, total })
+    },
+  },
+  // 须在 /v1/phone/:id 之前注册，否则 /phone/tags 会被当成 id=tags
+  {
+    url: '/v1/phone/tags',
+    method: 'get',
+    response: () => {
+      const seen = new Map<string, TagRec>()
+      for (const p of phones) {
+        for (const tg of p.tags) {
+          if (!seen.has(tg.name))
+            seen.set(tg.name, { ...tg })
+        }
+      }
+      return ok(Array.from(seen.values()))
+    },
+  },
+  {
+    url: '/v1/phone/tags',
+    method: 'post',
+    response: ({ body }) => {
+      const payload = parseBody(body)
+      const idSet = new Set(normalizeIds(payload.ids))
+      const tags = (Array.isArray(payload.tags) ? payload.tags : []) as TagRec[]
+      if (!idSet.size)
+        return fail('请选择云手机')
+      const normalized = tags
+        .map(tg => ({ name: String(tg?.name ?? '').trim(), color: tg?.color || 'green' }))
+        .filter(tg => tg.name)
+      let hit = 0
+      for (const p of phones) {
+        if (idSet.has(p.id)) {
+          p.tags = normalized.map(tg => ({ ...tg }))
+          p.updated_at = now()
+          hit++
+        }
+      }
+      if (!hit)
+        return fail('云手机不存在')
+      return ok(null)
     },
   },
   {
@@ -118,6 +187,7 @@ export default defineFakeRoute([
         image_id: body.image_id || 'img-android13',
         proxy_id: Number(body.proxy_id) || 0,
         remark: body.remark || '',
+        tags: [],
         created_at: now(),
         updated_at: now(),
       }

@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { ArrowRight, Bell, Loader2, Mail, Plus, Search, Sparkles } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import FilterBar from '@/components/FilterBar.vue'
+import CountTabs from '@/components/CountTabs.vue'
+import FilterDatePicker from '@/components/FilterDatePicker.vue'
+import FilterDateRangePicker from '@/components/FilterDateRangePicker.vue'
+import FilterField from '@/components/FilterField.vue'
+import FilterSearchInput from '@/components/FilterSearchInput.vue'
+import FilterSelect from '@/components/FilterSelect.vue'
+import TableComponentDemo from '@/components/demos/TableComponentDemo.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,6 +27,23 @@ import { Separator } from '@/components/ui/separator'
 
 const { t } = useI18n()
 const loading = ref(false)
+const filterSearch = ref('')
+const filterStatus = ref('all')
+const filterDate = ref('')
+const filterDateRange = ref({ from: '', to: '' })
+const countTab = ref('pending')
+
+const filterStatusOptions = computed(() => [
+  { value: 'all', label: t('comp.filterSelectAll') },
+  { value: 'active', label: t('comp.filterSelectActive') },
+  { value: 'paused', label: t('comp.filterSelectPaused') },
+])
+
+const countTabItems = computed(() => [
+  { value: 'pending', label: t('comp.countTabsPending'), count: 128 },
+  { value: 'claimed', label: t('comp.countTabsClaimed'), count: 12 },
+  { value: 'unavailable', label: t('comp.countTabsUnavailable'), count: 3 },
+])
 
 function fakeLoad() {
   loading.value = true
@@ -27,7 +52,7 @@ function fakeLoad() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-2">
     <!-- 页头 -->
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -214,6 +239,56 @@ function fakeLoad() {
         </CardContent>
       </Card>
     </div>
+
+    <!-- 计数 Tab -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('comp.countTabs') }}</CardTitle>
+        <CardDescription>{{ t('comp.countTabsDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <CountTabs v-model="countTab" :items="countTabItems" />
+      </CardContent>
+    </Card>
+
+    <!-- 表格筛选 -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('comp.tableFilters') }}</CardTitle>
+        <CardDescription>{{ t('comp.tableFiltersDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <FilterBar>
+          <FilterField :label="t('comp.filterSearchLabel')">
+            <FilterSearchInput v-model="filterSearch" :placeholder="t('comp.filterSearchPlaceholder')" />
+          </FilterField>
+          <FilterField :label="t('comp.filterSelectLabel')">
+            <FilterSelect
+              v-model="filterStatus"
+              :options="filterStatusOptions"
+              :placeholder="t('comp.filterSelectAll')"
+            />
+          </FilterField>
+          <FilterField :label="t('comp.filterDateLabel')">
+            <FilterDatePicker v-model="filterDate" :placeholder="t('comp.filterDateEmpty')" />
+          </FilterField>
+          <FilterField :label="t('comp.filterDateRangeLabel')">
+            <FilterDateRangePicker v-model="filterDateRange" :placeholder="t('comp.filterDateRangeEmpty')" />
+          </FilterField>
+        </FilterBar>
+      </CardContent>
+    </Card>
+
+    <!-- 表格组件 -->
+    <Card>
+      <CardHeader>
+        <CardTitle>{{ t('comp.tableComponent') }}</CardTitle>
+        <CardDescription>{{ t('comp.tableComponentDesc') }}</CardDescription>
+      </CardHeader>
+      <CardContent class="min-w-0 overflow-visible">
+        <TableComponentDemo />
+      </CardContent>
+    </Card>
 
     <!-- 卡片范例 -->
     <Card>

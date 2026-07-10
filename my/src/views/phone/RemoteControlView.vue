@@ -52,7 +52,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
   Tooltip,
@@ -119,6 +125,20 @@ const {
 } = useWebRTC({ id, videoRef })
 
 const input = useRemoteInput({ videoRef, connState, deviceWidth, deviceHeight, cssRotation, sendDC, tryAutoUnmute })
+const selectedQualityModel = computed({
+  get: () => String(selectedQuality.value),
+  set: (value) => {
+    selectedQuality.value = Number(value)
+    onSettingChange()
+  },
+})
+const selectedFpsModel = computed({
+  get: () => String(selectedFps.value),
+  set: (value) => {
+    selectedFps.value = Number(value)
+    onSettingChange()
+  },
+})
 
 // 画面比例优先用真实串流尺寸（避免与请求分辨率不一致导致 object-contain 黑边）。
 const streamW = ref(0)
@@ -661,27 +681,42 @@ onBeforeUnmount(() => {
         >
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.resolution') }}</label>
-            <NativeSelect v-model="selectedRes" class="h-9 w-full" @update:model-value="onSettingChange">
-              <NativeSelectOption v-for="r in resOptions" :key="r.label" :value="r.label">
-                {{ r.label }}
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-model="selectedRes" @update:model-value="onSettingChange">
+              <SelectTrigger class="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="r in resOptions" :key="r.label" :value="r.label">
+                  {{ r.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.quality') }}</label>
-            <NativeSelect v-model.number="selectedQuality" class="h-9 w-full" @update:model-value="onSettingChange">
-              <NativeSelectOption v-for="q in qualityOptions" :key="q.value" :value="q.value">
-                {{ q.label }}
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-model="selectedQualityModel">
+              <SelectTrigger class="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="q in qualityOptions" :key="q.value" :value="String(q.value)">
+                  {{ q.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-muted-foreground">{{ t('phone.rc.fps') }}</label>
-            <NativeSelect v-model.number="selectedFps" class="h-9 w-full" @update:model-value="onSettingChange">
-              <NativeSelectOption v-for="f in fpsOptions" :key="f" :value="f">
-                {{ f }}fps
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-model="selectedFpsModel">
+              <SelectTrigger class="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="f in fpsOptions" :key="f" :value="String(f)">
+                  {{ f }}fps
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button variant="outline" class="w-full justify-start gap-2" @click="fullscreen">
             <Maximize class="size-4" />
@@ -820,11 +855,16 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- 摄像头设备 -->
-            <NativeSelect v-if="videoInputs.length" v-model="videoDeviceModel" class="h-9 w-full">
-              <NativeSelectOption v-for="(c, i) in videoInputs" :key="c.deviceId" :value="c.deviceId">
-                {{ c.label || t('phone.rc.cameraDeviceN', { n: i + 1 }) }}
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-if="videoInputs.length" v-model="videoDeviceModel">
+              <SelectTrigger class="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="(c, i) in videoInputs" :key="c.deviceId" :value="c.deviceId">
+                  {{ c.label || t('phone.rc.cameraDeviceN', { n: i + 1 }) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
             <div v-else class="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-muted-foreground">
               {{ t('phone.rc.cameraNoDevice') }}
             </div>
@@ -854,11 +894,16 @@ onBeforeUnmount(() => {
               <Mic class="size-3.5" /> {{ t('phone.rc.micSection') }}
             </div>
 
-            <NativeSelect v-if="audioInputs.length" v-model="audioDeviceModel" class="h-9 w-full">
-              <NativeSelectOption v-for="(c, i) in audioInputs" :key="c.deviceId" :value="c.deviceId">
-                {{ c.label || t('phone.rc.micDeviceN', { n: i + 1 }) }}
-              </NativeSelectOption>
-            </NativeSelect>
+            <Select v-if="audioInputs.length" v-model="audioDeviceModel">
+              <SelectTrigger class="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="(c, i) in audioInputs" :key="c.deviceId" :value="c.deviceId">
+                  {{ c.label || t('phone.rc.micDeviceN', { n: i + 1 }) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
             <div v-else class="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs text-muted-foreground">
               {{ t('phone.rc.micNoDevice') }}
             </div>

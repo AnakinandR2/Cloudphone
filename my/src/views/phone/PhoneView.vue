@@ -1,25 +1,22 @@
 <script setup lang="ts">
 import type { ColumnDef } from '@tanstack/vue-table'
 import type { CloudPhone, Tag as TagType } from '@/types/phone'
+import { EllipsisVertical } from 'lucide-vue-next'
 import {
-  ChevronDown,
-  CircleStop,
-  FileClock,
-  LayoutGrid,
-  List,
+  Add2 as Plus,
+  AlarmClock as FileClock,
+  Grid as LayoutGrid,
+  Menu,
   Monitor,
-  MoreHorizontal,
-  Plus,
-  Power,
+  Pen as SquarePen,
   Shield,
   ShieldCheck,
-  SquarePen,
   Tag,
-  Terminal,
+  TerminalSquare as Terminal,
   Trash,
   Usb,
   Users,
-} from 'lucide-vue-next'
+} from 'reicon-vue'
 import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -27,6 +24,15 @@ import { toast } from 'vue-sonner'
 import phoneApi from '@/api/modules/phone'
 import proxyApi from '@/api/modules/proxy'
 import DataTable from '@/components/DataTable.vue'
+import FilterBar from '@/components/FilterBar.vue'
+import FilterField from '@/components/FilterField.vue'
+import FilterSearchInput from '@/components/FilterSearchInput.vue'
+import {
+  filterPopupAlign,
+  filterPopupSideOffset,
+  filterSelectContentClass,
+  filterSelectTriggerClass,
+} from '@/components/filterField'
 import Popconfirm from '@/components/Popconfirm.vue'
 import {
   AlertDialog,
@@ -48,6 +54,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,13 +62,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQuerySync } from '@/composables/useQuerySync'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
+import { phoneStatusBadge, STATUS_BADGE_DOT } from '@/utils/statusBadge'
 import { tagClass } from '@/utils/tagColor'
 import AndroidIcon from '@/components/icons/AndroidIcon.vue'
+import PowerSwitchIcon from '@/components/icons/PowerSwitchIcon.vue'
+import TruncatedText from '@/components/TruncatedText.vue'
 import AdbDrawer from './AdbDrawer.vue'
 import RunLogDialog from './RunLogDialog.vue'
 import TaskCreateDialog from '../automation/TaskCreateDialog.vue'
@@ -71,6 +87,9 @@ import PhoneFormDialog from './PhoneFormDialog.vue'
 import PhoneTagsDialog from './PhoneTagsDialog.vue'
 
 const { t } = useI18n()
+const powerOnBtnClass =
+  'bg-sidebar-primary/10 text-sidebar-primary shadow-none hover:bg-sidebar-primary/15 hover:text-sidebar-primary hover:translate-y-0 active:translate-y-0 dark:hover:bg-sidebar-primary/15'
+const powerOnBtnLoadingClass = 'animate-pulse disabled:opacity-100'
 const data = ref<CloudPhone[]>([])
 const loading = ref(false)
 const filters = reactive({ q: '' })
@@ -111,9 +130,18 @@ function openGroupControl() {
 // 卡片视图的客户端搜索过滤（表格视图由 DataTable 内部过滤）。
 // 状态/标签过滤下推后端（list 参数）；选项用独立来源，避免被当前结果集裁剪。
 const statusFilter = ref('')
+const ALL_FILTER_VALUE = '__all__'
+const statusFilterModel = computed({
+  get: () => statusFilter.value || ALL_FILTER_VALUE,
+  set: value => (statusFilter.value = value === ALL_FILTER_VALUE ? '' : value),
+})
 const statusOptions = ['RUNNING', 'STOPPED', 'STARTING', 'STOPPING', 'CREATING', 'CREATE_FAILED', 'DESTROYING', 'CREATED']
 const tagFilter = ref('')
 const tagOptions = ref<string[]>([])
+const tagFilterModel = computed({
+  get: () => tagFilter.value || ALL_FILTER_VALUE,
+  set: value => (tagFilter.value = value === ALL_FILTER_VALUE ? '' : value),
+})
 async function loadTagOptions() {
   try {
     tagOptions.value = (await phoneApi.listTags()).data?.map(tg => tg.name) ?? []
@@ -173,13 +201,12 @@ const columns = computed<ColumnDef<CloudPhone>[]>(() => [
   {
     id: 'select',
     enableHiding: false,
-    header: () => h('input', {
-      type: 'checkbox',
-      class: 'size-3.5 align-middle accent-primary',
-      checked: allRowsSelected.value,
-      onChange: (e: Event) => toggleSelectAll((e.target as HTMLInputElement).checked),
+    header: () => h(Checkbox, {
+      modelValue: allRowsSelected.value,
+      class: 'size-4',
+      'onUpdate:modelValue': (checked: boolean | 'indeterminate') => toggleSelectAll(checked === true),
     }),
-    meta: { cellClass: 'w-8' },
+    meta: { headClass: 'w-12 pl-4', cellClass: 'w-12 pl-4' },
   },
   { id: 'expander', header: '', enableHiding: false, meta: { cellClass: 'w-8' } },
   { accessorKey: 'id', id: 'id', header: t('table.id'), meta: { label: 'table.id' } },
@@ -188,8 +215,9 @@ const columns = computed<ColumnDef<CloudPhone>[]>(() => [
   { accessorKey: 'status', id: 'status', header: t('phone.colStatus'), meta: { label: 'phone.colStatus' } },
   { accessorKey: 'proxy_id', id: 'proxy_id', header: t('phone.colProxy'), meta: { label: 'phone.colProxy' } },
   { id: 'tags', header: t('phone.tag.col'), enableHiding: true, meta: { label: 'phone.tag.col' } },
+  { accessorKey: 'remark', id: 'remark', header: t('phone.colRemark'), enableHiding: true, meta: { label: 'phone.colRemark' } },
   { accessorKey: 'created_at', id: 'created_at', header: t('table.createdAt'), meta: { label: 'table.createdAt' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 const dialog = ref({ open: false, id: 0, mode: 'create' as 'create' | 'edit' | 'view' })
@@ -199,6 +227,7 @@ const runLogDialog = ref({ open: false, phone: null as CloudPhone | null })
 const scriptDialog = ref({ open: false, cpId: '' })
 const scriptReport = ref({ open: false, midTaskId: null as number | null })
 const opBusy = ref(false)
+const poweringOnId = ref<number | null>(null)
 
 // 危险操作（销毁/删除/重置）统一用一个「受控 AlertDialog」确认：
 // 之前把 Popconfirm 气泡套在下拉项里，鼠标移向气泡时下拉判定移出而关闭，气泡随之卸载、点不到。
@@ -213,33 +242,21 @@ function ask(title: string, desc: string, run: () => void) {
   confirmState.value = { open: true, title, desc, run }
 }
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'RUNNING')
-    return 'default'
-  if (status === 'CREATE_FAILED' || status === 'ERROR')
-    return 'destructive'
-  return 'secondary'
-}
-
-// 过渡态（创建中 / 开机中 / 销毁中）给一点视觉区分（描边 + 脉冲），并触发轮询刷新。
-function statusClass(status: string): string {
-  if (status === 'CREATING' || status === 'STARTING' || status === 'STOPPING')
-    return 'border-amber-500 text-amber-600 dark:text-amber-400 animate-pulse'
-  if (status === 'DESTROYING')
-    return 'border-destructive text-destructive animate-pulse'
-  if (status === 'CREATED')
-    return 'border-blue-500 text-blue-600 dark:text-blue-400'
-  if (status === 'UNKNOWN')
-    return 'border-muted-foreground/40 text-muted-foreground animate-pulse'
-  return ''
-}
-
 // 状态机门禁（与后端一致）：
 //   CREATING / STARTING：过渡态，禁止任何操作
 //   CREATE_FAILED：仅可删除         CREATED / STOPPED：可开机、可删除
 //   RUNNING：可关机、可远控、可管应用；不可删除
 function canPowerOn(s: string) {
   return s === 'CREATED' || s === 'STOPPED'
+}
+function isPoweringOn(s: string) {
+  return s === 'STARTING'
+}
+function isPowerOnLoading(row: CloudPhone) {
+  return poweringOnId.value === row.id || isPoweringOn(row.status)
+}
+function showPowerOnBtn(row: CloudPhone) {
+  return canPowerOn(row.status) || isPowerOnLoading(row)
 }
 function canPowerOff(s: string) {
   return s === 'RUNNING'
@@ -277,7 +294,10 @@ function onVisibilityChange() {
 }
 
 // silent=true：后台轮询刷新，不切骨架屏（避免表格抖动）。
+// loadSeq：丢弃过期响应，避免「保存标签后刷新」被更早发出的轮询结果盖回空标签。
+let loadSeq = 0
 async function load(silent = false) {
+  const seq = ++loadSeq
   if (!silent)
     loading.value = true
   try {
@@ -287,17 +307,19 @@ async function load(silent = false) {
       status: statusFilter.value || undefined,
       tag: tagFilter.value || undefined,
     })
+    if (seq !== loadSeq)
+      return
     data.value = res.data.list
   }
   finally {
-    if (!silent)
+    if (!silent && seq === loadSeq)
       loading.value = false
   }
 }
 watch([statusFilter, tagFilter], () => load())
 function refreshAfterTag() {
-  load()
-  loadTagOptions()
+  void load()
+  void loadTagOptions()
 }
 function openCreate() {
   dialog.value = { open: true, id: 0, mode: 'create' }
@@ -372,6 +394,7 @@ async function powerOn(row: CloudPhone) {
   if (opBusy.value)
     return
   opBusy.value = true
+  poweringOnId.value = row.id
   try {
     const res = await phoneApi.power(row.id, '开机')
     // 开机成功；若后端附带代理连通性告警（短超时探测未通过，CP-0028 / #23），
@@ -384,6 +407,7 @@ async function powerOn(row: CloudPhone) {
     load()
   }
   finally {
+    poweringOnId.value = null
     opBusy.value = false
   }
 }
@@ -412,14 +436,85 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Card>
-    <CardHeader>
-      <div class="flex items-start justify-between gap-4">
-        <div class="space-y-1.5">
+  <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <Card class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden py-5">
+      <CardHeader class="shrink-0">
+      <div class="flex min-w-0 items-center justify-between gap-4">
+        <div class="min-w-0 space-y-1.5">
           <CardTitle>{{ t('phone.title') }}</CardTitle>
           <CardDescription>{{ t('phone.desc') }}</CardDescription>
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex shrink-0">
+          <Button
+            class="h-[52px] gap-2.5 rounded-xl px-[32px] has-[>svg]:px-[32px] text-lg font-semibold shadow-[var(--btn-shadow-hover)]"
+            @click="openCreate"
+          >
+            <Plus class="size-6 shrink-0" stroke-width="2.5" />
+            {{ t('phone.add') }}
+          </Button>
+        </div>
+      </div>
+    </CardHeader>
+    <CardContent class="flex min-h-0 min-w-0 flex-1 flex-col items-stretch overflow-auto">
+      <DataTable
+        v-if="viewMode === 'table'"
+        v-model:search-value="filters.q"
+        fixed-layout
+        pin-actions-column
+        class="w-full shrink-0"
+        :columns="columns"
+        :data="data"
+        :loading="loading"
+        expandable
+        :search="false"
+        :get-row-id="(r) => String(r.id)"
+      >
+        <template #filters>
+          <FilterBar class="min-w-0 flex-1">
+            <FilterField :label="t('phone.searchLabel')">
+              <FilterSearchInput v-model="filters.q" :placeholder="t('phone.searchPlaceholder')" />
+            </FilterField>
+            <FilterField :label="t('phone.filterStatus')">
+              <Select v-model="statusFilterModel" class="flex h-full min-w-0 flex-1">
+                <SelectTrigger :class="filterSelectTriggerClass">
+                  <SelectValue :placeholder="t('phone.tag.statusAll')" />
+                </SelectTrigger>
+                <SelectContent
+                  :align="filterPopupAlign"
+                  :side-offset="filterPopupSideOffset"
+                  :class="filterSelectContentClass"
+                >
+                  <SelectItem :value="ALL_FILTER_VALUE">
+                    {{ t('phone.tag.statusAll') }}
+                  </SelectItem>
+                  <SelectItem v-for="st in statusOptions" :key="st" :value="st">
+                    {{ t(`phone.status_${st}`, st) }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+            <FilterField :label="t('phone.filterTag')">
+              <Select v-model="tagFilterModel" class="flex h-full min-w-0 flex-1">
+                <SelectTrigger :class="filterSelectTriggerClass">
+                  <SelectValue :placeholder="t('phone.tag.tagAll')" />
+                </SelectTrigger>
+                <SelectContent
+                  :align="filterPopupAlign"
+                  :side-offset="filterPopupSideOffset"
+                  :class="filterSelectContentClass"
+                >
+                  <SelectItem :value="ALL_FILTER_VALUE">
+                    {{ t('phone.tag.tagAll') }}
+                  </SelectItem>
+                  <SelectItem v-for="tg in tagOptions" :key="tg" :value="tg">
+                    {{ tg }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </FilterBar>
+        </template>
+        <template #leading-actions>
           <div class="flex items-center rounded-md border p-0.5">
             <Button
               variant="ghost"
@@ -429,7 +524,7 @@ onUnmounted(() => {
               :title="t('phone.viewTable')"
               @click="setView('table')"
             >
-              <List class="size-4" />
+              <Menu class="size-4" />
             </Button>
             <Button
               variant="ghost"
@@ -442,66 +537,31 @@ onUnmounted(() => {
               <LayoutGrid class="size-4" />
             </Button>
           </div>
-          <Button size="sm" variant="outline" :disabled="!selectedIds.size" @click="openTagDialog([...selectedIds])">
+          <Button size="sm" variant="outline" class="h-10" :disabled="!selectedIds.size" @click="openTagDialog([...selectedIds])">
             <Tag class="size-4" /> {{ t('phone.tag.batchBtn') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
           </Button>
-          <Button size="sm" variant="outline" :disabled="!selectedIds.size" @click="openGroupControl">
+          <Button size="sm" variant="outline" class="h-10" :disabled="!selectedIds.size" @click="openGroupControl">
             <Users class="size-4" /> {{ t('phone.groupControl') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
           </Button>
-          <Button size="sm" @click="openCreate">
-            <Plus class="size-4" /> {{ t('phone.add') }}
-          </Button>
-        </div>
-      </div>
-    </CardHeader>
-    <CardContent>
-      <DataTable
-        v-if="viewMode === 'table'"
-        v-model:search-value="filters.q"
-        :columns="columns"
-        :data="data"
-        :loading="loading"
-        expandable
-        :get-row-id="(r) => String(r.id)"
-        :search-placeholder="t('phone.searchPlaceholder')"
-      >
-        <template #filters>
-          <NativeSelect v-model="statusFilter" class="h-9 w-28 text-xs">
-            <NativeSelectOption value="">
-              {{ t('phone.tag.statusAll') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="st in statusOptions" :key="st" :value="st">
-              {{ t(`phone.status_${st}`, st) }}
-            </NativeSelectOption>
-          </NativeSelect>
-          <NativeSelect v-model="tagFilter" class="h-9 w-28 text-xs">
-            <NativeSelectOption value="">
-              {{ t('phone.tag.tagAll') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="tg in tagOptions" :key="tg" :value="tg">
-              {{ tg }}
-            </NativeSelectOption>
-          </NativeSelect>
         </template>
         <template #cell-select="{ row }">
-          <input
-            type="checkbox"
-            class="size-3.5 accent-primary"
-            :checked="selectedIds.has(row.id)"
-            @change="toggleSelect(row.id, ($event.target as HTMLInputElement).checked)"
-          >
+          <Checkbox
+            :model-value="selectedIds.has(row.id)"
+            @update:model-value="checked => toggleSelect(row.id, checked === true)"
+          />
         </template>
         <template #cell-id="{ row }">
           <span class="text-muted-foreground">#{{ row.id }}</span>
         </template>
         <template #cell-name="{ row }">
-          <span class="font-medium">{{ row.name }}</span>
+          <TruncatedText :text="row.name" class="font-medium" />
         </template>
         <template #cell-cp_id="{ row }">
           <span class="text-muted-foreground tabular-nums">{{ row.cp_id || '-' }}</span>
         </template>
         <template #cell-status="{ row }">
-          <Badge :variant="statusVariant(row.status)" :class="statusClass(row.status)">
+          <Badge v-bind="phoneStatusBadge(row.status)">
+            <span :class="STATUS_BADGE_DOT" />
             {{ t(`phone.status_${row.status}`, row.status) }}
           </Badge>
         </template>
@@ -510,22 +570,63 @@ onUnmounted(() => {
         </template>
         <template #cell-tags="{ row }">
           <div class="flex flex-wrap gap-1">
-            <Badge v-for="tg in row.tags" :key="tg.name" variant="outline" class="text-[10px]" :class="tagClass(tg.color)">
-              {{ tg.name }}
+            <Badge v-for="tg in row.tags" :key="tg.name" variant="outline" :class="tagClass(tg.color)">
+              <TruncatedText :text="tg.name" />
             </Badge>
             <span v-if="!row.tags?.length" class="text-muted-foreground">-</span>
           </div>
+        </template>
+        <template #cell-remark="{ row }">
+          <TruncatedText :text="row.remark" :max="20" class="text-muted-foreground" />
         </template>
         <template #cell-created_at="{ row }">
           <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex items-center justify-end gap-2">
-            <!-- 常用操作：行内直显（按状态机门禁）。主操作(远程控制)在前，关机用警告色+轻量二次确认。 -->
-            <Button v-if="canPowerOn(row.status)" size="sm" :disabled="opBusy" @click="powerOn(row)">
-              <Power class="size-4" /> {{ t('phone.op.powerOn') }}
+            <!-- 常用操作：开关机在远程控制左侧 -->
+            <Button
+              v-if="showPowerOnBtn(row)"
+              size="sm"
+              variant="ghost"
+              class="relative"
+              :class="[powerOnBtnClass, isPowerOnLoading(row) && powerOnBtnLoadingClass]"
+              :disabled="isPowerOnLoading(row) || opBusy"
+              @click="powerOn(row)"
+            >
+              <span
+                class="inline-flex items-center gap-1.5"
+                :class="isPowerOnLoading(row) && 'invisible'"
+              >
+                <PowerSwitchIcon class="size-4 shrink-0" />
+                {{ t('phone.op.powerOn') }}
+              </span>
+              <span
+                v-if="isPowerOnLoading(row)"
+                class="absolute inset-0 flex items-center justify-center"
+              >
+                {{ t('phone.op.powerOnPending') }}
+              </span>
             </Button>
-            <Button v-if="isRunning(row.status)" size="sm" variant="outline" @click="openRemoteControl(row)">
+            <Popconfirm
+              v-if="canPowerOff(row.status)"
+              :title="t('phone.op.powerOffConfirm', { name: row.name })"
+              @confirm="powerOff(row)"
+            >
+              <Button
+                size="sm"
+                variant="destructive"
+                :disabled="opBusy"
+              >
+                <PowerSwitchIcon class="size-4" /> {{ t('phone.op.powerOff') }}
+              </Button>
+            </Popconfirm>
+            <Button
+              size="sm"
+              variant="outline"
+              :disabled="!isRunning(row.status)"
+              @click="openRemoteControl(row)"
+            >
               <Monitor class="size-4" /> {{ t('phone.op.remoteControl') }}
             </Button>
             <Button
@@ -538,27 +639,12 @@ onUnmounted(() => {
             >
               <AndroidIcon class="size-4" /> ADB
             </Button>
-            <Popconfirm
-              v-if="canPowerOff(row.status)"
-              tone="warning"
-              :title="t('phone.op.powerOffConfirm', { name: row.name })"
-              @confirm="powerOff(row)"
-            >
-              <Button
-                size="sm"
-                variant="outline"
-                :disabled="opBusy"
-                class="border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
-              >
-                <CircleStop class="size-4" /> {{ t('phone.op.powerOff') }}
-              </Button>
-            </Popconfirm>
 
             <!-- 更多：编辑 / 应用管理 / 删除 -->
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
-                <Button variant="ghost" size="sm">
-                  {{ t('crud.more') }} <ChevronDown class="size-4" />
+                <Button variant="outline" size="icon-sm" :title="t('crud.more')">
+                  <EllipsisVertical class="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" class="w-40">
@@ -607,7 +693,8 @@ onUnmounted(() => {
             <div><span class="text-muted-foreground">{{ t('phone.colCpId') }}：</span><span class="tabular-nums">{{ row.cp_id || '-' }}</span></div>
             <div>
               <span class="text-muted-foreground">{{ t('phone.colStatus') }}：</span>
-              <Badge :variant="statusVariant(row.status)" :class="statusClass(row.status)">
+              <Badge v-bind="phoneStatusBadge(row.status)">
+                <span :class="STATUS_BADGE_DOT" />
                 {{ t(`phone.status_${row.status}`, row.status) }}
               </Badge>
             </div>
@@ -624,50 +711,107 @@ onUnmounted(() => {
       </DataTable>
 
       <!-- 卡片视图 -->
-      <div v-else>
-        <div class="mb-4 flex flex-wrap items-center gap-2">
-          <Input v-model="filters.q" :placeholder="t('phone.searchPlaceholder')" class="max-w-xs" />
-          <NativeSelect v-model="statusFilter" class="h-9 w-28 text-xs">
-            <NativeSelectOption value="">
-              {{ t('phone.tag.statusAll') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="st in statusOptions" :key="st" :value="st">
-              {{ t(`phone.status_${st}`, st) }}
-            </NativeSelectOption>
-          </NativeSelect>
-          <NativeSelect v-model="tagFilter" class="h-9 w-28 text-xs">
-            <NativeSelectOption value="">
-              {{ t('phone.tag.tagAll') }}
-            </NativeSelectOption>
-            <NativeSelectOption v-for="tg in tagOptions" :key="tg" :value="tg">
-              {{ tg }}
-            </NativeSelectOption>
-          </NativeSelect>
+      <div v-else class="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+        <div class="mb-4 flex min-w-0 shrink-0 flex-wrap items-center gap-3 py-[3px]">
+          <FilterBar class="min-w-0 flex-1">
+            <FilterField :label="t('phone.searchLabel')">
+              <FilterSearchInput v-model="filters.q" :placeholder="t('phone.searchPlaceholder')" />
+            </FilterField>
+            <FilterField :label="t('phone.filterStatus')">
+              <Select v-model="statusFilterModel" class="flex h-full min-w-0 flex-1">
+                <SelectTrigger :class="filterSelectTriggerClass">
+                  <SelectValue :placeholder="t('phone.tag.statusAll')" />
+                </SelectTrigger>
+                <SelectContent
+                  :align="filterPopupAlign"
+                  :side-offset="filterPopupSideOffset"
+                  :class="filterSelectContentClass"
+                >
+                  <SelectItem :value="ALL_FILTER_VALUE">
+                    {{ t('phone.tag.statusAll') }}
+                  </SelectItem>
+                  <SelectItem v-for="st in statusOptions" :key="st" :value="st">
+                    {{ t(`phone.status_${st}`, st) }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+            <FilterField :label="t('phone.filterTag')">
+              <Select v-model="tagFilterModel" class="flex h-full min-w-0 flex-1">
+                <SelectTrigger :class="filterSelectTriggerClass">
+                  <SelectValue :placeholder="t('phone.tag.tagAll')" />
+                </SelectTrigger>
+                <SelectContent
+                  :align="filterPopupAlign"
+                  :side-offset="filterPopupSideOffset"
+                  :class="filterSelectContentClass"
+                >
+                  <SelectItem :value="ALL_FILTER_VALUE">
+                    {{ t('phone.tag.tagAll') }}
+                  </SelectItem>
+                  <SelectItem v-for="tg in tagOptions" :key="tg" :value="tg">
+                    {{ tg }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </FilterBar>
+          <div class="ml-auto flex items-center gap-2">
+            <div class="flex items-center rounded-md border p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                :class="viewMode === 'table' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                :title="t('phone.viewTable')"
+                @click="setView('table')"
+              >
+                <Menu class="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                :class="viewMode === 'card' ? 'bg-muted text-foreground' : 'text-muted-foreground'"
+                :title="t('phone.viewCard')"
+                @click="setView('card')"
+              >
+                <LayoutGrid class="size-4" />
+              </Button>
+            </div>
+            <Button size="sm" variant="outline" class="h-9" :disabled="!selectedIds.size" @click="openTagDialog([...selectedIds])">
+              <Tag class="size-4" /> {{ t('phone.tag.batchBtn') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
+            </Button>
+            <Button size="sm" variant="outline" class="h-9" :disabled="!selectedIds.size" @click="openGroupControl">
+              <Users class="size-4" /> {{ t('phone.groupControl') }}<span v-if="selectedIds.size">（{{ selectedIds.size }}）</span>
+            </Button>
+          </div>
         </div>
 
-        <div v-if="loading" class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+        <div class="min-h-0 w-full flex-1 overflow-auto">
+        <div v-if="loading" class="grid w-full grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           <Skeleton v-for="i in 10" :key="i" class="h-36 rounded-xl" />
         </div>
-        <div v-else-if="!filteredData.length" class="py-16 text-center text-sm text-muted-foreground">
+        <div v-else-if="!filteredData.length" class="w-full py-16 text-center text-sm text-muted-foreground">
           {{ t('common.empty') }}
         </div>
-        <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+        <div v-else class="grid w-full grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           <Card v-for="row in filteredData" :key="row.id" class="flex flex-col gap-2 py-4">
             <CardHeader class="gap-1 px-4">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex min-w-0 items-center gap-2">
-                  <input
-                    type="checkbox"
-                    class="size-3.5 shrink-0 accent-primary"
-                    :checked="selectedIds.has(row.id)"
+                  <Checkbox
+                    class="shrink-0"
+                    :model-value="selectedIds.has(row.id)"
                     @click.stop
-                    @change="toggleSelect(row.id, ($event.target as HTMLInputElement).checked)"
-                  >
-                  <CardTitle class="truncate text-sm">
-                    {{ row.name }}
+                    @update:model-value="checked => toggleSelect(row.id, checked === true)"
+                  />
+                  <CardTitle class="text-sm">
+                    <TruncatedText :text="row.name" />
                   </CardTitle>
                 </div>
-                <Badge :variant="statusVariant(row.status)" :class="statusClass(row.status)">
+                <Badge v-bind="phoneStatusBadge(row.status)">
+                  <span :class="STATUS_BADGE_DOT" />
                   {{ t(`phone.status_${row.status}`, row.status) }}
                 </Badge>
               </div>
@@ -681,9 +825,13 @@ onUnmounted(() => {
                 <span class="truncate" :class="row.proxy_id > 0 && 'font-mono text-xs'">{{ proxyLabel(row.proxy_id) }}</span>
               </div>
               <div v-if="row.tags?.length" class="flex flex-wrap gap-1 pt-0.5">
-                <Badge v-for="tg in row.tags" :key="tg.name" variant="outline" class="text-[10px]" :class="tagClass(tg.color)">
-                  {{ tg.name }}
+                <Badge v-for="tg in row.tags" :key="tg.name" variant="outline" :class="tagClass(tg.color)">
+                  <TruncatedText :text="tg.name" />
                 </Badge>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="shrink-0 text-muted-foreground">{{ t('phone.colRemark') }}</span>
+                <TruncatedText :text="row.remark" :max="20" class="truncate text-right" />
               </div>
               <div class="flex items-center justify-between gap-2">
                 <span class="text-muted-foreground">{{ t('table.createdAt') }}</span>
@@ -691,10 +839,50 @@ onUnmounted(() => {
               </div>
             </CardContent>
             <CardFooter class="flex flex-wrap items-center gap-1.5 px-4">
-              <Button v-if="canPowerOn(row.status)" size="icon" class="size-8" :disabled="opBusy" :title="t('phone.op.powerOn')" @click="powerOn(row)">
-                <Power class="size-4" />
+              <Button
+                v-if="showPowerOnBtn(row)"
+                size="sm"
+                variant="ghost"
+                class="relative"
+                :class="[powerOnBtnClass, isPowerOnLoading(row) && powerOnBtnLoadingClass]"
+                :disabled="isPowerOnLoading(row) || opBusy"
+                @click="powerOn(row)"
+              >
+                <span
+                  class="inline-flex items-center gap-1.5"
+                  :class="isPowerOnLoading(row) && 'invisible'"
+                >
+                  <PowerSwitchIcon class="size-4 shrink-0" />
+                  {{ t('phone.op.powerOn') }}
+                </span>
+                <span
+                  v-if="isPowerOnLoading(row)"
+                  class="absolute inset-0 flex items-center justify-center"
+                >
+                  {{ t('phone.op.powerOnPending') }}
+                </span>
               </Button>
-              <Button v-if="isRunning(row.status)" size="icon" variant="outline" class="size-8" :title="t('phone.op.remoteControl')" @click="openRemoteControl(row)">
+              <Popconfirm
+                v-if="canPowerOff(row.status)"
+                :title="t('phone.op.powerOffConfirm', { name: row.name })"
+                @confirm="powerOff(row)"
+              >
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  :disabled="opBusy"
+                >
+                  <PowerSwitchIcon class="size-4" /> {{ t('phone.op.powerOff') }}
+                </Button>
+              </Popconfirm>
+              <Button
+                size="icon"
+                variant="outline"
+                class="size-8"
+                :disabled="!isRunning(row.status)"
+                :title="t('phone.op.remoteControl')"
+                @click="openRemoteControl(row)"
+              >
                 <Monitor class="size-4" />
               </Button>
               <Button
@@ -707,27 +895,11 @@ onUnmounted(() => {
               >
                 <AndroidIcon class="size-4" />
               </Button>
-              <Popconfirm
-                v-if="canPowerOff(row.status)"
-                tone="warning"
-                :title="t('phone.op.powerOffConfirm', { name: row.name })"
-                @confirm="powerOff(row)"
-              >
-                <Button
-                  size="icon"
-                  variant="outline"
-                  :disabled="opBusy"
-                  :title="t('phone.op.powerOff')"
-                  class="size-8 border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
-                >
-                  <CircleStop class="size-4" />
-                </Button>
-              </Popconfirm>
 
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="icon" class="ml-auto size-8" :title="t('crud.more')">
-                    <MoreHorizontal class="size-4" />
+                  <Button variant="outline" size="icon-sm" class="ml-auto" :title="t('crud.more')">
+                    <EllipsisVertical class="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="w-40">
@@ -769,6 +941,7 @@ onUnmounted(() => {
             </CardFooter>
           </Card>
         </div>
+        </div>
       </div>
     </CardContent>
 
@@ -796,4 +969,5 @@ onUnmounted(() => {
       </AlertDialogContent>
     </AlertDialog>
   </Card>
+  </div>
 </template>

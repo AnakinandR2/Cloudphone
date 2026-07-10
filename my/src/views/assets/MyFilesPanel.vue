@@ -27,6 +27,7 @@ import { toast } from 'vue-sonner'
 import libraryApi, { uploadLibraryFile } from '@/api/modules/library'
 import Popconfirm from '@/components/Popconfirm.vue'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -151,10 +152,12 @@ function selectTag(id: number) {
 }
 
 // ---- 多选 ----
-function toggleSelect(id: number) {
-  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
-  else selectedIds.value.add(id)
-  selectedIds.value = new Set(selectedIds.value)
+function toggleSelect(id: number, checked: boolean) {
+  const next = new Set(selectedIds.value)
+  if (checked)
+    next.add(id)
+  else next.delete(id)
+  selectedIds.value = next
 }
 const hasSelection = computed(() => selectedIds.value.size > 0)
 
@@ -567,7 +570,10 @@ function gotoPage(p: number) {
           <tbody>
             <tr v-for="f in files" :key="f.id" class="hover:bg-muted/30 border-b transition-colors">
               <td class="py-2">
-                <input type="checkbox" :checked="selectedIds.has(f.id)" @change="toggleSelect(f.id)">
+                <Checkbox
+                  :model-value="selectedIds.has(f.id)"
+                  @update:model-value="checked => toggleSelect(f.id, checked === true)"
+                />
               </td>
               <td class="max-w-[280px] truncate py-2" :title="f.name">{{ f.name }}</td>
               <td class="py-2">

@@ -18,6 +18,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { useQuerySync } from '@/composables/useQuerySync'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
+import { planStatusBadge } from '@/utils/statusBadge'
 import TaskCreateDialog from './TaskCreateDialog.vue'
 import TaskReportDialog from './TaskReportDialog.vue'
 
@@ -36,7 +38,7 @@ const columns = computed<ColumnDef<AutomationPlan>[]>(() => [
   { id: 'targets', header: t('taskSchedule.colTargets'), meta: { label: 'taskSchedule.colTargets' } },
   { id: 'schedule', header: t('taskSchedule.colSchedule'), meta: { label: 'taskSchedule.colSchedule' } },
   { accessorKey: 'status', id: 'status', header: t('taskSchedule.colStatus'), meta: { label: 'taskSchedule.colStatus' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 async function load() {
@@ -95,10 +97,12 @@ function onCreated(firstTaskId: number | null) {
     <CardContent>
       <DataTable
         v-model:search-value="filters.q"
+        pin-actions-column
         :columns="columns"
         :data="data"
         :loading="loading"
         :get-row-id="(r) => String(r.id)"
+        :search-label="t('taskSchedule.searchLabel')"
         :search-placeholder="t('taskSchedule.searchPlaceholder')"
       >
         <template #cell-name="{ row }">
@@ -117,20 +121,22 @@ function onCreated(firstTaskId: number | null) {
           </Badge>
         </template>
         <template #cell-status="{ row }">
-          <Badge :variant="row.status === 'ENABLING' ? 'default' : 'secondary'">{{ t(`taskSchedule.planStatus_${row.status}`) }}</Badge>
+          <Badge v-bind="planStatusBadge(row.status)">{{ t(`taskSchedule.planStatus_${row.status}`) }}</Badge>
         </template>
         <template #cell-actions="{ row }">
-          <Button v-if="row.status !== 'ENABLING'" variant="ghost" size="icon" class="size-7" :title="t('taskSchedule.start')" @click="start(row)">
-            <Play class="size-3.5" />
-          </Button>
-          <Button v-else variant="ghost" size="icon" class="size-7" :title="t('taskSchedule.pause')" @click="pause(row)">
-            <Pause class="size-3.5" />
-          </Button>
-          <Popconfirm :title="t('taskSchedule.delConfirm', { name: row.name })" tone="danger" @confirm="remove(row)">
-            <Button variant="ghost" size="icon" class="size-7 text-destructive hover:text-destructive" :title="t('crud.delete')">
-              <Trash2 class="size-3.5" />
+          <div class="flex items-center justify-end gap-2">
+            <Button v-if="row.status !== 'ENABLING'" variant="ghost" size="icon" class="size-7" :title="t('taskSchedule.start')" @click="start(row)">
+              <Play class="size-3.5" />
             </Button>
-          </Popconfirm>
+            <Button v-else variant="ghost" size="icon" class="size-7" :title="t('taskSchedule.pause')" @click="pause(row)">
+              <Pause class="size-3.5" />
+            </Button>
+            <Popconfirm :title="t('taskSchedule.delConfirm', { name: row.name })" tone="danger" @confirm="remove(row)">
+              <Button variant="ghost" size="icon" class="size-7 text-destructive hover:text-destructive" :title="t('crud.delete')">
+                <Trash2 class="size-3.5" />
+              </Button>
+            </Popconfirm>
+          </div>
         </template>
       </DataTable>
     </CardContent>

@@ -20,6 +20,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { formatDateTime } from '@/utils/date'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
+import { enabledStatusBadge } from '@/utils/statusBadge'
 import ScriptEditDialog from './ScriptEditDialog.vue'
 import TaskCreateDialog from './TaskCreateDialog.vue'
 
@@ -39,7 +41,7 @@ const columns = computed<ColumnDef<AutomationScript>[]>(() => [
   { accessorKey: 'description', id: 'description', header: t('script.colDesc'), meta: { label: 'script.colDesc' } },
   { accessorKey: 'updateTime', id: 'updateTime', header: t('script.colUpdated'), meta: { label: 'script.colUpdated' } },
   { accessorKey: 'status', id: 'status', header: t('script.colStatus'), meta: { label: 'script.colStatus' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 async function load() {
@@ -104,10 +106,12 @@ async function remove(s: AutomationScript) {
         <TabsContent value="mine" class="mt-4">
           <DataTable
             v-model:search-value="filters.q"
+            pin-actions-column
             :columns="columns"
             :data="mine"
             :loading="loading"
             :get-row-id="(r) => String(r.id)"
+            :search-label="t('script.searchLabel')"
             :search-placeholder="t('script.searchMine')"
           >
             <template #cell-name="{ row }">
@@ -125,25 +129,27 @@ async function remove(s: AutomationScript) {
               <span class="tabular-nums text-muted-foreground">{{ formatDateTime(row.updateTime) }}</span>
             </template>
             <template #cell-status="{ row }">
-              <Badge :variant="row.status === 'enabled' ? 'default' : 'secondary'">
+              <Badge v-bind="enabledStatusBadge(row.status === 'enabled')">
                 {{ row.status === 'enabled' ? t('script.enabled') : t('script.disabled') }}
               </Badge>
             </template>
             <template #cell-actions="{ row }">
-              <Button variant="ghost" size="icon" class="size-7" :title="t('script.run')" :disabled="row.status !== 'enabled'" @click="runWith(row.id)">
-                <Play class="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" class="size-7" :title="t('crud.edit')" @click="openEdit(row)">
-                <Pencil class="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" class="size-7" :title="row.status === 'enabled' ? t('script.disable') : t('script.enable')" @click="toggle(row)">
-                <Power class="size-3.5" />
-              </Button>
-              <Popconfirm :title="t('script.delConfirm', { name: row.name })" tone="danger" @confirm="remove(row)">
-                <Button variant="ghost" size="icon" class="size-7 text-destructive hover:text-destructive" :title="t('crud.delete')">
-                  <Trash2 class="size-3.5" />
+              <div class="flex items-center justify-end gap-2">
+                <Button variant="ghost" size="icon" class="size-7" :title="t('script.run')" :disabled="row.status !== 'enabled'" @click="runWith(row.id)">
+                  <Play class="size-3.5" />
                 </Button>
-              </Popconfirm>
+                <Button variant="ghost" size="icon" class="size-7" :title="t('crud.edit')" @click="openEdit(row)">
+                  <Pencil class="size-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" class="size-7" :title="row.status === 'enabled' ? t('script.disable') : t('script.enable')" @click="toggle(row)">
+                  <Power class="size-3.5" />
+                </Button>
+                <Popconfirm :title="t('script.delConfirm', { name: row.name })" tone="danger" @confirm="remove(row)">
+                  <Button variant="ghost" size="icon" class="size-7 text-destructive hover:text-destructive" :title="t('crud.delete')">
+                    <Trash2 class="size-3.5" />
+                  </Button>
+                </Popconfirm>
+              </div>
             </template>
           </DataTable>
         </TabsContent>

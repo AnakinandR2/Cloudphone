@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ColumnDef } from '@tanstack/vue-table'
 import type { ApiKey } from '@/types/apikey'
 import type { McpToolGroup } from '@/types/mcp'
 import { ArrowUpRight, Copy, Eye, KeyRound, Plug, Plus, TriangleAlert } from 'lucide-vue-next'
@@ -7,6 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import apikeyApi from '@/api/modules/apikey'
 import mcpApi from '@/api/modules/mcp'
+import DataTable from '@/components/DataTable.vue'
 import { copyText } from '@/utils/clipboard'
 import Popconfirm from '@/components/Popconfirm.vue'
 import { Badge } from '@/components/ui/badge'
@@ -28,15 +30,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { activeStatusBadge } from '@/utils/statusBadge'
 
 const { t } = useI18n()
 
@@ -47,6 +43,15 @@ const newName = ref('')
 const creating = ref(false)
 const fullKeyOpen = ref(false)
 const fullKey = ref('')
+
+const columns = computed<ColumnDef<ApiKey>[]>(() => [
+  { accessorKey: 'name', id: 'name', header: t('apimcp.colName'), meta: { label: 'apimcp.colName' } },
+  { id: 'key', header: t('apimcp.colKey'), meta: { label: 'apimcp.colKey' } },
+  { accessorKey: 'createdAt', id: 'createdAt', header: t('apimcp.colCreated'), meta: { label: 'apimcp.colCreated' } },
+  { accessorKey: 'lastUsedAt', id: 'lastUsedAt', header: t('apimcp.colLastUsed'), meta: { label: 'apimcp.colLastUsed' } },
+  { accessorKey: 'status', id: 'status', header: t('apimcp.colStatus'), meta: { label: 'apimcp.colStatus' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
+])
 
 const baseUrl = computed(() => `${window.location.origin}/api/open/v1`)
 const curlExample = computed(() =>
@@ -176,51 +181,45 @@ async function copy(text: string) {
         </Button>
       </CardHeader>
       <CardContent class="flex flex-col gap-4">
-        <div class="overflow-x-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{{ t('apimcp.colName') }}</TableHead>
-                <TableHead>{{ t('apimcp.colKey') }}</TableHead>
-                <TableHead>{{ t('apimcp.colCreated') }}</TableHead>
-                <TableHead>{{ t('apimcp.colLastUsed') }}</TableHead>
-                <TableHead>{{ t('apimcp.colStatus') }}</TableHead>
-                <TableHead class="text-right">{{ t('apimcp.colAction') }}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-if="!keys.length">
-                <TableCell colspan="6" class="text-muted-foreground py-8 text-center text-sm">
-                  {{ t('apimcp.empty') }}
-                </TableCell>
-              </TableRow>
-              <TableRow v-for="k in keys" :key="k.id" :class="k.status === 'revoked' && 'opacity-50'">
-                <TableCell class="font-medium">{{ k.name }}</TableCell>
-                <TableCell>
-                  <span class="inline-flex items-center gap-1.5">
-                    <code class="font-mono text-xs">{{ k.masked }}</code>
-                    <Button variant="ghost" size="icon" class="size-6" :title="t('apimcp.reveal')" @click="revealKey(k)">
-                      <Eye class="size-3.5" />
-                    </Button>
-                  </span>
-                </TableCell>
-                <TableCell class="text-muted-foreground tabular-nums">{{ formatDateTime(k.createdAt) }}</TableCell>
-                <TableCell class="text-muted-foreground tabular-nums">{{ k.lastUsedAt ? formatDateTime(k.lastUsedAt) : '—' }}</TableCell>
-                <TableCell>
-                  <Badge :variant="k.status === 'active' ? 'default' : 'secondary'">
-                    {{ k.status === 'active' ? t('apimcp.statusActive') : t('apimcp.statusRevoked') }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="text-right">
-                  <Popconfirm v-if="k.status === 'active'" :title="t('apimcp.revokeConfirm', { name: k.name })" tone="danger" @confirm="revoke(k)">
-                    <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">{{ t('apimcp.revoke') }}</Button>
-                  </Popconfirm>
-                  <span v-else class="text-muted-foreground text-xs">{{ t('apimcp.revoked') }}</span>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          pin-actions-column
+          :columns="columns"
+          :data="keys"
+          :loading="loading"
+          :search="false"
+          :get-row-id="(k) => String(k.id)"
+        >
+          <template #cell-name="{ row }">
+            <span class="font-medium" :class="row.status === 'revoked' && 'opacity-50'">{{ row.name }}</span>
+          </template>
+          <template #cell-key="{ row }">
+            <span class="inline-flex items-center gap-1.5" :class="row.status === 'revoked' && 'opacity-50'">
+              <code class="font-mono text-xs">{{ row.masked }}</code>
+              <Button variant="ghost" size="icon" class="size-6" :title="t('apimcp.reveal')" @click="revealKey(row)">
+                <Eye class="size-3.5" />
+              </Button>
+            </span>
+          </template>
+          <template #cell-createdAt="{ row }">
+            <span class="text-muted-foreground tabular-nums" :class="row.status === 'revoked' && 'opacity-50'">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+          <template #cell-lastUsedAt="{ row }">
+            <span class="text-muted-foreground tabular-nums" :class="row.status === 'revoked' && 'opacity-50'">{{ row.lastUsedAt ? formatDateTime(row.lastUsedAt) : '—' }}</span>
+          </template>
+          <template #cell-status="{ row }">
+            <Badge v-bind="activeStatusBadge(row.status === 'active')" :class="row.status === 'revoked' && 'opacity-50'">
+              {{ row.status === 'active' ? t('apimcp.statusActive') : t('apimcp.statusRevoked') }}
+            </Badge>
+          </template>
+          <template #cell-actions="{ row }">
+            <div class="flex items-center justify-end gap-2">
+              <Popconfirm v-if="row.status === 'active'" :title="t('apimcp.revokeConfirm', { name: row.name })" tone="danger" @confirm="revoke(row)">
+                <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">{{ t('apimcp.revoke') }}</Button>
+              </Popconfirm>
+              <span v-else class="text-muted-foreground text-xs">{{ t('apimcp.revoked') }}</span>
+            </div>
+          </template>
+        </DataTable>
 
         <!-- 如何调用 -->
         <div class="flex flex-col gap-1.5">

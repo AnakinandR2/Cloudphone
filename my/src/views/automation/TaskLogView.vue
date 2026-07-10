@@ -6,6 +6,15 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import automationApi from '@/api/modules/automation'
 import DataTable from '@/components/DataTable.vue'
+import FilterBar from '@/components/FilterBar.vue'
+import FilterField from '@/components/FilterField.vue'
+import FilterSearchInput from '@/components/FilterSearchInput.vue'
+import {
+  filterPopupAlign,
+  filterPopupSideOffset,
+  filterSelectContentClass,
+  filterSelectTriggerClass,
+} from '@/components/filterField'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,9 +24,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useQuerySync } from '@/composables/useQuerySync'
+import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
+import { taskLogStatusBadge } from '@/utils/statusBadge'
 import TaskReportDialog from './TaskReportDialog.vue'
 
 const { t } = useI18n()
@@ -26,6 +43,11 @@ const data = ref<AutomationTask[]>([])
 const loading = ref(false)
 const filters = reactive({ q: '', status: '' })
 useQuerySync(filters, { q: '', status: '' })
+const ALL_STATUS_VALUE = '__all__'
+const statusFilterModel = computed({
+  get: () => filters.status || ALL_STATUS_VALUE,
+  set: value => (filters.status = value === ALL_STATUS_VALUE ? '' : value),
+})
 const reportDialog = ref<{ open: boolean, midTaskId: number | null }>({ open: false, midTaskId: null })
 
 const columns = computed<ColumnDef<AutomationTask>[]>(() => [
@@ -35,7 +57,7 @@ const columns = computed<ColumnDef<AutomationTask>[]>(() => [
   { id: 'trigger', header: t('taskLog.colTrigger'), meta: { label: 'taskLog.colTrigger' } },
   { accessorKey: 'runStart', id: 'runStart', header: t('taskLog.colStart'), meta: { label: 'taskLog.colStart' } },
   { accessorKey: 'status', id: 'status', header: t('taskLog.colStatus'), meta: { label: 'taskLog.colStatus' } },
-  { id: 'actions', header: '', enableHiding: false, meta: { label: 'crud.actions', headClass: 'text-right', cellClass: 'text-right whitespace-nowrap' } },
+  { id: 'actions', header: t('crud.actions'), enableHiding: false, meta: ACTIONS_COLUMN_META },
 ])
 
 async function load() {
@@ -59,9 +81,9 @@ function statusKind(s: string): 'success' | 'failed' | 'running' {
   return 'running'
 }
 const statusMeta = {
-  success: { icon: CheckCircle2, cls: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' },
-  failed: { icon: XCircle, cls: 'bg-destructive/10 text-destructive' },
-  running: { icon: Loader2, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
+  success: { icon: CheckCircle2 },
+  failed: { icon: XCircle },
+  running: { icon: Loader2 },
 } as const
 
 function view(row: AutomationTask) {
@@ -78,27 +100,44 @@ function view(row: AutomationTask) {
     <CardContent>
       <DataTable
         v-model:search-value="filters.q"
+        pin-actions-column
         :columns="columns"
         :data="data"
         :loading="loading"
+        :search="false"
         :get-row-id="(r) => String(r.id)"
-        :search-placeholder="t('taskLog.searchPlaceholder')"
       >
         <template #filters>
-          <NativeSelect v-model="filters.status" class="h-9 w-36 text-xs">
-            <NativeSelectOption value="">
-              {{ t('taskLog.statusAll') }}
-            </NativeSelectOption>
-            <NativeSelectOption value="COMPLETED">
-              {{ t('taskLog.success') }}
-            </NativeSelectOption>
-            <NativeSelectOption value="FAILED">
-              {{ t('taskLog.failed') }}
-            </NativeSelectOption>
-            <NativeSelectOption value="EXECUTING">
-              {{ t('taskLog.running') }}
-            </NativeSelectOption>
-          </NativeSelect>
+          <FilterBar class="min-w-0 flex-1">
+            <FilterField :label="t('taskLog.searchLabel')">
+              <FilterSearchInput v-model="filters.q" :placeholder="t('taskLog.searchPlaceholder')" />
+            </FilterField>
+            <FilterField :label="t('taskLog.filterStatus')">
+              <Select v-model="statusFilterModel" class="flex h-full min-w-0 flex-1">
+                <SelectTrigger :class="filterSelectTriggerClass">
+                  <SelectValue :placeholder="t('taskLog.statusAll')" />
+                </SelectTrigger>
+                <SelectContent
+                  :align="filterPopupAlign"
+                  :side-offset="filterPopupSideOffset"
+                  :class="filterSelectContentClass"
+                >
+                  <SelectItem :value="ALL_STATUS_VALUE">
+                    {{ t('taskLog.statusAll') }}
+                  </SelectItem>
+                  <SelectItem value="COMPLETED">
+                    {{ t('taskLog.success') }}
+                  </SelectItem>
+                  <SelectItem value="FAILED">
+                    {{ t('taskLog.failed') }}
+                  </SelectItem>
+                  <SelectItem value="EXECUTING">
+                    {{ t('taskLog.running') }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </FilterBar>
         </template>
 
         <template #cell-taskName="{ row }">
@@ -117,15 +156,17 @@ function view(row: AutomationTask) {
           <span class="tabular-nums text-muted-foreground">{{ row.runStart ? formatDateTime(row.runStart) : '—' }}</span>
         </template>
         <template #cell-status="{ row }">
-          <Badge variant="secondary" :class="statusMeta[statusKind(row.status)].cls">
+          <Badge v-bind="taskLogStatusBadge(statusKind(row.status))">
             <component :is="statusMeta[statusKind(row.status)].icon" class="mr-1 size-3" :class="statusKind(row.status) === 'running' && 'animate-spin'" />
             {{ row.status }}
           </Badge>
         </template>
         <template #cell-actions="{ row }">
-          <Button variant="ghost" size="sm" @click="view(row)">
-            <Eye class="size-3.5" /> {{ t('taskLog.view') }}
-          </Button>
+          <div class="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" @click="view(row)">
+              <Eye class="size-3.5" /> {{ t('taskLog.view') }}
+            </Button>
+          </div>
         </template>
       </DataTable>
     </CardContent>

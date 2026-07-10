@@ -9,7 +9,7 @@ import proxyApi from '@/api/modules/proxy'
 import type { CloudPhone } from '@/types/phone'
 import type { Proxy } from '@/types/proxy'
 import { formatDateTime } from '@/utils/date'
-import { buildPhoneFormSchema } from './phoneFormSchema'
+import { buildPhoneFormSchema, PHONE_TEXT_MAX } from './phoneFormSchema'
 import { countBoundProxies, formatProxyAddress, formatProxyIp } from './proxyBind'
 import {
   Dialog,
@@ -36,6 +36,8 @@ const readonly = computed(() => props.mode === 'view')
 const isCreate = computed(() => props.mode === 'create')
 const submitting = ref(false)
 const nameError = ref('')
+const remarkError = ref('')
+const textMax = PHONE_TEXT_MAX
 
 // 可选代理（不分页，含未测试/失败态，便于在表格里完整展示与选择）。
 const proxies = ref<Proxy[]>([])
@@ -90,6 +92,7 @@ watch(open, async (v) => {
   if (v) {
     Object.assign(form, emptyForm())
     nameError.value = ''
+    remarkError.value = ''
     // 拉取全部代理供表格选择（查看态也加载以便回显）。
     try {
       const res = await proxyApi.list({ page: 1, size: 999 })
@@ -117,10 +120,19 @@ watch(open, async (v) => {
 
 async function submit() {
   nameError.value = ''
-  // 校验交给 zod schema（@/views/phone/phoneFormSchema），错误映射回 nameError 就地显示。
-  const r = buildPhoneFormSchema(t).safeParse({ name: form.name })
+  remarkError.value = ''
+  // 校验交给 zod schema（@/views/phone/phoneFormSchema），错误映射回字段就地显示。
+  const r = buildPhoneFormSchema(t).safeParse({ name: form.name, remark: form.remark })
   if (!r.success) {
-    nameError.value = r.error.issues[0]?.message ?? t('phone.errNameRequired')
+    for (const issue of r.error.issues) {
+      const field = issue.path[0]
+      if (field === 'name' && !nameError.value)
+        nameError.value = issue.message
+      else if (field === 'remark' && !remarkError.value)
+        remarkError.value = issue.message
+    }
+    if (!nameError.value && !remarkError.value)
+      nameError.value = r.error.issues[0]?.message ?? t('phone.errNameRequired')
     return
   }
   submitting.value = true
@@ -167,7 +179,20 @@ async function submit() {
           <Label for="ph-name">
             {{ t('phone.fName') }}<span class="text-destructive ml-0.5" aria-hidden="true">*</span>
           </Label>
-          <Input id="ph-name" v-model="form.name" :disabled="readonly" :aria-invalid="!!nameError" :placeholder="t('phone.fNamePlaceholder')" />
+          <div class="relative">
+            <Input
+              id="ph-name"
+              v-model="form.name"
+              class="pr-14"
+              :disabled="readonly"
+              :maxlength="textMax"
+              :aria-invalid="!!nameError"
+              :placeholder="t('phone.fNamePlaceholder')"
+            />
+            <span class="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs tabular-nums">
+              {{ t('phone.textMaxHint', { n: [...form.name].length, max: textMax }) }}
+            </span>
+          </div>
           <p v-if="nameError" class="text-destructive text-xs">{{ nameError }}</p>
         </div>
         <div v-if="!isCreate" class="space-y-2">
@@ -235,7 +260,21 @@ async function submit() {
 
         <div class="space-y-2">
           <Label for="ph-remark">{{ t('phone.fRemark') }}</Label>
-          <Input id="ph-remark" v-model="form.remark" :disabled="readonly" :placeholder="t('phone.fRemarkPlaceholder')" />
+          <div class="relative">
+            <Input
+              id="ph-remark"
+              v-model="form.remark"
+              class="pr-14"
+              :disabled="readonly"
+              :maxlength="textMax"
+              :aria-invalid="!!remarkError"
+              :placeholder="t('phone.fRemarkPlaceholder')"
+            />
+            <span class="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs tabular-nums">
+              {{ t('phone.textMaxHint', { n: [...form.remark].length, max: textMax }) }}
+            </span>
+          </div>
+          <p v-if="remarkError" class="text-destructive text-xs">{{ remarkError }}</p>
         </div>
         <div v-if="!isCreate" class="text-muted-foreground grid grid-cols-2 gap-2 text-xs">
           <span>{{ t('table.createdAt') }}: {{ formatDateTime(form.created_at) }}</span>
