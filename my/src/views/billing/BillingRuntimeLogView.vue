@@ -5,8 +5,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import billingApi from '@/api/modules/billing'
 import FilterBar from '@/components/FilterBar.vue'
+import FilterDatePicker from '@/components/FilterDatePicker.vue'
 import FilterField from '@/components/FilterField.vue'
-import { filterInputClass } from '@/components/filterField'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -162,18 +162,16 @@ function segMinutes(segs: RuntimeLogSegment[]) {
         <div class="mb-4 flex flex-wrap items-center gap-3">
           <FilterBar class="min-w-0 flex-1">
             <FilterField :label="t('billing.runtimeLog.filterFrom')">
-              <input
+              <FilterDatePicker
                 v-model="fromInput"
-                type="datetime-local"
-                :class="filterInputClass"
-              >
+                :placeholder="t('comp.filterDateEmpty')"
+              />
             </FilterField>
             <FilterField :label="t('billing.runtimeLog.filterTo')">
-              <input
+              <FilterDatePicker
                 v-model="toInput"
-                type="datetime-local"
-                :class="filterInputClass"
-              >
+                :placeholder="t('comp.filterDateEmpty')"
+              />
             </FilterField>
           </FilterBar>
           <Button size="sm" class="h-10" @click="applyFilter">

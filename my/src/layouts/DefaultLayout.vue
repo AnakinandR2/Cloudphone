@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowDoorOut3 as LogOut, Command, Moon, Sun } from 'reicon-vue'
+import { ArrowDoorOut3 as LogOut, Moon, Sun } from 'reicon-vue'
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
+import logoChangchang from '@/assets/images/logo-changchang.png'
 import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import Icon from '@/components/Icon.vue'
 
@@ -93,9 +94,13 @@ async function logout() {
           <RouterLink
             to="/"
             :title="appTitle"
-            class="bg-sidebar-primary text-sidebar-primary-foreground flex size-9 items-center justify-center rounded-lg transition-transform hover:scale-105"
+            class="flex size-9 items-center justify-center overflow-hidden rounded-lg transition-transform hover:scale-105"
           >
-            <Command class="size-5" />
+            <img
+              :src="logoChangchang"
+              alt=""
+              class="size-9 object-cover object-left"
+            >
           </RouterLink>
         </SidebarHeader>
         <SidebarContent>
@@ -129,20 +134,17 @@ async function logout() {
           <div
             class="flex h-14 items-center gap-2 px-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           >
-            <!-- 单层模式：图标 + 站点名作为品牌标识，点击回首页 -->
+            <!-- 单层模式：品牌 logo，点击回首页 -->
             <RouterLink
               v-if="!isDouble"
               to="/"
-              class="flex items-center gap-2 transition-opacity hover:opacity-80"
+              class="flex min-w-0 items-center transition-opacity hover:opacity-80"
             >
-              <div
-                class="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg"
+              <img
+                :src="logoChangchang"
+                alt="畅畅云手机"
+                class="h-8 w-auto max-w-[168px] object-contain object-left group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:max-w-none group-data-[collapsible=icon]:object-cover"
               >
-                <Command class="size-4" />
-              </div>
-              <span class="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
-                {{ appTitle }}
-              </span>
             </RouterLink>
             <!-- 双层模式：显示当前分组标题（非品牌，不跳首页） -->
             <span v-else class="truncate text-sm font-semibold">
@@ -211,8 +213,15 @@ async function logout() {
       </header>
       <main class="bg-muted/30 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-6">
         <RouterView v-slot="{ Component }">
-          <Transition :name="transitionName" mode="out-in" appear>
-            <component :is="Component" :key="route.path" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto" />
+          <!-- 用包裹层做过渡，避免直接给异步页面根节点加 transform/opacity 导致高度塌成空白 -->
+          <Transition :name="transitionName" mode="out-in">
+            <div
+              v-if="Component"
+              :key="route.path"
+              class="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"
+            >
+              <component :is="Component" class="flex min-h-0 min-w-0 flex-1 flex-col" />
+            </div>
           </Transition>
         </RouterView>
       </main>

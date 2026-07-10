@@ -13,7 +13,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground border border-[var(--btn-border-primary)] shadow-[var(--btn-shadow)] hover:bg-[var(--primary-strong)] hover:-translate-y-px hover:shadow-[var(--btn-shadow-hover)] active:translate-y-0",
+          "bg-primary text-primary-foreground border border-[var(--btn-border-primary)] shadow-[var(--btn-shadow)] hover:bg-[var(--primary-hover)] hover:-translate-y-px hover:shadow-[var(--btn-shadow-hover)] active:bg-[var(--primary-pressed)] active:translate-y-0",
         destructive:
           "bg-destructive text-white border border-[var(--btn-border-destructive)] shadow-[var(--btn-shadow-destructive)] hover:bg-destructive/90 hover:-translate-y-px hover:shadow-[var(--btn-shadow-destructive-hover)] active:translate-y-0 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         warning:

@@ -6,6 +6,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
+import { DEMO_TEST_ACCOUNT } from '@/constants/demoAccount'
 import { useSettingsStore } from '@/stores/settings'
 import { useUserStore } from '@/stores/user'
 
@@ -15,8 +16,8 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 
-const phone = ref('')
-const password = ref('')
+const phone = ref(DEMO_TEST_ACCOUNT.phone)
+const password = ref(DEMO_TEST_ACCOUNT.password)
 const loading = ref(false)
 
 async function onSubmit() {
@@ -137,6 +138,10 @@ async function onSubmit() {
               {{ loading ? t('login.submitting') : t('login.submit') }}
             </button>
           </form>
+
+          <p class="auth-demo-hint">
+            {{ t('login.demoHint', { phone: DEMO_TEST_ACCOUNT.phone, password: DEMO_TEST_ACCOUNT.password }) }}
+          </p>
 
           <p class="auth-foot">
             {{ t('login.noAccount') }}

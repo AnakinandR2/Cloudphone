@@ -72,7 +72,7 @@ async function onPaid() {
 <template>
   <div class="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col">
     <!-- 购买资源区（Figma 青绿底 + 深色 KPI 卡片） -->
-    <section class="bg-[#009d8d] px-6 pb-12 pt-6">
+    <section class="bg-primary px-6 pb-12 pt-6">
       <div class="space-y-6">
         <div>
           <h1 class="text-2xl font-semibold tracking-tight text-white">

@@ -71,8 +71,8 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
     class="trial-card group relative h-full w-full min-w-0"
     :class="{ 'trial-card--static': isUnavailable }"
   >
-    <div class="trial-card-body relative flex h-full flex-col overflow-hidden rounded-[8px] border border-[#eaedf1] bg-card">
-      <div class="trial-ribbon pointer-events-none absolute -right-px -top-px z-20 h-6 w-[94px] overflow-hidden rounded-bl-[8px]">
+    <div class="trial-card-body relative flex h-full flex-col overflow-hidden rounded-2xl border border-[#eaedf1] bg-card">
+      <div class="trial-ribbon pointer-events-none absolute -right-px -top-px z-20 h-6 w-[94px] overflow-hidden rounded-bl-2xl">
         <img :src="trialRibbon" alt="" class="block h-full w-full" aria-hidden="true">
         <span class="absolute left-[23px] top-1 max-w-[62px] truncate whitespace-nowrap text-xs font-medium leading-4 text-white">
           {{ t('billing.trialBadgeLabel') }}
@@ -81,7 +81,7 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
 
       <div class="shrink-0 bg-card p-4">
         <div class="flex flex-col gap-6">
-          <div v-if="primaryGrant" class="text-[#009d8d]">
+          <div v-if="primaryGrant" class="text-[#1f2329]">
             <div class="flex items-baseline gap-1">
               <span class="text-[40px] font-bold leading-[48px] tabular-nums">
                 {{ primaryGrant.quantity }}
@@ -96,9 +96,9 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
           </div>
 
           <div class="flex w-full flex-col gap-2">
-            <div class="flex w-full items-center gap-[7px] rounded-[8px] bg-[#f1f9ff] px-2 py-1">
-              <Info class="size-3 shrink-0 text-[#0052d9]" />
-              <p class="min-w-0 truncate whitespace-nowrap text-xs font-medium leading-4 text-[#0052d9]">
+            <div class="flex w-full items-center gap-[7px] rounded-[8px] bg-[#fff4e8] px-2 py-1">
+              <Info class="size-3 shrink-0 text-[#ff7d00]" />
+              <p class="min-w-0 truncate whitespace-nowrap text-xs font-medium leading-4 text-[#ff7d00]">
                 {{ t('billing.trialPerUserLimit', { n: item.policy.per_user_limit }) }}
                 <span v-if="item.claimed_count > 0">
                   · {{ t('billing.trialClaimedCount', { n: item.claimed_count }) }}
@@ -108,7 +108,7 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
 
             <Button
               v-if="item.claimable"
-              class="h-auto w-full rounded-[8px] bg-[#009d8d] px-3 py-[9px] text-sm font-medium text-white hover:bg-[#008a7c]"
+              class="h-auto w-full rounded-[8px] bg-primary px-3 py-[9px] text-sm font-medium text-primary-foreground hover:bg-[var(--primary-hover)]"
               :disabled="claiming"
               @click="emit('claim')"
             >
@@ -116,7 +116,7 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
             </Button>
             <Button
               v-else-if="isClaimed"
-              class="h-auto w-full rounded-[8px] bg-[#009d8d] px-3 py-[9px] text-sm font-medium text-white hover:bg-[#008a7c]"
+              class="h-auto w-full rounded-[8px] bg-primary px-3 py-[9px] text-sm font-medium text-primary-foreground hover:bg-[var(--primary-hover)]"
               @click="emit('use')"
             >
               {{ t('billing.trialGoUse') }}
@@ -195,7 +195,7 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
 }
 
 .trial-card:not(.trial-card--static):hover .trial-card-body {
-  border-color: #009d8d;
+  border-color: var(--primary);
   box-shadow: 0 12px 28px rgb(0 0 0 / 6%);
 }
 </style>

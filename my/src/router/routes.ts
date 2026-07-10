@@ -76,6 +76,12 @@ export const asyncRoutes: AppMainRoute[] = [
         meta: { title: 'menu.billingPurchase', icon: 'ShoppingCart' },
       },
       {
+        path: '/billing/purchase-1',
+        name: 'billingPurchase1',
+        component: () => import('@/views/billing/BillingPurchaseView1.vue'),
+        meta: { title: 'menu.billingPurchase1', icon: 'ShoppingCart' },
+      },
+      {
         // 余额充值页暂时隐藏（恢复时改回 BillingRechargeView 并去掉 menu: false）
         path: '/billing/recharge',
         name: 'billingRecharge',

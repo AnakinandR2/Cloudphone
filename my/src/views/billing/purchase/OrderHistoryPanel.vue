@@ -32,13 +32,14 @@ import {
 import { ACTIONS_COLUMN_META } from '@/lib/table'
 import { formatDateTime } from '@/utils/date'
 import { fmtCents, fmtDiscountBps } from '@/utils/money'
-import { orderStatusBadge } from '@/utils/statusBadge'
+import { orderStatusBadge, STATUS_BADGE_BASE } from '@/utils/statusBadge'
 
 // 默认 tab：全部订单 — 订单 ID / 类型 / 明细 / 金额 / 状态 / 时间；未支付可继续支付。
 // 明细按订单项派生摘要（数量 + 时长），可展开看完整明细；支持按状态 + 创建时间区间过滤（服务端）。
 const emit = defineEmits<{ paid: [] }>()
 const props = defineProps<{
   bizType?: string
+  statusTone?: 'default' | 'primary'
 }>()
 const { t } = useI18n()
 
@@ -113,6 +114,17 @@ function toIso(local: string): string | undefined {
   if (!local) return undefined
   const d = new Date(local)
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+
+function badgeForStatus(status: string) {
+  const base = orderStatusBadge(status)
+  if (props.statusTone === 'primary' && status === 'paid') {
+    return {
+      ...base,
+      class: `${STATUS_BADGE_BASE} bg-[var(--primary-light-bg)] text-primary dark:bg-primary/15 dark:text-primary`,
+    }
+  }
+  return base
 }
 
 async function load() {
@@ -389,7 +401,7 @@ async function continuePay(o: Order2) {
       </div>
     </template>
     <template #cell-status="{ row }">
-      <Badge v-bind="orderStatusBadge(row.status)" class="text-sm leading-5">
+      <Badge v-bind="badgeForStatus(row.status)" class="text-sm leading-5">
         {{ t(`billing.purchase2.status_${row.status}`) }}
       </Badge>
     </template>

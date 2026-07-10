@@ -225,7 +225,7 @@ function useTrial() {
     <section class="min-w-0 overflow-x-hidden px-8 pb-8 pt-2">
       <div ref="gridMeasureRef" class="min-w-0 w-full">
       <div v-if="loading" class="trials-grid grid w-full min-w-0 items-stretch gap-3" :style="gridStyle">
-        <div v-for="i in pageSize" :key="i" class="flex w-full min-w-0 flex-col overflow-hidden rounded-[8px] border border-[#eaedf1] bg-card">
+        <div v-for="i in pageSize" :key="i" class="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#eaedf1] bg-card">
           <div class="space-y-6 bg-card p-4">
             <div class="space-y-1">
               <Skeleton class="h-12 w-24" />
