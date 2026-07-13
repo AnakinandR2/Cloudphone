@@ -10,6 +10,8 @@ import { toast } from 'vue-sonner'
 import proxyApi from '@/api/modules/proxy'
 import DataTable from '@/components/DataTable.vue'
 import Popconfirm from '@/components/Popconfirm.vue'
+import TableExpanded from '@/components/TableExpanded.vue'
+import TableExpandedTable from '@/components/TableExpandedTable.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -177,15 +179,46 @@ onMounted(load)
               <span class="text-muted-foreground tabular-nums">{{ formatDateTime(row.created_at) }}</span>
             </template>
 
-            <!-- 行展开：用户名 / 地区 / ASN / 公司 / 最近检测 / 备注 -->
+            <!-- 行展开：图2 浅灰底 + 嵌套横线表 -->
             <template #expanded="{ row }">
-              <div class="text-muted-foreground grid grid-cols-2 gap-x-10 gap-y-2 px-2 py-1 text-sm md:grid-cols-3">
-                <div><span class="text-foreground/70">{{ t('proxy.colUsername') }}：</span>{{ row.username || '-' }}</div>
-                <div><span class="text-foreground/70">{{ t('proxy.colRegion') }}：</span>{{ row.region || '-' }}</div>
-                <div><span class="text-foreground/70">{{ t('proxy.colAsn') }}：</span>{{ asnText(row) }}</div>
-                <div><span class="text-foreground/70">{{ t('proxy.colCompany') }}：</span>{{ row.company || '-' }}</div>
-                <div><span class="text-foreground/70">{{ t('proxy.lastChecked') }}：</span>{{ row.last_checked_at ? formatDateTime(row.last_checked_at) : '-' }}</div>
-              </div>
+              <TableExpanded>
+                <TableExpandedTable>
+                  <template #head>
+                    <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                      {{ t('proxy.colUsername') }}
+                    </th>
+                    <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                      {{ t('proxy.colRegion') }}
+                    </th>
+                    <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                      {{ t('proxy.colAsn') }}
+                    </th>
+                    <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                      {{ t('proxy.colCompany') }}
+                    </th>
+                    <th class="py-2.5 font-normal whitespace-nowrap">
+                      {{ t('proxy.lastChecked') }}
+                    </th>
+                  </template>
+                  <tr>
+                    <td class="py-3 pr-6 whitespace-nowrap">
+                      {{ row.username || '-' }}
+                    </td>
+                    <td class="py-3 pr-6 whitespace-nowrap">
+                      {{ row.region || '-' }}
+                    </td>
+                    <td class="py-3 pr-6 whitespace-nowrap">
+                      {{ asnText(row) }}
+                    </td>
+                    <td class="py-3 pr-6 whitespace-nowrap">
+                      {{ row.company || '-' }}
+                    </td>
+                    <td class="py-3 tabular-nums whitespace-nowrap">
+                      {{ row.last_checked_at ? formatDateTime(row.last_checked_at) : '-' }}
+                    </td>
+                  </tr>
+                </TableExpandedTable>
+              </TableExpanded>
             </template>
 
             <template #cell-actions="{ row }">

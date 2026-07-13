@@ -491,11 +491,10 @@ html[data-theme]:not([data-theme='teal']) {
     background-color: var(--muted);
   }
 
-  /* 操作列左缘：整条纵向渐变阴影，向左投射到滚动区域 */
+  /* 操作列左缘：纵向渐变阴影（高度/顶边由 DataTable 分段设置，跳过展开行） */
   .pinned-col-shadow {
     pointer-events: none;
     position: absolute;
-    top: 0;
     z-index: 25;
     width: 16px;
     transform: translateX(-100%);

@@ -862,6 +862,8 @@ export default {
     tableDemoSearchPlaceholder: '请输入名称，支持模糊查询',
     tableDemoStatusAll: '全部状态',
     tableDemoExpanded: '{name}（{id}）的详情展开区域示例。',
+    tableExpandTabDetail: '详情摘要',
+    tableExpandTabRaw: '原始 JSON',
     filterSearchLabel: '搜索',
     filterSearchPlaceholder: '请输入关键词…',
     filterSelectLabel: '状态',

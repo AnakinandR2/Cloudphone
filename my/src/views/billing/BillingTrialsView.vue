@@ -209,7 +209,7 @@ function useTrial() {
 
 <template>
   <div class="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col bg-background">
-    <header class="border-border border-b px-8 py-5">
+    <header class="px-8 py-5">
       <h1 class="text-foreground text-xl font-medium leading-7">
         {{ t('billing.trialsTitle') }}
       </h1>

@@ -81,7 +81,10 @@ watch(grantSummary, () => nextTick(checkGrantOverflow))
 
       <div class="shrink-0 bg-card p-4">
         <div class="flex flex-col gap-6">
-          <div v-if="primaryGrant" class="text-[#1f2329]">
+          <div
+            v-if="primaryGrant"
+            :class="isUnavailable ? 'text-[#8f959e]' : 'text-[#1f2329]'"
+          >
             <div class="flex items-baseline gap-1">
               <span class="text-[40px] font-bold leading-[48px] tabular-nums">
                 {{ primaryGrant.quantity }}

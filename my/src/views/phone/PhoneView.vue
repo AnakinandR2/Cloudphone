@@ -24,6 +24,8 @@ import { toast } from 'vue-sonner'
 import phoneApi from '@/api/modules/phone'
 import proxyApi from '@/api/modules/proxy'
 import DataTable from '@/components/DataTable.vue'
+import TableExpanded from '@/components/TableExpanded.vue'
+import TableExpandedTable from '@/components/TableExpandedTable.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import FilterField from '@/components/FilterField.vue'
 import FilterSearchInput from '@/components/FilterSearchInput.vue'
@@ -686,27 +688,34 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <!-- 行展开 = 查看详情 -->
+        <!-- 行展开：仅补充第一层没有的字段 -->
         <template #expanded="{ row }">
-          <div class="grid grid-cols-2 gap-x-8 gap-y-2 p-4 text-sm md:grid-cols-3">
-            <div><span class="text-muted-foreground">{{ t('phone.colName') }}：</span>{{ row.name }}</div>
-            <div><span class="text-muted-foreground">{{ t('phone.colCpId') }}：</span><span class="tabular-nums">{{ row.cp_id || '-' }}</span></div>
-            <div>
-              <span class="text-muted-foreground">{{ t('phone.colStatus') }}：</span>
-              <Badge v-bind="phoneStatusBadge(row.status)">
-                <span :class="STATUS_BADGE_DOT" />
-                {{ t(`phone.status_${row.status}`, row.status) }}
-              </Badge>
-            </div>
-            <div><span class="text-muted-foreground">{{ t('phone.detailVmId') }}：</span><span class="font-mono text-xs">{{ row.vm_id || '-' }}</span></div>
-            <div><span class="text-muted-foreground">{{ t('phone.fImageId') }}：</span><span class="font-mono text-xs">{{ row.image_id || '-' }}</span></div>
-            <div><span class="text-muted-foreground">{{ t('phone.colProxy') }}：</span>{{ proxyLabel(row.proxy_id) }}</div>
-            <div class="col-span-2 md:col-span-3">
-              <span class="text-muted-foreground">{{ t('phone.fRemark') }}：</span>{{ row.remark || '-' }}
-            </div>
-            <div><span class="text-muted-foreground">{{ t('table.createdAt') }}：</span><span class="tabular-nums">{{ formatDateTime(row.created_at) }}</span></div>
-            <div><span class="text-muted-foreground">{{ t('phone.updatedAt') }}：</span><span class="tabular-nums">{{ formatDateTime(row.updated_at) }}</span></div>
-          </div>
+          <TableExpanded>
+            <TableExpandedTable>
+              <template #head>
+                <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                  {{ t('phone.detailVmId') }}
+                </th>
+                <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+                  {{ t('phone.fImageId') }}
+                </th>
+                <th class="py-2.5 font-normal whitespace-nowrap">
+                  {{ t('phone.updatedAt') }}
+                </th>
+              </template>
+              <tr>
+                <td class="py-3 pr-6 font-mono text-xs whitespace-nowrap">
+                  {{ row.vm_id || '-' }}
+                </td>
+                <td class="py-3 pr-6 font-mono text-xs whitespace-nowrap">
+                  {{ row.image_id || '-' }}
+                </td>
+                <td class="py-3 tabular-nums whitespace-nowrap">
+                  {{ formatDateTime(row.updated_at) }}
+                </td>
+              </tr>
+            </TableExpandedTable>
+          </TableExpanded>
         </template>
       </DataTable>
 

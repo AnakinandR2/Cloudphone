@@ -18,6 +18,8 @@ import {
   filterSelectContentClass,
   filterSelectTriggerClass,
 } from '@/components/filterField'
+import TableExpanded from '@/components/TableExpanded.vue'
+import TableExpandedTable from '@/components/TableExpandedTable.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -421,45 +423,60 @@ async function continuePay(o: Order2) {
       </div>
     </template>
 
-    <!-- 行展开：完整订单项明细 + 赠送时长 -->
+    <!-- 行展开：完整订单项明细 + 赠送时长（图2 嵌套横线表） -->
     <template #expanded="{ row }">
-      <div class="px-4 py-3">
-        <div class="overflow-hidden rounded-md border">
-          <div class="bg-muted/50 text-muted-foreground grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 text-xs font-medium">
-            <span>{{ t('billing.purchase2.dColKind') }}</span>
-            <span class="text-right">{{ t('billing.purchase2.dColQty') }}</span>
-            <span class="text-right">{{ t('billing.purchase2.dColDuration') }}</span>
-            <span class="text-right">{{ t('billing.purchase2.dColUnitPrice') }}</span>
-            <span class="text-right">{{ t('billing.purchase2.dColAmount') }}</span>
-          </div>
-          <div
+      <TableExpanded>
+        <TableExpandedTable>
+          <template #head>
+            <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+              {{ t('billing.purchase2.dColKind') }}
+            </th>
+            <th class="py-2.5 pr-6 text-right font-normal whitespace-nowrap">
+              {{ t('billing.purchase2.dColQty') }}
+            </th>
+            <th class="py-2.5 pr-6 text-right font-normal whitespace-nowrap">
+              {{ t('billing.purchase2.dColDuration') }}
+            </th>
+            <th class="py-2.5 pr-6 text-right font-normal whitespace-nowrap">
+              {{ t('billing.purchase2.dColUnitPrice') }}
+            </th>
+            <th class="py-2.5 text-right font-normal whitespace-nowrap">
+              {{ t('billing.purchase2.dColAmount') }}
+            </th>
+          </template>
+          <tr
             v-for="it in (row.items ?? [])"
             :key="it.id"
-            class="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] items-center gap-2 border-t px-3 py-2 text-sm"
           >
-            <span>{{ kindLabel(it.target_kind) }}</span>
-            <span class="text-right tabular-nums">{{ it.quantity }}</span>
-            <span class="text-right tabular-nums">
+            <td class="py-3 pr-6 whitespace-nowrap">
+              {{ kindLabel(it.target_kind) }}
+            </td>
+            <td class="py-3 pr-6 text-right tabular-nums whitespace-nowrap">
+              {{ it.quantity }}
+            </td>
+            <td class="py-3 pr-6 text-right tabular-nums whitespace-nowrap">
               <template v-if="it.duration_value">{{ it.duration_value }}{{ durUnit(it.duration_unit) }}</template>
-              <span v-else class="text-muted-foreground">—</span>
-            </span>
-            <span class="text-right tabular-nums">¥{{ fmtCents(it.unit_price_cents) }}</span>
-            <span class="text-right tabular-nums">
-              <span v-if="it.qty_discount_bps < 10000 || it.duration_discount_bps < 10000" class="text-red-500 mr-1 text-xs">
+              <span v-else class="text-[#8f959e]">—</span>
+            </td>
+            <td class="py-3 pr-6 text-right tabular-nums whitespace-nowrap">
+              ¥{{ fmtCents(it.unit_price_cents) }}
+            </td>
+            <td class="py-3 text-right tabular-nums whitespace-nowrap">
+              <span v-if="it.qty_discount_bps < 10000 || it.duration_discount_bps < 10000" class="mr-1 text-xs text-red-500">
                 {{ fmtDiscountBps(it.qty_discount_bps) }}<span v-if="it.qty_discount_bps < 10000 && it.duration_discount_bps < 10000">×</span>{{ it.duration_discount_bps < 10000 ? fmtDiscountBps(it.duration_discount_bps) : '' }}
               </span>
               ¥{{ fmtCents(it.amount_cents) }}
-            </span>
-          </div>
-        </div>
+            </td>
+          </tr>
+        </TableExpandedTable>
         <!-- 手续费 / 实付小结：仅有手续费时展示（历史/旧订单为 0 时隐藏）。 -->
-        <div v-if="row.fee_cents > 0" class="mt-2 flex flex-col items-end gap-0.5 text-sm">
+        <div v-if="row.fee_cents > 0" class="mt-3 flex flex-col items-end gap-0.5 text-sm">
           <div class="flex w-full max-w-xs items-baseline justify-between">
-            <span class="text-muted-foreground">{{ t('billing.purchase2.sumTotal') }}</span>
+            <span class="text-[#8f959e]">{{ t('billing.purchase2.sumTotal') }}</span>
             <span class="tabular-nums">¥{{ fmtCents(row.total_cents) }}</span>
           </div>
           <div class="flex w-full max-w-xs items-baseline justify-between">
-            <span class="text-muted-foreground">{{ t('billing.purchase2.sumFee') }}</span>
+            <span class="text-[#8f959e]">{{ t('billing.purchase2.sumFee') }}</span>
             <span class="tabular-nums">¥{{ fmtCents(row.fee_cents) }}</span>
           </div>
           <div class="flex w-full max-w-xs items-baseline justify-between">
@@ -467,10 +484,10 @@ async function continuePay(o: Order2) {
             <span class="font-semibold tabular-nums text-red-600">¥{{ fmtCents(row.total_cents + row.fee_cents) }}</span>
           </div>
         </div>
-        <div v-if="row.gift_runtime_minutes > 0" class="text-emerald-600 dark:text-emerald-400 mt-2 text-xs">
+        <div v-if="row.gift_runtime_minutes > 0" class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
           {{ t('billing.purchase2.giftLine', { min: row.gift_runtime_minutes }) }}
         </div>
-      </div>
+      </TableExpanded>
     </template>
   </DataTable>
 </template>

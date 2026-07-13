@@ -862,6 +862,8 @@ export default {
     tableDemoSearchPlaceholder: 'Search by name…',
     tableDemoStatusAll: 'All statuses',
     tableDemoExpanded: 'Expanded detail area for {name} ({id}).',
+    tableExpandTabDetail: 'Summary',
+    tableExpandTabRaw: 'Raw JSON',
     filterSearchLabel: 'Search',
     filterSearchPlaceholder: 'Enter keyword…',
     filterSelectLabel: 'Status',

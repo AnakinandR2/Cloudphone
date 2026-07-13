@@ -9,6 +9,8 @@ import FilterBar from '@/components/FilterBar.vue'
 import FilterField from '@/components/FilterField.vue'
 import FilterSearchInput from '@/components/FilterSearchInput.vue'
 import FilterSelect from '@/components/FilterSelect.vue'
+import TableExpanded from '@/components/TableExpanded.vue'
+import TableExpandedTable from '@/components/TableExpandedTable.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -30,19 +32,23 @@ interface DemoRow {
   tag: string
   remark: string
   created_at: string
+  vm_id: string
+  image_id: string
+  updated_at: string
 }
 
 const { t } = useI18n()
 
 const rows: DemoRow[] = [
-  { id: 4, name: '云手机4', cp_id: 'CP-1004', status: 'RUNNING', proxy: 'socks5://10.0.0.4:1084', tag: '12414141', remark: '1241414124', created_at: '2026-01-10 10:30' },
-  { id: 3, name: '云手机3', cp_id: 'CP-1003', status: 'STOPPED', proxy: 'socks5://10.0.0.3:1083', tag: '12414141', remark: '—', created_at: '2026-01-09 16:20' },
-  { id: 2, name: '云手机2', cp_id: 'CP-1002', status: 'CREATED', proxy: 'socks5://10.0.0.2:1082', tag: '12414141', remark: '—', created_at: '2026-01-08 09:15' },
-  { id: 1, name: '云手机1', cp_id: 'CP-1001', status: 'CREATE_FAILED', proxy: '—', tag: '—', remark: '—', created_at: '2026-01-07 14:00' },
+  { id: 4, name: '云手机4', cp_id: 'CP-1004', status: 'RUNNING', proxy: 'socks5://10.0.0.4:1084', tag: '12414141', remark: '1241414124', created_at: '2026-01-10 10:30', vm_id: 'vm-4', image_id: 'img-android11', updated_at: '2026-01-10 10:30' },
+  { id: 3, name: '云手机3', cp_id: 'CP-1003', status: 'STOPPED', proxy: 'socks5://10.0.0.3:1083', tag: '12414141', remark: '—', created_at: '2026-01-09 16:20', vm_id: 'vm-3', image_id: 'img-android11', updated_at: '2026-01-09 16:20' },
+  { id: 2, name: '云手机2', cp_id: 'CP-1002', status: 'CREATED', proxy: 'socks5://10.0.0.2:1082', tag: '12414141', remark: '—', created_at: '2026-01-08 09:15', vm_id: 'vm-2', image_id: 'img-android12', updated_at: '2026-01-08 09:15' },
+  { id: 1, name: '云手机1', cp_id: 'CP-1001', status: 'CREATE_FAILED', proxy: '—', tag: '—', remark: '—', created_at: '2026-01-07 14:00', vm_id: '—', image_id: 'img-android11', updated_at: '2026-01-07 14:00' },
 ]
 
 const filters = reactive({ q: '', status: 'all' })
 const selectedIds = ref<Set<number>>(new Set())
+const expandTab = ref<'detail' | 'raw'>('detail')
 
 const allRowsSelected = computed(() => rows.length > 0 && rows.every(r => selectedIds.value.has(r.id)))
 
@@ -201,9 +207,56 @@ function canPowerOff(status: string) {
     </template>
 
     <template #expanded="{ row }">
-      <div class="text-muted-foreground px-4 py-3 text-sm">
-        {{ t('comp.tableDemoExpanded', { name: row.name, id: row.cp_id }) }}
-      </div>
+      <TableExpanded>
+        <template #toolbar>
+          <button
+            type="button"
+            class="rounded border border-[#d7dbe2] bg-white px-3 py-1 text-xs transition-colors"
+            :class="expandTab === 'detail' ? 'border-primary text-primary' : 'text-[#646a73] hover:bg-white/80'"
+            @click="expandTab = 'detail'"
+          >
+            {{ t('comp.tableExpandTabDetail') }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-[#d7dbe2] bg-white px-3 py-1 text-xs transition-colors"
+            :class="expandTab === 'raw' ? 'border-primary text-primary' : 'text-[#646a73] hover:bg-white/80'"
+            @click="expandTab = 'raw'"
+          >
+            {{ t('comp.tableExpandTabRaw') }}
+          </button>
+        </template>
+
+        <TableExpandedTable v-if="expandTab === 'detail'">
+          <template #head>
+            <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+              {{ t('phone.detailVmId') }}
+            </th>
+            <th class="py-2.5 pr-6 font-normal whitespace-nowrap">
+              {{ t('phone.fImageId') }}
+            </th>
+            <th class="py-2.5 font-normal whitespace-nowrap">
+              {{ t('phone.updatedAt') }}
+            </th>
+          </template>
+          <tr>
+            <td class="py-3 pr-6 font-mono text-xs whitespace-nowrap">
+              {{ row.vm_id }}
+            </td>
+            <td class="py-3 pr-6 font-mono text-xs whitespace-nowrap">
+              {{ row.image_id }}
+            </td>
+            <td class="py-3 tabular-nums whitespace-nowrap">
+              {{ row.updated_at }}
+            </td>
+          </tr>
+        </TableExpandedTable>
+
+        <pre
+          v-else
+          class="overflow-x-auto rounded-md border border-[#e5e6eb] bg-white p-3 font-mono text-xs leading-5 text-[#1f2329]"
+        >{{ JSON.stringify({ vm_id: row.vm_id, image_id: row.image_id, updated_at: row.updated_at }, null, 2) }}</pre>
+      </TableExpanded>
     </template>
   </DataTable>
 </template>

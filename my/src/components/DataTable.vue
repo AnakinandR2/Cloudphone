@@ -9,7 +9,7 @@ import {
   getPaginationRowModel,
   useVueTable,
 } from '@tanstack/vue-table'
-import { ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Minus, SlidersHorizontal } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -121,6 +121,32 @@ watch(() => props.data.length, () => {
 })
 
 const leafCount = computed(() => table.getVisibleLeafColumns().length)
+
+/** 展开内容左缩进（px）：与首个数据列文字起点对齐（跳过 select / expander） */
+const expandIndentPx = ref(0)
+
+function measureExpandIndent() {
+  nextTick(() => {
+    const root = tableBoxRef.value
+    if (!root)
+      return
+    const row = root.querySelector('tbody tr.group') as HTMLElement | null
+    if (!row)
+      return
+    const cells = [...row.querySelectorAll<HTMLElement>('td[data-col]')]
+    const firstData = cells.find((td) => {
+      const id = td.dataset.col
+      return !!id && id !== 'select' && id !== 'expander'
+    })
+    if (!firstData)
+      return
+    const padLeft = Number.parseFloat(getComputedStyle(firstData).paddingLeft) || 0
+    // 相对行左缘，保证与 ID 列文字起点对齐（不受横向滚动影响）
+    const left = firstData.getBoundingClientRect().left - row.getBoundingClientRect().left + padLeft
+    expandIndentPx.value = Math.round(left)
+  })
+}
+
 const pageIndex = computed(() => table.getState().pagination.pageIndex)
 const pageCount = computed(() => table.getPageCount())
 
@@ -159,9 +185,36 @@ const scrollRef = ref<HTMLElement | null>(null)
 const tableBoxRef = ref<HTMLElement | null>(null)
 const tableScrollableX = ref(false)
 const shadowLeft = ref(0)
-const tableHeight = ref(0)
 const shadowReady = ref(false)
+/** 钉住列竖阴影分段：跳过展开行，避免阴影穿过展开层 */
+const shadowSegments = ref<{ top: number, height: number }[]>([])
 let pinMetricsObserver: ResizeObserver | null = null
+
+function buildShadowSegments(box: HTMLElement) {
+  const boxRect = box.getBoundingClientRect()
+  const totalH = box.offsetHeight
+  const gaps = [...box.querySelectorAll<HTMLElement>('tr.table-expanded-row')]
+    .map((tr) => {
+      const r = tr.getBoundingClientRect()
+      return {
+        top: r.top - boxRect.top,
+        bottom: r.bottom - boxRect.top,
+      }
+    })
+    .filter(g => g.bottom > g.top)
+    .sort((a, b) => a.top - b.top)
+
+  const segments: { top: number, height: number }[] = []
+  let y = 0
+  for (const g of gaps) {
+    if (g.top > y + 0.5)
+      segments.push({ top: y, height: g.top - y })
+    y = Math.max(y, g.bottom)
+  }
+  if (totalH > y + 0.5)
+    segments.push({ top: y, height: totalH - y })
+  shadowSegments.value = segments
+}
 
 function updatePinMetrics() {
   nextTick(() => {
@@ -170,6 +223,7 @@ function updatePinMetrics() {
     if (!root || !box || !props.pinActionsColumn) {
       tableScrollableX.value = false
       shadowReady.value = false
+      shadowSegments.value = []
       return
     }
 
@@ -179,12 +233,14 @@ function updatePinMetrics() {
 
     if (!scrollable) {
       shadowReady.value = false
+      shadowSegments.value = []
       return
     }
 
     const head = root.querySelector('.pinned-col-right-head') as HTMLElement | null
     if (!head) {
       shadowReady.value = false
+      shadowSegments.value = []
       // 钉住类名刚挂上，下一帧再量
       requestAnimationFrame(updatePinMetrics)
       return
@@ -192,33 +248,48 @@ function updatePinMetrics() {
     const headRect = head.getBoundingClientRect()
     const boxRect = box.getBoundingClientRect()
     shadowLeft.value = headRect.left - boxRect.left
-    tableHeight.value = box.offsetHeight
-    shadowReady.value = shadowLeft.value > 0 && tableHeight.value > 0
+    buildShadowSegments(box)
+    shadowReady.value = shadowLeft.value > 0 && shadowSegments.value.some(s => s.height > 0)
   })
+}
+
+function onWindowResize() {
+  updatePinMetrics()
+  measureExpandIndent()
 }
 
 onMounted(() => {
   updatePinMetrics()
-  pinMetricsObserver = new ResizeObserver(updatePinMetrics)
+  measureExpandIndent()
+  pinMetricsObserver = new ResizeObserver(() => {
+    updatePinMetrics()
+    measureExpandIndent()
+  })
   if (scrollRef.value)
     pinMetricsObserver.observe(scrollRef.value)
   if (tableBoxRef.value)
     pinMetricsObserver.observe(tableBoxRef.value)
   scrollRef.value?.addEventListener('scroll', updatePinMetrics, { passive: true })
-  window.addEventListener('resize', updatePinMetrics)
+  window.addEventListener('resize', onWindowResize)
   // 表格渲染完成后再量一次
-  requestAnimationFrame(updatePinMetrics)
+  requestAnimationFrame(() => {
+    updatePinMetrics()
+    measureExpandIndent()
+  })
 })
 
 onUnmounted(() => {
   pinMetricsObserver?.disconnect()
   scrollRef.value?.removeEventListener('scroll', updatePinMetrics)
-  window.removeEventListener('resize', updatePinMetrics)
+  window.removeEventListener('resize', onWindowResize)
 })
 
 watch(
   () => [props.data.length, props.loading, props.pinActionsColumn, columnVisibility.value, expanded.value, tableScrollableX.value] as const,
-  updatePinMetrics,
+  () => {
+    updatePinMetrics()
+    measureExpandIndent()
+  },
 )
 </script>
 
@@ -291,10 +362,11 @@ watch(
           </template>
           <template v-else-if="table.getRowModel().rows.length">
             <template v-for="row in table.getRowModel().rows" :key="row.id">
-              <TableRow class="group" :data-state="row.getIsExpanded() ? 'selected' : undefined">
+              <TableRow class="group">
                 <TableCell
                   v-for="cell in row.getVisibleCells()"
                   :key="cell.id"
+                  :data-col="cell.column.id"
                   :class="cellClass(cell.column.id, cell.column.columnDef.meta)"
                 >
                   <!-- 展开按钮列 -->
@@ -305,9 +377,13 @@ watch(
                     class="size-7"
                     @click="row.toggleExpanded()"
                   >
+                    <Minus
+                      v-if="row.getIsExpanded()"
+                      class="size-4"
+                    />
                     <ChevronRight
-                      class="size-4 transition-transform"
-                      :class="row.getIsExpanded() && 'rotate-90'"
+                      v-else
+                      class="size-4"
                     />
                   </Button>
                   <!-- 自定义单元格插槽 cell-<id> -->
@@ -329,9 +405,17 @@ watch(
                   </template>
                 </TableCell>
               </TableRow>
-              <!-- 展开行 -->
-              <TableRow v-if="expandable && row.getIsExpanded()" :key="`${row.id}-expanded`" class="hover:bg-transparent">
-                <TableCell :colspan="leafCount" class="!h-auto bg-muted/30 p-0">
+              <!-- 展开行：竖阴影分段跳过本行，展开层不出现钉住列阴影 -->
+              <TableRow
+                v-if="expandable && row.getIsExpanded()"
+                :key="`${row.id}-expanded`"
+                class="table-expanded-row hover:bg-transparent"
+              >
+                <TableCell
+                  :colspan="leafCount"
+                  class="!h-auto p-0"
+                  :style="{ '--table-expand-indent': `${expandIndentPx}px` }"
+                >
                   <slot name="expanded" :row="row.original" />
                 </TableCell>
               </TableRow>
@@ -343,11 +427,14 @@ watch(
         </TableBody>
       </Table>
       <div
-        v-if="pinActionsColumn && tableScrollableX && shadowReady"
+        v-for="(seg, i) in shadowSegments"
+        v-show="pinActionsColumn && tableScrollableX && shadowReady"
+        :key="`pin-shadow-${i}`"
         class="pinned-col-shadow"
         :style="{
           left: `${shadowLeft}px`,
-          height: `${tableHeight}px`,
+          top: `${seg.top}px`,
+          height: `${seg.height}px`,
         }"
         aria-hidden="true"
       />
